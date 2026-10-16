@@ -1,0 +1,8 @@
+# Never send secrets or local build output into an image.
+.env
+.git
+.cache
+**/node_modules
+**/dist
+**/coverage
+apps/api/src/generated

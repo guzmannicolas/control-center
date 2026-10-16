@@ -1,5 +1,28 @@
 name: control-center
 
+# Rotate container logs so they cannot slowly fill the disk.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: docker/app.Dockerfile
+    target: runtime
+  image: control-center-app
+  env_file: .env
+  restart: unless-stopped
+  mem_limit: 256m
+  logging: *logging
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -15,6 +38,7 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    logging: *logging
 
   redis:
     image: redis:7-alpine
@@ -27,6 +51,38 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    logging: *logging
+
+  # Applies pending migrations once, then exits. The API and worker start only if it succeeds.
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+      target: build
+    image: control-center-migrate
+    env_file: .env
+    command: ["pnpm", "--filter", "@cc/api", "exec", "prisma", "migrate", "deploy"]
+    restart: "no"
+    logging: *logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    ports:
+      - "127.0.0.1:4100:4100" # only reachable from the VPS itself
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4100/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    <<: *app
+    command: ["node", "--enable-source-maps", "dist/worker.js"]
+    stop_grace_period: 40s # running checks get up to 30 s to finish
 
   # Node toolbox for development on a machine without Node: docker compose run --rm tools <cmd>
   tools:
@@ -45,7 +101,7 @@ services:
     volumes:
       - .:/app
     ports:
-      - "127.0.0.1:4100:4100"
+      - "127.0.0.1:4101:4100" # 4100 belongs to the running API
     depends_on:
       postgres:
         condition: service_healthy

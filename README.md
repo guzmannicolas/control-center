@@ -39,6 +39,19 @@ packages/shared  Zod schemas and types shared by API and dashboard
 
 The control center has its **own** Postgres and Redis, separate from the services it watches, so it keeps working when they break.
 
+## Production (on the VPS)
+
+```sh
+docker compose up -d --build      # migrate → api + worker, restarted automatically
+docker compose ps                 # api shows (healthy)
+docker compose logs -f worker     # one JSON line per check
+```
+
+- `migrate` applies pending migrations once and exits; `api` and `worker` start only if it succeeds.
+- One image (`docker/app.Dockerfile`, multi-stage) runs both: `node dist/server.js` or `node dist/worker.js`, as a non-root user, with no source, dev tools or `.env` inside. esbuild bundles our TypeScript; npm dependencies are installed with `pnpm deploy --prod`.
+- `.pnpmfile.cjs` stops `@prisma/client`'s optional peers (the Prisma CLI, TypeScript) from leaking into production, and the build keeps only the PostgreSQL query engine: 745 MB → 313 MB.
+- The API listens on `127.0.0.1:4100` only. Logs rotate (3 × 10 MB per container); API and worker are capped at 256 MB of RAM.
+
 ## Development
 
 Needs only Docker. Node tools run in the `tools` container.
@@ -49,8 +62,8 @@ docker compose up -d postgres redis
 docker compose run --rm tools pnpm install
 docker compose run --rm tools pnpm --filter @cc/api exec prisma migrate dev
 docker compose run --rm tools pnpm --filter @cc/api db:seed  # load targets (safe to re-run)
-docker compose run --rm --service-ports tools pnpm dev:api   # http://127.0.0.1:4100/health
-docker compose run --rm tools pnpm dev:worker                # runs the checks
+docker compose run --rm --service-ports tools pnpm dev:api   # http://127.0.0.1:4101/health
+docker compose run --rm tools pnpm dev:worker                # runs checks (stop the production worker first)
 
 docker compose run --rm tools pnpm typecheck
 docker compose run --rm tools pnpm test
