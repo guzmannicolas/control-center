@@ -8,10 +8,13 @@ const redis = createRedis(env.REDIS_URL);
 
 const app = buildApp(
   {
-    pingDatabase: () => prisma.$queryRaw`SELECT 1`,
-    pingRedis: () => redis.ping(),
+    prisma,
+    probes: { database: () => prisma.$queryRaw`SELECT 1`, redis: () => redis.ping() },
+    dashboardOrigin: env.DASHBOARD_ORIGIN,
+    cookieSecure: env.COOKIE_SECURE,
+    rateLimitRedis: redis,
   },
-  { logger: { level: env.LOG_LEVEL } },
+  { logger: { level: env.LOG_LEVEL, redact: ['req.headers.cookie', 'res.headers["set-cookie"]'] } },
 );
 
 // Docker sends SIGTERM on stop: finish in-flight requests and close connections cleanly.

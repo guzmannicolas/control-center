@@ -1,0 +1,99 @@
+import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
+import {
+  CHECK_STATUSES, statusRank, worstStatus,
+  type CheckStatus, type IncidentView, type MonitorView, type Overview, type ResultPoint, type TargetView,
+} from '@cc/shared';
+import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
+import type { PrismaClient } from '../generated/prisma/client.js';
+
+const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
+
+export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
+  // Every route in this plugin requires a logged-in user.
+  app.addHook('preHandler', async (req, reply) => {
+    const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
+    if (!user) return reply.code(401).send({ error: 'Not logged in' });
+  });
+
+  app.get('/overview', async (): Promise<Overview> => {
+    const targets = await prisma.target.findMany({
+      where: { enabled: true },
+      orderBy: { name: 'asc' },
+      include: {
+        monitors: {
+          where: { enabled: true },
+          orderBy: { checker: 'asc' },
+          include: {
+            results: { take: 1, orderBy: { checkedAt: 'desc' }, select: { message: true, metrics: true } },
+            _count: { select: { incidents: { where: { resolvedAt: null } } } },
+          },
+        },
+      },
+    });
+
+    const views: TargetView[] = targets.map((t) => {
+      const monitors: MonitorView[] = t.monitors.map((m) => ({
+        id: m.id,
+        checker: m.checker,
+        intervalSeconds: m.intervalSeconds,
+        status: m.lastStatus,
+        lastCheckedAt: m.lastCheckedAt?.toISOString() ?? null,
+        message: m.results[0]?.message ?? null,
+        metrics: asMetrics(m.results[0]?.metrics),
+        openIncident: m._count.incidents > 0,
+      }));
+      const known = monitors.flatMap((m) => (m.status ? [m.status] : []));
+      const config = t.config as { url?: string };
+      return {
+        id: t.id, name: t.name, type: t.type, tags: t.tags,
+        url: config.url ?? null,
+        status: known.length ? worstStatus(known) : null,
+        monitors,
+      };
+    });
+    views.sort((a, b) => statusRank(b.status) - statusRank(a.status) || a.name.localeCompare(b.name));
+
+    const counts = Object.fromEntries([...CHECK_STATUSES, 'unknown'].map((s) => [s, 0])) as Overview['counts'];
+    for (const t of views) counts[t.status ?? 'unknown']++;
+    return { generatedAt: new Date().toISOString(), counts, targets: views };
+  });
+
+  const IncidentsQuery = z.object({
+    open: z.enum(['true', 'false']).optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+  });
+  app.get('/incidents', async (req, reply): Promise<IncidentView[] | void> => {
+    const q = IncidentsQuery.safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: 'Invalid query' });
+    const rows = await prisma.incident.findMany({
+      where: q.data.open === 'true' ? { resolvedAt: null } : {},
+      orderBy: { openedAt: 'desc' },
+      take: q.data.limit,
+      include: { monitor: { select: { checker: true, target: { select: { name: true } } } } },
+    });
+    return rows.map((i) => ({
+      id: i.id, monitorId: i.monitorId, targetName: i.monitor.target.name, checker: i.monitor.checker,
+      severity: i.severity, openedAt: i.openedAt.toISOString(), resolvedAt: i.resolvedAt?.toISOString() ?? null,
+      lastMessage: i.lastMessage,
+    }));
+  });
+
+  const ResultsParams = z.object({ id: z.uuid() });
+  const ResultsQuery = z.object({ hours: z.coerce.number().int().min(1).max(720).default(24) });
+  app.get('/monitors/:id/results', async (req, reply): Promise<ResultPoint[] | void> => {
+    const params = ResultsParams.safeParse(req.params);
+    const query = ResultsQuery.safeParse(req.query);
+    if (!params.success || !query.success) return reply.code(400).send({ error: 'Invalid request' });
+    const rows = await prisma.result.findMany({
+      where: { monitorId: params.data.id, checkedAt: { gte: new Date(Date.now() - query.data.hours * 3_600_000) } },
+      orderBy: { checkedAt: 'asc' },
+      take: 5000,
+      select: { checkedAt: true, status: true, durationMs: true, message: true, metrics: true },
+    });
+    return rows.map((r) => ({
+      checkedAt: r.checkedAt.toISOString(), status: r.status as CheckStatus, durationMs: r.durationMs,
+      message: r.message, metrics: asMetrics(r.metrics),
+    }));
+  });
+};

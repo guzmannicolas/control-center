@@ -93,3 +93,29 @@ model Incident {
   @@index([monitorId, openedAt(sort: Desc)])
   @@map("incidents")
 }
+
+// Dashboard users. Created from the command line only: there is no sign-up.
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  sessions     Session[]
+
+  @@map("users")
+}
+
+// A logged-in browser. Only a hash of the cookie token is stored, so a database leak exposes no sessions.
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  tokenHash  String   @unique @map("token_hash")
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  ip         String?
+  userAgent  String?  @map("user_agent")
+
+  @@index([userId])
+  @@map("sessions")
+}

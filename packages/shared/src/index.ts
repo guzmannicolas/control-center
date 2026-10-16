@@ -23,6 +23,62 @@ export type CheckOutcome = z.infer<typeof CheckOutcome>;
 // "error" ranks below "fail": not knowing is less bad than knowing it is broken.
 const SEVERITY: Record<CheckStatus, number> = { ok: 0, warn: 1, error: 2, fail: 3 };
 
+// Higher = more serious. A status of null (never checked yet) ranks lowest.
+export const statusRank = (s: CheckStatus | null) => (s === null ? -1 : SEVERITY[s]);
+
 export function worstStatus(statuses: readonly CheckStatus[]): CheckStatus {
   return statuses.reduce<CheckStatus>((worst, s) => (SEVERITY[s] > SEVERITY[worst] ? s : worst), 'ok');
+}
+
+// --- API contract: what the API returns and the dashboard reads -----------------------------------
+
+export interface User {
+  id: string;
+  email: string;
+}
+
+export interface MonitorView {
+  id: string;
+  checker: string;
+  intervalSeconds: number;
+  status: CheckStatus | null;
+  lastCheckedAt: string | null;
+  message: string | null;
+  metrics: Record<string, number>;
+  openIncident: boolean;
+}
+
+export interface TargetView {
+  id: string;
+  name: string;
+  type: TargetType;
+  tags: string[];
+  url: string | null;
+  status: CheckStatus | null; // worst of its monitors; null until first checked
+  monitors: MonitorView[];
+}
+
+export interface Overview {
+  generatedAt: string;
+  counts: Record<CheckStatus | 'unknown', number>;
+  targets: TargetView[]; // most serious first
+}
+
+export interface IncidentView {
+  id: string;
+  monitorId: string;
+  targetName: string;
+  checker: string;
+  severity: 'warn' | 'fail';
+  openedAt: string;
+  resolvedAt: string | null;
+  lastMessage: string;
+}
+
+export interface ResultPoint {
+  checkedAt: string;
+  status: CheckStatus;
+  durationMs: number;
+  message: string;
+  metrics: Record<string, number>;
 }

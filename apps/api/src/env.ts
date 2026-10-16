@@ -7,6 +7,8 @@ const Env = z.object({
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().default(4100),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  DASHBOARD_ORIGIN: z.url(),
+  COOKIE_SECURE: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
 });
 
 export type Env = z.infer<typeof Env>;
