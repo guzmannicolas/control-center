@@ -1,0 +1,57 @@
+name: control-center
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: control
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: control
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U control -d control"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Node toolbox for development on a machine without Node: docker compose run --rm tools <cmd>
+  tools:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: docker/tools.Dockerfile
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /app
+    env_file: .env
+    environment:
+      HOME: /tmp
+      COREPACK_HOME: /app/.cache/corepack
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      npm_config_store_dir: /app/.cache/pnpm-store
+    volumes:
+      - .:/app
+    ports:
+      - "127.0.0.1:4100:4100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:

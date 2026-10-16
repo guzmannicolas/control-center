@@ -1,0 +1,95 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TargetType {
+  domain
+  website
+  vercel_project
+  github_repo
+  server
+  service
+}
+
+enum CheckStatus {
+  ok
+  warn
+  fail
+  error
+}
+
+enum Severity {
+  warn
+  fail
+}
+
+// Something I own and want to watch.
+model Target {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String
+  type      TargetType
+  config    Json       @default("{}")
+  tags      String[]   @default([])
+  enabled   Boolean    @default(true)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  monitors  Monitor[]
+
+  @@map("targets")
+}
+
+// One checker run against one target on a schedule.
+model Monitor {
+  id              String       @id @default(uuid()) @db.Uuid
+  targetId        String       @map("target_id") @db.Uuid
+  target          Target       @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  checker         String
+  intervalSeconds Int          @map("interval_seconds")
+  settings        Json         @default("{}")
+  enabled         Boolean      @default(true)
+  // Copy of the latest result so the dashboard never has to scan the results table.
+  lastStatus      CheckStatus? @map("last_status")
+  lastCheckedAt   DateTime?    @map("last_checked_at") @db.Timestamptz(3)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  results         Result[]
+  incidents       Incident[]
+
+  @@unique([targetId, checker])
+  @@map("monitors")
+}
+
+// What happened each time a monitor ran. Grows fast.
+model Result {
+  id         BigInt      @id @default(autoincrement())
+  monitorId  String      @map("monitor_id") @db.Uuid
+  monitor    Monitor     @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  checkedAt  DateTime    @default(now()) @map("checked_at") @db.Timestamptz(3)
+  status     CheckStatus
+  durationMs Int         @map("duration_ms")
+  message    String
+  metrics    Json        @default("{}")
+
+  @@index([monitorId, checkedAt(sort: Desc)])
+  @@map("results")
+}
+
+// A problem with a start and an end: one alert when it breaks, one when it recovers.
+model Incident {
+  id          String    @id @default(uuid()) @db.Uuid
+  monitorId   String    @map("monitor_id") @db.Uuid
+  monitor     Monitor   @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  severity    Severity
+  openedAt    DateTime  @default(now()) @map("opened_at") @db.Timestamptz(3)
+  resolvedAt  DateTime? @map("resolved_at") @db.Timestamptz(3)
+  lastMessage String    @map("last_message")
+
+  @@index([monitorId, openedAt(sort: Desc)])
+  @@map("incidents")
+}
