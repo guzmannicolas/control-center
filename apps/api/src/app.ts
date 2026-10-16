@@ -1,4 +1,5 @@
 import Fastify, { type FastifyServerOptions } from 'fastify';
+import { withTimeout } from './lib/timeout.js';
 
 // The app receives what it depends on instead of importing it, so tests can pass fakes.
 export interface Deps {
@@ -7,14 +8,6 @@ export interface Deps {
 }
 
 // A health check that hangs is worse than one that fails: callers cannot tell slow from dead.
-export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
 export function buildApp(deps: Deps, options: FastifyServerOptions = {}, healthTimeoutMs = 2000) {
   const app = Fastify(options);
 

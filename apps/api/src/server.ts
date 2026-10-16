@@ -1,12 +1,10 @@
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
 import { loadEnv } from './env.js';
-import { PrismaClient } from './generated/prisma/client.js';
+import { createPrisma, createRedis } from './infra.js';
 
 const env = loadEnv();
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: env.DATABASE_URL }) });
-const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+const prisma = createPrisma(env.DATABASE_URL);
+const redis = createRedis(env.REDIS_URL);
 
 const app = buildApp(
   {

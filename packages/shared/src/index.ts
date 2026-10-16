@@ -4,6 +4,10 @@ export const TARGET_TYPES = ['domain', 'website', 'vercel_project', 'github_repo
 export const TargetType = z.enum(TARGET_TYPES);
 export type TargetType = z.infer<typeof TargetType>;
 
+// What each target type stores in its `config` column.
+export const DomainConfig = z.object({ domain: z.string().min(3) });
+export const UrlConfig = z.object({ url: z.url() });
+
 // ok: all good · warn: works but needs attention · fail: broken · error: the check itself could not run
 export const CHECK_STATUSES = ['ok', 'warn', 'fail', 'error'] as const;
 export const CheckStatus = z.enum(CHECK_STATUSES);

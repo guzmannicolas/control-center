@@ -5,7 +5,8 @@
   "scripts": {
     "dev:api": "pnpm --filter @cc/api dev",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "dev:worker": "pnpm --filter @cc/api dev:worker"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
