@@ -87,11 +87,12 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     if (!params.success || !query.success) return reply.code(400).send({ error: 'Invalid request' });
     const rows = await prisma.result.findMany({
       where: { monitorId: params.data.id, checkedAt: { gte: new Date(Date.now() - query.data.hours * 3_600_000) } },
-      orderBy: { checkedAt: 'asc' },
+      // Newest 5000, then back into time order: a long range keeps its most recent part.
+      orderBy: { checkedAt: 'desc' },
       take: 5000,
       select: { checkedAt: true, status: true, durationMs: true, message: true, metrics: true },
     });
-    return rows.map((r) => ({
+    return rows.reverse().map((r) => ({
       checkedAt: r.checkedAt.toISOString(), status: r.status as CheckStatus, durationMs: r.durationMs,
       message: r.message, metrics: asMetrics(r.metrics),
     }));

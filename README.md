@@ -33,11 +33,25 @@ TypeScript everywhere · Fastify · PostgreSQL + Prisma · Redis + BullMQ · Rea
 
 ```
 apps/api         Fastify API, checkers, scheduler
-apps/web         React dashboard (coming)
+apps/web         React dashboard (Vite, TanStack Query, Tailwind)
 packages/shared  Zod schemas and types shared by API and dashboard
 ```
 
 The control center has its **own** Postgres and Redis, separate from the services it watches, so it keeps working when they break.
+
+## Dashboard
+
+A React app (`apps/web`) for one user: a login screen, then status counts, open incidents, every target with its checks, and a response-time chart (24 h / 7 / 30 days, hover or arrow keys to read values, table view). Status is never shown by color alone. Light and dark mode.
+
+It calls the API with `credentials: 'include'`. Set `VITE_API_URL` at build time, and the API's `DASHBOARD_ORIGIN` to the dashboard's address.
+
+### Login
+
+- Passwords: scrypt (N=2^16, r=8), salted, compared in constant time. Unknown emails cost the same time as wrong passwords.
+- Sessions: 256-bit random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie; the database stores only its SHA-256. 7 days.
+- Brute force: 5 attempts per 15 minutes per IP, counted in Redis.
+- CORS allows only `DASHBOARD_ORIGIN`; requests that change something must come from that origin (CSRF).
+- No sign-up. Create or reset a user on the server: `docker compose run --rm tools pnpm --filter @cc/api user:create you@example.com`
 
 ## Production (on the VPS)
 
