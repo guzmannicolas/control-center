@@ -1,4 +1,4 @@
-import type { DomainView, IncidentView, Overview, ResultPoint, User } from '@cc/shared';
+import type { DatabaseView, DomainView, IncidentView, Overview, ResultPoint, User } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
 
@@ -39,5 +39,6 @@ export const api = {
   overview: () => request<Overview>('/api/overview'),
   incidents: () => request<IncidentView[]>('/api/incidents?limit=20'),
   domains: () => request<DomainView[]>('/api/domains'),
+  databases: () => request<DatabaseView[]>('/api/databases'),
   results: (monitorId: string, hours: number) => request<ResultPoint[]>(`/api/monitors/${monitorId}/results?hours=${hours}`),
 };

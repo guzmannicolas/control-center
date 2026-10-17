@@ -32,6 +32,14 @@ export const urlOf = (target: CheckTarget) => new URL(UrlConfig.parse(target.con
 export const hostOf = (target: CheckTarget) =>
   target.type === 'domain' ? DomainConfig.parse(target.config).domain : urlOf(target).hostname;
 
+// Connection URLs for watched databases live in the environment, under MONITOR_* names only.
+export function monitorUrl(envName: string): string {
+  if (!/^MONITOR_[A-Z0-9_]+$/.test(envName)) throw new Error(`${envName} is not a MONITOR_ variable`);
+  const value = process.env[envName];
+  if (!value) throw new Error(`${envName} is not set on the server`);
+  return value;
+}
+
 export const daysBetween = (from: Date, to: Date) => Math.floor((to.getTime() - from.getTime()) / 86_400_000);
 
 export function statusByDaysLeft(daysLeft: number, s: { warnDays: number; failDays: number }): CheckStatus {
@@ -40,10 +48,12 @@ export function statusByDaysLeft(daysLeft: number, s: { warnDays: number; failDa
   return 'ok';
 }
 
-// fetch hides the useful part ("ECONNREFUSED", "ENOTFOUND") inside error.cause.
+// The useful part ("ECONNREFUSED", "ENOTFOUND") is a code: on the error itself (pg, net) or in error.cause (fetch).
 export function errorReason(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   if (err.name === 'TimeoutError') return 'timed out';
+  const own = (err as { code?: unknown }).code;
+  if (typeof own === 'string' && /^E[A-Z]+$/.test(own)) return own;
   const cause = err.cause as { code?: string; message?: string } | undefined;
   return cause?.code ?? cause?.message ?? err.message;
 }

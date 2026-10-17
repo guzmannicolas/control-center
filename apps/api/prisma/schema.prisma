@@ -15,6 +15,7 @@ enum TargetType {
   github_repo
   server
   service
+  database
 }
 
 enum CheckStatus {

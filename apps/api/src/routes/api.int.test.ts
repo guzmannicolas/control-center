@@ -54,3 +54,34 @@ describe.skipIf(!url)('GET /api/domains', () => {
     expect((await app.inject('/api/domains')).statusCode).toBe(401);
   });
 });
+
+describe.skipIf(!url)('GET /api/databases', () => {
+  const prisma = createPrisma(url ?? '');
+  const up = async () => 'ok';
+  const app = buildApp({ prisma, probes: { database: up, redis: up }, dashboardOrigin: ORIGIN, cookieSecure: true });
+  afterAll(() => prisma.$disconnect());
+
+  it('returns each database with its health and backup checks, and no connection secrets', async () => {
+    await prisma.$executeRawUnsafe('TRUNCATE targets, users CASCADE');
+    await prisma.user.create({ data: { email: 'me@example.com', passwordHash: await hashPassword('a long enough password') } });
+    const login = await app.inject({
+      method: 'POST', url: '/auth/login', headers: { origin: ORIGIN, 'cf-connecting-ip': '192.0.2.51' },
+      payload: { email: 'me@example.com', password: 'a long enough password' },
+    });
+    const cookies = { cc_session: login.cookies.find((c) => c.name === 'cc_session')!.value };
+
+    const t = await prisma.target.create({ data: { name: 'Main DB', type: 'database', config: { engine: 'postgres', connectionEnv: 'MONITOR_MAIN', purpose: 'Everything' } } });
+    const health = await prisma.monitor.create({ data: { targetId: t.id, checker: 'postgres-health', intervalSeconds: 300, lastStatus: 'ok' } });
+    await prisma.result.create({ data: { monitorId: health.id, status: 'ok', durationMs: 4, message: 'PostgreSQL 16.4', metrics: { sizeBytes: 1000 }, details: { version: '16.4' } } });
+    await prisma.monitor.create({ data: { targetId: t.id, checker: 'backup-age', intervalSeconds: 3600, settings: { logPath: '/x' }, lastStatus: 'warn' } });
+    await prisma.target.create({ data: { name: 'Cache', type: 'database', config: { engine: 'redis', connectionEnv: 'MONITOR_CACHE' } } });
+
+    const res = await app.inject({ url: '/api/databases', cookies });
+    expect(res.statusCode).toBe(200);
+    const [main, cache] = res.json(); // the database with a warning comes first
+    expect(main).toMatchObject({ name: 'Main DB', engine: 'postgres', purpose: 'Everything', status: 'warn',
+      health: { status: 'ok', metrics: { sizeBytes: 1000 }, details: { version: '16.4' } }, backup: { status: 'warn' } });
+    expect(cache).toMatchObject({ name: 'Cache', engine: 'redis', status: null, health: null, backup: null });
+    expect(res.body).not.toContain('MONITOR_');
+  });
+});

@@ -1,12 +1,20 @@
 import { z } from 'zod';
 
-export const TARGET_TYPES = ['domain', 'website', 'vercel_project', 'github_repo', 'server', 'service'] as const;
+export const TARGET_TYPES = ['domain', 'website', 'vercel_project', 'github_repo', 'server', 'service', 'database'] as const;
 export const TargetType = z.enum(TARGET_TYPES);
 export type TargetType = z.infer<typeof TargetType>;
 
 // What each target type stores in its `config` column.
 export const DomainConfig = z.object({ domain: z.string().min(3) });
 export const UrlConfig = z.object({ url: z.url() });
+// A database is reached through a URL kept in an environment variable (never in the database itself).
+// The name must start with MONITOR_ so a checker can never be pointed at another secret, like DATABASE_URL.
+export const DATABASE_ENGINES = ['postgres', 'redis'] as const;
+export const DatabaseConfig = z.object({
+  engine: z.enum(DATABASE_ENGINES),
+  connectionEnv: z.string().regex(/^MONITOR_[A-Z0-9_]+$/),
+  purpose: z.string().max(200).default(''),
+});
 
 // ok: all good · warn: works but needs attention · fail: broken · error: the check itself could not run
 export const CHECK_STATUSES = ['ok', 'warn', 'fail', 'error'] as const;
@@ -99,6 +107,24 @@ export interface DomainView {
   daysLeft: number | null;
   details: DomainDetails | null;
   sites: { id: string; name: string; url: string; status: CheckStatus | null }[];
+}
+
+export interface CheckSnapshot {
+  status: CheckStatus | null;
+  message: string | null;
+  checkedAt: string | null;
+  metrics: Record<string, number>;
+  details: Record<string, unknown>;
+}
+
+export interface DatabaseView {
+  id: string;
+  name: string;
+  engine: (typeof DATABASE_ENGINES)[number];
+  purpose: string;
+  status: CheckStatus | null;
+  health: CheckSnapshot | null;
+  backup: CheckSnapshot | null; // null = no backup is being watched for this database
 }
 
 export interface ResultPoint {

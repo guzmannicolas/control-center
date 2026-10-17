@@ -1,0 +1,18 @@
+# Wiring for this particular VPS, kept apart from the portable docker-compose.yml.
+# Enabled with COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml in .env.
+services:
+  worker:
+    # Joins the CMS network to watch its Postgres and Redis (with statistics-only access).
+    networks: [default, cms]
+    environment:
+      # On two networks, "postgres" and "redis" would be ambiguous: name our own containers exactly.
+      DATABASE_URL: postgresql://control:${POSTGRES_PASSWORD}@control-center-postgres-1:5432/control
+      REDIS_URL: redis://control-center-redis-1:6379
+    volumes:
+      # Only the backup log, read-only: never the backup files, which contain secrets.
+      - /home/adminnico/cms/backups/backup.log:/backups/cms/backup.log:ro
+
+networks:
+  cms:
+    name: cms_cms_net
+    external: true

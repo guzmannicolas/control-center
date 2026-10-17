@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
-  CHECK_STATUSES, statusRank, worstStatus,
-  type CheckStatus, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview,
+  CHECK_STATUSES, DatabaseConfig, statusRank, worstStatus,
+  type CheckSnapshot, type CheckStatus, type DatabaseView, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview,
   type ResultPoint, type TargetView,
 } from '@cc/shared';
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
@@ -102,6 +102,47 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     });
     // Soonest renewal first: that is what needs attention.
     return domains.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity));
+  });
+
+  app.get('/databases', async (): Promise<DatabaseView[]> => {
+    const targets = await prisma.target.findMany({
+      where: { enabled: true, type: 'database' },
+      orderBy: { name: 'asc' },
+      include: {
+        monitors: {
+          where: { enabled: true },
+          include: { results: { take: 1, orderBy: { checkedAt: 'desc' }, select: { message: true, metrics: true, details: true } } },
+        },
+      },
+    });
+    const views = targets.flatMap((t): DatabaseView[] => {
+      const config = DatabaseConfig.safeParse(t.config);
+      if (!config.success) return [];
+      const snapshot = (checker: string): CheckSnapshot | null => {
+        const m = t.monitors.find((x) => x.checker === checker);
+        if (!m) return null;
+        const last = m.results[0];
+        return {
+          status: m.lastStatus,
+          message: last?.message ?? null,
+          checkedAt: m.lastCheckedAt?.toISOString() ?? null,
+          metrics: asMetrics(last?.metrics),
+          details: (last?.details ?? {}) as Record<string, unknown>,
+        };
+      };
+      const known = t.monitors.flatMap((m) => (m.lastStatus ? [m.lastStatus] : []));
+      return [{
+        id: t.id,
+        name: t.name,
+        engine: config.data.engine,
+        purpose: config.data.purpose,
+        status: known.length ? worstStatus(known) : null,
+        health: snapshot(config.data.engine === 'postgres' ? 'postgres-health' : 'redis-health'),
+        backup: snapshot('backup-age'),
+      }];
+    });
+    // Whatever needs attention first.
+    return views.sort((a, b) => statusRank(b.status) - statusRank(a.status) || a.name.localeCompare(b.name));
   });
 
   const IncidentsQuery = z.object({

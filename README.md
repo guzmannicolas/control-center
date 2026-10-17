@@ -20,7 +20,17 @@ New things to watch are added as **checkers**: one file that follows a common co
 |---|---|---|---|
 | `http-uptime` | website, service | 5 min | Status code and response time; can require a redirect (e.g. a login wall that must stay in front). |
 | `ssl-expiry` | website, service, domain | 24 h | Whether the certificate is trusted and how many days are left. |
-| `domain-expiry` | domain | 24 h | Registration expiry date, read from RDAP. |
+| `domain-expiry` | domain | 24 h | Registration record from RDAP: expiry, registrar, DNS provider, DNSSEC, transfer lock. |
+| `postgres-health` | database | 5 min | Version, size, connections, uptime, cache hit rate, biggest tables. |
+| `redis-health` | database | 5 min | Version, memory, keys, clients, persistence. |
+| `backup-age` | database | 1 h | When the backup script last succeeded, its size, and any warnings it printed. |
+
+### Watching databases safely
+
+- Each watched Postgres has a `cc_monitor` user that is only a member of `pg_monitor`: it reads statistics, never rows, and cannot write (`CREATE ROLE cc_monitor LOGIN PASSWORD '…' CONNECTION LIMIT 3 IN ROLE pg_monitor`).
+- Connection URLs live in `.env` under names starting with `MONITOR_`; a target only names the variable, and checkers refuse any other name, so they can never be pointed at `DATABASE_URL` or another secret. The API never returns them.
+- The backup checker reads only the backup script's log, mounted read-only, never the backup files.
+- Server-specific wiring (joining the CMS network, the log mount) lives in `docker-compose.vps.yml`, enabled with `COMPOSE_FILE` in `.env`, so `docker-compose.yml` stays portable.
 
 ### Processes
 
@@ -41,7 +51,7 @@ The control center has its **own** Postgres and Redis, separate from the service
 
 ## Dashboard
 
-A React app (`apps/web`) for one user: a login screen, then status counts, open incidents, every target with its checks, and a response-time chart (24 h / 7 / 30 days, hover or arrow keys to read values, table view). Status is never shown by color alone. Light and dark mode.
+A React app (`apps/web`) for one user. Sections come from one registry (`src/sections.tsx`): **Overview** (status counts, open incidents, every target with its checks, a response-time chart), **Domains** (renewal, registrar, DNS, transfer lock, sites on each domain) and **Databases** (health, size, biggest tables, backups). The overview's chart (24 h / 7 / 30 days, hover or arrow keys to read values, table view). Status is never shown by color alone. Light and dark mode.
 
 The dashboard calls the API at its own subdomain with `credentials: 'include'`: CORS allows only `DASHBOARD_ORIGIN`, and the session cookie works because both addresses are on the same site. Set `VITE_API_URL` at build time (`https://control-api.nicoguzmandev.com` in production, `http://localhost:4101` for local tests). API responses are `Cache-Control: no-store`.
 
