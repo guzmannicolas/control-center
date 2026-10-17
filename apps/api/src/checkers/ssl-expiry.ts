@@ -1,6 +1,6 @@
 import tls from 'node:tls';
 import { z } from 'zod';
-import type { CheckOutcome } from '@cc/shared';
+import type { CheckOutcomeInput } from '@cc/shared';
 import { daysBetween, defineChecker, hostOf, statusByDaysLeft } from './define.js';
 
 export interface CertificateInfo {
@@ -39,7 +39,7 @@ const Settings = z.object({
   timeoutMs: z.number().int().positive().default(10_000),
 });
 
-export function classifyCertificate(cert: CertificateInfo, now: Date, s: z.output<typeof Settings>): CheckOutcome {
+export function classifyCertificate(cert: CertificateInfo, now: Date, s: z.output<typeof Settings>): CheckOutcomeInput {
   const daysLeft = daysBetween(now, cert.validTo);
   const metrics = { daysLeft };
   if (!cert.trusted) return { status: 'fail', message: `Certificate not trusted: ${cert.trustError ?? 'unknown reason'}`, metrics };

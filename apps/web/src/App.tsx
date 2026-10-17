@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { api, isUnauthorized } from './api.ts';
-import { Dashboard } from './components/Dashboard.tsx';
+import { api, isNetworkError, isUnauthorized } from './api.ts';
+import { Shell } from './components/Shell.tsx';
 import { Login } from './components/Login.tsx';
 
 export function App() {
-  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: false });
+  // Retry only network trouble (a hiccup, a hung connection); a 401 is a real answer.
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, retry: (count, err) => isNetworkError(err) && count < 2 });
 
   if (me.isPending) return <p className="p-8 text-muted">Loading…</p>;
   if (me.error && isUnauthorized(me.error)) return <Login />;
@@ -19,5 +20,5 @@ export function App() {
       </main>
     );
   }
-  return <Dashboard user={me.data.user} />;
+  return <Shell user={me.data.user} />;
 }

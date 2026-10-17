@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
   CHECK_STATUSES, statusRank, worstStatus,
-  type CheckStatus, type IncidentView, type MonitorView, type Overview, type ResultPoint, type TargetView,
+  type CheckStatus, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview,
+  type ResultPoint, type TargetView,
 } from '@cc/shared';
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
@@ -57,6 +58,50 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     const counts = Object.fromEntries([...CHECK_STATUSES, 'unknown'].map((s) => [s, 0])) as Overview['counts'];
     for (const t of views) counts[t.status ?? 'unknown']++;
     return { generatedAt: new Date().toISOString(), counts, targets: views };
+  });
+
+  app.get('/domains', async (): Promise<DomainView[]> => {
+    const targets = await prisma.target.findMany({
+      where: { enabled: true },
+      orderBy: { name: 'asc' },
+      include: {
+        monitors: {
+          where: { enabled: true },
+          include: { results: { take: 1, orderBy: { checkedAt: 'desc' }, select: { message: true, metrics: true, details: true } } },
+        },
+      },
+    });
+    const hostOf = (config: unknown) => {
+      const url = (config as { url?: string }).url;
+      return url ? new URL(url).hostname : null;
+    };
+    const sites = targets.flatMap((t) => {
+      const host = hostOf(t.config);
+      if (!host) return [];
+      const known = t.monitors.flatMap((m) => (m.lastStatus ? [m.lastStatus] : []));
+      return [{ id: t.id, name: t.name, url: (t.config as { url: string }).url, host, status: known.length ? worstStatus(known) : null }];
+    });
+
+    const domains = targets.filter((t) => t.type === 'domain').map((t): DomainView => {
+      const name = (t.config as { domain: string }).domain;
+      const m = t.monitors.find((x) => x.checker === 'domain-expiry');
+      const last = m?.results[0];
+      const details = last?.details as DomainDetails | undefined;
+      return {
+        id: t.id,
+        name,
+        status: m?.lastStatus ?? null,
+        message: last?.message ?? null,
+        checkedAt: m?.lastCheckedAt?.toISOString() ?? null,
+        daysLeft: asMetrics(last?.metrics).daysLeft ?? null,
+        details: details && 'expiresOn' in details ? details : null,
+        sites: sites
+          .filter((x) => x.host === name || x.host.endsWith(`.${name}`))
+          .map(({ host: _host, ...site }) => site),
+      };
+    });
+    // Soonest renewal first: that is what needs attention.
+    return domains.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity));
   });
 
   const IncidentsQuery = z.object({

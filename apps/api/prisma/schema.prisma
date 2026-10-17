@@ -75,6 +75,7 @@ model Result {
   durationMs Int         @map("duration_ms")
   message    String
   metrics    Json        @default("{}")
+  details    Json        @default("{}")
 
   @@index([monitorId, checkedAt(sort: Desc)])
   @@map("results")

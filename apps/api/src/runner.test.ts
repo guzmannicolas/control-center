@@ -27,7 +27,7 @@ describe('decideIncident', () => {
 describe('executeCheck turns every kind of trouble into an "error" result', () => {
   it('passes a good outcome through', async () => {
     const { outcome } = await executeCheck(fake(async () => ({ status: 'ok', message: 'fine' })), site, {});
-    expect(outcome).toEqual({ status: 'ok', message: 'fine', metrics: {} });
+    expect(outcome).toEqual({ status: 'ok', message: 'fine', metrics: {}, details: {} });
   });
 
   it('unknown checker', async () => {

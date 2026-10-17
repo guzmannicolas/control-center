@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { DomainConfig, UrlConfig, type CheckOutcome, type CheckStatus, type TargetType } from '@cc/shared';
+import { DomainConfig, UrlConfig, type CheckOutcomeInput, type CheckStatus, type TargetType } from '@cc/shared';
 
 export interface CheckTarget {
   id: string;
@@ -20,7 +20,7 @@ export interface Checker<S extends z.ZodType = z.ZodType> {
   appliesTo: readonly TargetType[];
   settings: S;
   defaultIntervalSeconds: number;
-  run(target: CheckTarget, settings: z.output<S>, ctx: CheckContext): Promise<CheckOutcome>;
+  run(target: CheckTarget, settings: z.output<S>, ctx: CheckContext): Promise<CheckOutcomeInput>;
 }
 
 export const defineChecker = <S extends z.ZodType>(checker: Checker<S>): Checker<S> => checker;

@@ -1,9 +1,10 @@
-import type { CheckStatus, IncidentView, User } from '@cc/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { CheckStatus, IncidentView } from '@cc/shared';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../api.ts';
+import { PageHeader } from '../components/PageHeader.tsx';
 import { ago, checkerLabel, dateTime, duration } from '../format.ts';
-import { StatusIcon } from './Status.tsx';
-import { TargetCard } from './TargetCard.tsx';
+import { StatusIcon } from '../components/Status.tsx';
+import { TargetCard } from '../components/TargetCard.tsx';
 
 const TILES: { key: CheckStatus | 'unknown'; label: string }[] = [
   { key: 'ok', label: 'OK' },
@@ -26,34 +27,19 @@ function IncidentRow({ incident }: { incident: IncidentView }) {
   );
 }
 
-export function Dashboard({ user }: { user: User }) {
-  const queryClient = useQueryClient();
+export function OverviewPage() {
   const overview = useQuery({ queryKey: ['overview'], queryFn: api.overview, refetchInterval: 30_000 });
   const incidents = useQuery({ queryKey: ['incidents'], queryFn: api.incidents, refetchInterval: 60_000 });
-  const logout = useMutation({
-    mutationFn: api.logout,
-    // Reset (not clear) "who am I": it refetches, gets 401 and shows the login screen. Then drop the private data.
-    onSettled: async () => {
-      await queryClient.resetQueries({ queryKey: ['me'] });
-      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' });
-    },
-  });
 
   const open = incidents.data?.filter((i) => i.resolvedAt === null) ?? [];
   const past = incidents.data?.filter((i) => i.resolvedAt !== null) ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-16">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-1 py-6">
-        <h1 className="text-xl font-semibold">Control Center</h1>
-        <span className="text-sm text-muted">
-          {overview.data ? `Updated ${ago(overview.data.generatedAt)}` : overview.isError ? 'Could not refresh' : 'Loading…'}
-        </span>
-        <span className="ml-auto truncate text-sm text-ink-2">{user.email}</span>
-        <button onClick={() => logout.mutate()} className="rounded-md border border-line px-3 py-1 text-sm hover:bg-grid/40">
-          Sign out
-        </button>
-      </header>
+    <div>
+      <PageHeader
+        title="Overview"
+        subtitle={overview.data ? `Updated ${ago(overview.data.generatedAt)}` : overview.isError ? 'Could not refresh' : 'Loading…'}
+      />
 
       {overview.data && (
         <>

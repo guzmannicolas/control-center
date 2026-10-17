@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { CheckTarget } from './define.js';
-import { classifyExpiry, findExpiration } from './domain-expiry.js';
+import { classifyExpiry, findExpiration, parseRdap } from './domain-expiry.js';
 import { httpUptime } from './http-uptime.js';
 import { classifyCertificate } from './ssl-expiry.js';
 
@@ -31,7 +31,7 @@ describe('http-uptime (against a local server)', () => {
   it('is ok for a fast 200', async () => {
     const r = await run('/');
     expect(r.status).toBe('ok');
-    expect(r.metrics.statusCode).toBe(200);
+    expect(r.metrics?.statusCode).toBe(200);
   });
 
   it('fails on a 500', async () => {
@@ -101,6 +101,33 @@ describe('domain-expiry', () => {
 
   it('warns 30 days ahead and gives the date to renew by', () => {
     const r = classifyExpiry(inDays(20), now, { warnDays: 30, failDays: 7, timeoutMs: 1, rdapBase: 'https://x/' });
-    expect(r).toEqual({ status: 'warn', message: 'Renew by 2026-11-05 (20 days left)', metrics: { daysLeft: 20 } });
+    expect(r).toEqual({ status: 'warn', message: 'Renew by 2026-11-05 (20 days left)', metrics: { daysLeft: 20 }, details: {} });
+  });
+
+  it('reads registrar, DNS, DNSSEC and transfer lock from a real-shaped RDAP record', () => {
+    const rdap = {
+      status: ['client transfer prohibited'],
+      nameservers: [{ ldhName: 'ASPEN.NS.CLOUDFLARE.COM' }, { ldhName: 'COLIN.NS.CLOUDFLARE.COM' }],
+      secureDNS: { delegationSigned: false },
+      events: [
+        { eventAction: 'registration', eventDate: '2025-04-24T02:01:18Z' },
+        { eventAction: 'expiration', eventDate: '2027-04-24T02:01:18Z' },
+      ],
+      entities: [{ roles: ['registrar'], vcardArray: ['vcard', [['version', {}, 'text', '4.0'], ['fn', {}, 'text', 'Cloudflare, Inc.']]] }],
+    };
+    expect(parseRdap(rdap)?.details).toEqual({
+      registrar: 'Cloudflare, Inc.',
+      registeredOn: '2025-04-24T02:01:18.000Z',
+      expiresOn: '2027-04-24T02:01:18.000Z',
+      nameservers: ['aspen.ns.cloudflare.com', 'colin.ns.cloudflare.com'],
+      dnsProvider: 'Cloudflare',
+      dnssec: false,
+      transferLocked: true,
+    });
+  });
+
+  it('copes with a record that has no registrar, name servers or lock', () => {
+    const d = parseRdap({ events: [{ eventAction: 'expiration', eventDate: '2027-01-01T00:00:00Z' }] })?.details;
+    expect(d).toMatchObject({ registrar: null, nameservers: [], dnsProvider: null, dnssec: null, transferLocked: false });
   });
 });

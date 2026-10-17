@@ -11,7 +11,7 @@ describe.skipIf(!url)('recordOutcome on a real database', () => {
   let monitorId: string;
   const at = (minute: number) => new Date(Date.UTC(2026, 9, 16, 12, minute));
   const record = (status: CheckOutcome['status'], minute: number, message: string = status) =>
-    recordOutcome(prisma, monitorId, { status, message, metrics: {} }, 10, at(minute));
+    recordOutcome(prisma, monitorId, { status, message, metrics: {}, details: {} }, 10, at(minute));
   const incidents = () => prisma.incident.findMany({ where: { monitorId }, orderBy: { openedAt: 'asc' } });
 
   beforeEach(async () => {

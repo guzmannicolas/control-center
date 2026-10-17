@@ -4,7 +4,7 @@ import { errorReason, type Checker, type CheckTarget } from './checkers/define.j
 import type { PrismaClient } from './generated/prisma/client.js';
 import { withTimeout } from './lib/timeout.js';
 
-const error = (message: string): CheckOutcome => ({ status: 'error', message, metrics: {} });
+const error = (message: string): CheckOutcome => ({ status: 'error', message, metrics: {}, details: {} });
 
 // Runs one checker safely: a missing, misconfigured, crashing or hanging checker becomes an "error" result.
 export async function executeCheck(
@@ -50,8 +50,8 @@ export function decideIncident(hasOpenIncident: boolean, status: CheckStatus): I
 // One transaction: the result, the monitor's latest status and the incident change are saved together or not at all.
 export function recordOutcome(prisma: PrismaClient, monitorId: string, outcome: CheckOutcome, durationMs: number, checkedAt: Date) {
   return prisma.$transaction(async (tx) => {
-    const { status, message, metrics } = outcome;
-    await tx.result.create({ data: { monitorId, checkedAt, status, durationMs, message, metrics } });
+    const { status, message, metrics, details } = outcome;
+    await tx.result.create({ data: { monitorId, checkedAt, status, durationMs, message, metrics, details: details as object } });
     await tx.monitor.update({ where: { id: monitorId }, data: { lastStatus: status, lastCheckedAt: checkedAt } });
 
     const open = await tx.incident.findFirst({ where: { monitorId, resolvedAt: null } });
