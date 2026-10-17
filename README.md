@@ -43,9 +43,9 @@ The control center has its **own** Postgres and Redis, separate from the service
 
 A React app (`apps/web`) for one user: a login screen, then status counts, open incidents, every target with its checks, and a response-time chart (24 h / 7 / 30 days, hover or arrow keys to read values, table view). Status is never shown by color alone. Light and dark mode.
 
-In production the browser only talks to the dashboard's own address: Vercel forwards `/auth/*` and `/api/*` to the API (`apps/web/vercel.json`), so there is no cross-site request and the session cookie is first-party. The reason is practical: Spanish ISPs block Cloudflare IP ranges during LaLiga matches, and the API sits behind Cloudflare, so direct calls from Spain hang at those times. `VITE_API_URL` is the address the dashboard calls (the dashboard itself in production, `http://localhost:4101` for local tests); the API's `DASHBOARD_ORIGIN` must match the dashboard. API responses are `Cache-Control: no-store`.
+The dashboard calls the API at its own subdomain with `credentials: 'include'`: CORS allows only `DASHBOARD_ORIGIN`, and the session cookie works because both addresses are on the same site. Set `VITE_API_URL` at build time (`https://control-api.nicoguzmandev.com` in production, `http://localhost:4101` for local tests). API responses are `Cache-Control: no-store`.
 
-Trade-off: through Vercel, every login attempt reaches the API from Vercel's addresses, so the per-IP login limit is shared; at worst someone can lock the login for 15 minutes.
+Known limitation: the API is behind Cloudflare, and Spanish ISPs block Cloudflare IP ranges during LaLiga matches, so from Spain the dashboard cannot reach it at those times (it shows an error with Retry after 15 s). Forwarding the API through Vercel would avoid it, but Cloudflare's bot protection challenges Vercel's server-to-server requests; that needs Bot Fight Mode off for the zone, or a route that skips Cloudflare.
 
 ### Login
 

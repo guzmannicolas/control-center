@@ -2,14 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/auth/:path*",
-      "destination": "https://control-api.nicoguzmandev.com/auth/:path*"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "https://control-api.nicoguzmandev.com/api/:path*"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
