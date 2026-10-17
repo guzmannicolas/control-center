@@ -134,3 +134,41 @@ export interface ResultPoint {
   message: string;
   metrics: Record<string, number>;
 }
+
+// --- Improvements (backlog) -----------------------------------------------------------------------
+
+export const IMPROVEMENT_AREAS = ['security', 'backups', 'monitoring', 'infrastructure', 'domains', 'dashboard', 'code quality', 'clients'] as const;
+export const IMPROVEMENT_STATUSES = ['idea', 'planned', 'in_progress', 'done'] as const;
+export const PRIORITIES = ['high', 'medium', 'low'] as const;
+
+// One schema for the form in the browser and the request on the server.
+export const ImprovementInput = z.object({
+  title: z.string().trim().min(3, 'Write at least 3 characters').max(200),
+  details: z.string().trim().max(2000).default(''),
+  area: z.enum(IMPROVEMENT_AREAS),
+  priority: z.enum(PRIORITIES).default('medium'),
+  status: z.enum(IMPROVEMENT_STATUSES).default('idea'),
+});
+export type ImprovementInput = z.input<typeof ImprovementInput>;
+export const ImprovementPatch = ImprovementInput.partial();
+
+export interface ImprovementView {
+  id: string;
+  title: string;
+  details: string;
+  area: (typeof IMPROVEMENT_AREAS)[number];
+  priority: (typeof PRIORITIES)[number];
+  status: (typeof IMPROVEMENT_STATUSES)[number];
+  createdAt: string;
+  doneAt: string | null;
+}
+
+// --- Learning -------------------------------------------------------------------------------------
+
+export const ModuleId = z.string().regex(/^[a-z0-9-]{2,60}$/);
+
+export interface LearningProgressView {
+  moduleId: string;
+  score: number;
+  completedAt: string;
+}

@@ -85,3 +85,59 @@ describe.skipIf(!url)('GET /api/databases', () => {
     expect(res.body).not.toContain('MONITOR_');
   });
 });
+
+describe.skipIf(!url)('improvements and learning progress', () => {
+  const prisma = createPrisma(url ?? '');
+  const up = async () => 'ok';
+  const app = buildApp({ prisma, probes: { database: up, redis: up }, dashboardOrigin: ORIGIN, cookieSecure: true });
+  afterAll(() => prisma.$disconnect());
+
+  const loginAs = async (email: string, ip: string) => {
+    await prisma.user.create({ data: { email, passwordHash: await hashPassword('a long enough password') } });
+    const res = await app.inject({
+      method: 'POST', url: '/auth/login', headers: { origin: ORIGIN, 'cf-connecting-ip': ip },
+      payload: { email, password: 'a long enough password' },
+    });
+    return { cc_session: res.cookies.find((c) => c.name === 'cc_session')!.value };
+  };
+  const send = (method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, cookies: Record<string, string>, payload?: object) =>
+    app.inject({ method, url: path, cookies, headers: { origin: ORIGIN }, ...(payload ? { payload } : {}) });
+
+  beforeEach(async () => {
+    await prisma.$executeRawUnsafe('TRUNCATE users, improvements CASCADE');
+  });
+
+  it('creates, lists in working order, updates, completes, reopens and deletes improvements', async () => {
+    const me = await loginAs('me@example.com', '192.0.2.60');
+    expect((await send('POST', '/api/improvements', me, { title: 'x', area: 'security' })).statusCode).toBe(400);
+
+    const low = (await send('POST', '/api/improvements', me, { title: 'Turn on DNSSEC', area: 'domains', priority: 'low' })).json();
+    const high = (await send('POST', '/api/improvements', me, { title: 'Back up the database', area: 'backups', priority: 'high' })).json();
+    await send('PATCH', `/api/improvements/${low.id}`, me, { status: 'in_progress' });
+    const list = (await app.inject({ url: '/api/improvements', cookies: me })).json();
+    expect(list.map((i: { title: string }) => i.title)).toEqual(['Turn on DNSSEC', 'Back up the database']); // in progress first
+
+    const done = (await send('PATCH', `/api/improvements/${high.id}`, me, { status: 'done' })).json();
+    expect(done.doneAt).not.toBeNull();
+    const reopened = (await send('PATCH', `/api/improvements/${high.id}`, me, { status: 'planned' })).json();
+    expect(reopened.doneAt).toBeNull();
+
+    expect((await send('DELETE', `/api/improvements/${low.id}`, me)).statusCode).toBe(204);
+    expect((await send('DELETE', `/api/improvements/${low.id}`, me)).statusCode).toBe(404);
+  });
+
+  it('keeps learning progress per user', async () => {
+    const me = await loginAs('me@example.com', '192.0.2.61');
+    const other = await loginAs('other@example.com', '192.0.2.62');
+    expect((await send('PUT', '/api/learning/progress/docker', me, { score: 100 })).statusCode).toBe(200);
+    expect((await send('PUT', '/api/learning/progress/Not Valid', me, { score: 100 })).statusCode).toBe(400);
+
+    expect((await app.inject({ url: '/api/learning/progress', cookies: me })).json()).toMatchObject([{ moduleId: 'docker', score: 100 }]);
+    expect((await app.inject({ url: '/api/learning/progress', cookies: other })).json()).toEqual([]);
+
+    await send('DELETE', '/api/learning/progress/docker', other); // someone else cannot reset mine
+    expect((await app.inject({ url: '/api/learning/progress', cookies: me })).json()).toHaveLength(1);
+    await send('DELETE', '/api/learning/progress/docker', me);
+    expect((await app.inject({ url: '/api/learning/progress', cookies: me })).json()).toEqual([]);
+  });
+});

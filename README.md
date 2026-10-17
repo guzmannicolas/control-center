@@ -51,7 +51,7 @@ The control center has its **own** Postgres and Redis, separate from the service
 
 ## Dashboard
 
-A React app (`apps/web`) for one user. Sections come from one registry (`src/sections.tsx`): **Overview** (status counts, open incidents, every target with its checks, a response-time chart), **Domains** (renewal, registrar, DNS, transfer lock, sites on each domain) and **Databases** (health, size, biggest tables, backups). The overview's chart (24 h / 7 / 30 days, hover or arrow keys to read values, table view). Status is never shown by color alone. Light and dark mode.
+A React app (`apps/web`) for one user. Sections come from one registry (`src/sections.tsx`): **Overview** (status counts, open incidents, every target with its checks, a response-time chart), **Domains** (renewal, registrar, DNS, transfer lock, sites on each domain) and **Databases** (health, size, biggest tables, backups), **Improvements** (a backlog stored in Postgres: area, priority, idea → planned → in progress → done) and **Learning** (one study module per technology used here, with interview questions and a quiz; passing it earns a badge, and modules not yet passed show as knowledge debt). The overview's chart (24 h / 7 / 30 days, hover or arrow keys to read values, table view). Status is never shown by color alone. Light and dark mode.
 
 The dashboard calls the API at its own subdomain with `credentials: 'include'`: CORS allows only `DASHBOARD_ORIGIN`, and the session cookie works because both addresses are on the same site. Set `VITE_API_URL` at build time (`https://control-api.nicoguzmandev.com` in production, `http://localhost:4101` for local tests). API responses are `Cache-Control: no-store`.
 

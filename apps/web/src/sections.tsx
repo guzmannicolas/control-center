@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react';
-import { DatabaseIcon, DomainIcon, OverviewIcon } from './components/Icons.tsx';
+import { DatabaseIcon, DomainIcon, ImprovementIcon, LearningIcon, OverviewIcon } from './components/Icons.tsx';
 import { DatabasesPage } from './pages/Databases.tsx';
+import { ImprovementsPage } from './pages/Improvements.tsx';
+import { LearningPage } from './pages/Learning.tsx';
 import { DomainsPage } from './pages/Domains.tsx';
 import { OverviewPage } from './pages/Overview.tsx';
 
@@ -16,4 +18,6 @@ export const SECTIONS: Section[] = [
   { path: '/', label: 'Overview', Icon: OverviewIcon, Page: OverviewPage },
   { path: '/domains', label: 'Domains', Icon: DomainIcon, Page: DomainsPage },
   { path: '/databases', label: 'Databases', Icon: DatabaseIcon, Page: DatabasesPage },
+  { path: '/improvements', label: 'Improvements', Icon: ImprovementIcon, Page: ImprovementsPage },
+  { path: '/learning', label: 'Learning', Icon: LearningIcon, Page: LearningPage },
 ];

@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
-  CHECK_STATUSES, DatabaseConfig, statusRank, worstStatus,
+  CHECK_STATUSES, DatabaseConfig, ImprovementInput, ImprovementPatch, ModuleId, PRIORITIES, statusRank, worstStatus,
+  type ImprovementView, type LearningProgressView,
   type CheckSnapshot, type CheckStatus, type DatabaseView, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview,
   type ResultPoint, type TargetView,
 } from '@cc/shared';
@@ -10,11 +11,29 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    user: { id: string; email: string } | null;
+  }
+}
+
+type ImprovementRow = {
+  id: string; title: string; details: string; area: string; priority: ImprovementView['priority'];
+  status: ImprovementView['status']; createdAt: Date; doneAt: Date | null;
+};
+const improvementView = (i: ImprovementRow): ImprovementView => ({
+  id: i.id, title: i.title, details: i.details, area: i.area as ImprovementView['area'], priority: i.priority,
+  status: i.status, createdAt: i.createdAt.toISOString(), doneAt: i.doneAt?.toISOString() ?? null,
+});
+const IdParam = z.object({ id: z.uuid() });
+
 export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
-  // Every route in this plugin requires a logged-in user.
+  // Every route in this plugin requires a logged-in user, and knows who it is.
+  app.decorateRequest('user', null);
   app.addHook('preHandler', async (req, reply) => {
     const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
     if (!user) return reply.code(401).send({ error: 'Not logged in' });
+    req.user = user;
   });
 
   app.get('/overview', async (): Promise<Overview> => {
@@ -143,6 +162,76 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     });
     // Whatever needs attention first.
     return views.sort((a, b) => statusRank(b.status) - statusRank(a.status) || a.name.localeCompare(b.name));
+  });
+
+  // --- Improvements: a shared backlog ----------------------------------------------------------------
+  const order = (i: ImprovementView) =>
+    [['in_progress', 'planned', 'idea', 'done'].indexOf(i.status), PRIORITIES.indexOf(i.priority)] as const;
+
+  app.get('/improvements', async (): Promise<ImprovementView[]> => {
+    const rows = await prisma.improvement.findMany({ orderBy: { createdAt: 'desc' } });
+    // Work in progress first, then planned, ideas, done; high priority first within each.
+    return rows.map(improvementView).sort((a, b) => {
+      const [sa, pa] = order(a);
+      const [sb, pb] = order(b);
+      return sa - sb || pa - pb;
+    });
+  });
+
+  app.post('/improvements', async (req, reply) => {
+    const body = ImprovementInput.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: body.error.issues[0]?.message ?? 'Invalid improvement' });
+    const row = await prisma.improvement.create({
+      data: { ...body.data, doneAt: body.data.status === 'done' ? new Date() : null },
+    });
+    return reply.code(201).send(improvementView(row));
+  });
+
+  app.patch('/improvements/:id', async (req, reply) => {
+    const params = IdParam.safeParse(req.params);
+    const body = ImprovementPatch.safeParse(req.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: 'Invalid change' });
+    const current = await prisma.improvement.findUnique({ where: { id: params.data.id } });
+    if (!current) return reply.code(404).send({ error: 'Not found' });
+    // Remember when something was finished; forget it if it is reopened.
+    const status = body.data.status ?? current.status;
+    const doneAt = status === 'done' ? (current.doneAt ?? new Date()) : null;
+    const row = await prisma.improvement.update({ where: { id: current.id }, data: { ...body.data, doneAt } });
+    return improvementView(row);
+  });
+
+  app.delete('/improvements/:id', async (req, reply) => {
+    const params = IdParam.safeParse(req.params);
+    if (!params.success) return reply.code(400).send({ error: 'Invalid id' });
+    const { count } = await prisma.improvement.deleteMany({ where: { id: params.data.id } });
+    return count ? reply.code(204).send() : reply.code(404).send({ error: 'Not found' });
+  });
+
+  // --- Learning: which modules this user has passed ----------------------------------------------------
+  app.get('/learning/progress', async (req): Promise<LearningProgressView[]> => {
+    const rows = await prisma.learningProgress.findMany({ where: { userId: req.user!.id }, orderBy: { completedAt: 'asc' } });
+    return rows.map((r) => ({ moduleId: r.moduleId, score: r.score, completedAt: r.completedAt.toISOString() }));
+  });
+
+  const Score = z.object({ score: z.number().int().min(0).max(100) });
+  app.put('/learning/progress/:moduleId', async (req, reply) => {
+    const moduleId = ModuleId.safeParse((req.params as { moduleId?: string }).moduleId);
+    const body = Score.safeParse(req.body);
+    if (!moduleId.success || !body.success) return reply.code(400).send({ error: 'Invalid progress' });
+    const key = { userId: req.user!.id, moduleId: moduleId.data };
+    const row = await prisma.learningProgress.upsert({
+      where: { userId_moduleId: key },
+      create: { ...key, score: body.data.score },
+      update: { score: body.data.score, completedAt: new Date() },
+    });
+    return { moduleId: row.moduleId, score: row.score, completedAt: row.completedAt.toISOString() };
+  });
+
+  app.delete('/learning/progress/:moduleId', async (req, reply) => {
+    const moduleId = ModuleId.safeParse((req.params as { moduleId?: string }).moduleId);
+    if (!moduleId.success) return reply.code(400).send({ error: 'Invalid module' });
+    await prisma.learningProgress.deleteMany({ where: { userId: req.user!.id, moduleId: moduleId.data } });
+    return reply.code(204).send();
   });
 
   const IncidentsQuery = z.object({

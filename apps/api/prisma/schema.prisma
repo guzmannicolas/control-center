@@ -103,6 +103,7 @@ model User {
   passwordHash String    @map("password_hash")
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions     Session[]
+  learning     LearningProgress[]
 
   @@map("users")
 }
@@ -120,4 +121,45 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+enum ImprovementStatus {
+  idea
+  planned
+  in_progress
+  done
+}
+
+enum Priority {
+  high
+  medium
+  low
+}
+
+// The backlog: everything worth improving, so nothing found along the way gets lost.
+model Improvement {
+  id        String            @id @default(uuid()) @db.Uuid
+  title     String
+  details   String            @default("")
+  area      String
+  priority  Priority          @default(medium)
+  status    ImprovementStatus @default(idea)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  doneAt    DateTime?         @map("done_at") @db.Timestamptz(3)
+
+  @@index([status])
+  @@map("improvements")
+}
+
+// Learning modules a user has passed. The modules themselves live in the code.
+model LearningProgress {
+  userId      String   @map("user_id") @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moduleId    String   @map("module_id")
+  score       Int
+  completedAt DateTime @default(now()) @map("completed_at") @db.Timestamptz(3)
+
+  @@id([userId, moduleId])
+  @@map("learning_progress")
 }

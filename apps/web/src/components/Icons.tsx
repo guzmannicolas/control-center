@@ -17,3 +17,9 @@ export const DomainIcon = () => (
 export const DatabaseIcon = () => (
   <Icon><ellipse cx="12" cy="5.5" rx="7.5" ry="2.8" /><path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13" /><path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8" /></Icon>
 );
+export const ImprovementIcon = () => (
+  <Icon><path d="M9 11l3 3l8-8" /><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /></Icon>
+);
+export const LearningIcon = () => (
+  <Icon><path d="M2 8l10-5l10 5l-10 5z" /><path d="M6 10.5v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" /><path d="M22 8v6" /></Icon>
+);

@@ -21,7 +21,7 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}) {
   const app = Fastify(options);
 
   // CORS: browsers may call this API only from the dashboard, with its cookie.
-  app.register(cors, { origin: deps.dashboardOrigin, credentials: true, methods: ['GET', 'POST'] });
+  app.register(cors, { origin: deps.dashboardOrigin, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
   app.register(cookie);
   app.register(rateLimit, { global: false, redis: deps.rateLimitRedis, nameSpace: 'cc-rate-limit:' });
 

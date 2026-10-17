@@ -24,7 +24,8 @@ export function Shell({ user }: { user: User }) {
       queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' });
     },
   });
-  const current = SECTIONS.find((s) => s.path === path);
+  // A section also owns the paths below it (/learning/docker belongs to /learning).
+  const current = SECTIONS.find((s) => s.path === path) ?? SECTIONS.find((s) => s.path !== '/' && path.startsWith(`${s.path}/`));
   const Page = current?.Page ?? NotFound;
 
   return (
@@ -40,7 +41,7 @@ export function Shell({ user }: { user: User }) {
         </div>
         <ul className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:px-3">
           {SECTIONS.map(({ path: to, label, Icon }) => {
-            const active = to === path;
+            const active = to === current?.path;
             return (
               <li key={to}>
                 <Link

@@ -1,4 +1,6 @@
-import type { DatabaseView, DomainView, IncidentView, Overview, ResultPoint, User } from '@cc/shared';
+import type {
+  DatabaseView, DomainView, ImprovementInput, ImprovementView, IncidentView, LearningProgressView, Overview, ResultPoint, User,
+} from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
 
@@ -23,7 +25,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const timedOut = err instanceof DOMException && err.name === 'TimeoutError';
     throw new ApiError(0, timedOut ? 'The API took too long to answer' : 'The API cannot be reached');
   }
-  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  const body = (res.status === 204 ? {} : await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new ApiError(res.status, body.error ?? `HTTP ${res.status}`);
   return body as T;
 }
@@ -40,5 +42,14 @@ export const api = {
   incidents: () => request<IncidentView[]>('/api/incidents?limit=20'),
   domains: () => request<DomainView[]>('/api/domains'),
   databases: () => request<DatabaseView[]>('/api/databases'),
+  improvements: () => request<ImprovementView[]>('/api/improvements'),
+  addImprovement: (input: ImprovementInput) => request<ImprovementView>('/api/improvements', { method: 'POST', body: JSON.stringify(input) }),
+  updateImprovement: (id: string, change: Partial<ImprovementInput>) =>
+    request<ImprovementView>(`/api/improvements/${id}`, { method: 'PATCH', body: JSON.stringify(change) }),
+  deleteImprovement: (id: string) => request<void>(`/api/improvements/${id}`, { method: 'DELETE' }),
+  learningProgress: () => request<LearningProgressView[]>('/api/learning/progress'),
+  completeModule: (moduleId: string, score: number) =>
+    request<LearningProgressView>(`/api/learning/progress/${moduleId}`, { method: 'PUT', body: JSON.stringify({ score }) }),
+  resetModule: (moduleId: string) => request<void>(`/api/learning/progress/${moduleId}`, { method: 'DELETE' }),
   results: (monitorId: string, hours: number) => request<ResultPoint[]>(`/api/monitors/${monitorId}/results?hours=${hours}`),
 };
