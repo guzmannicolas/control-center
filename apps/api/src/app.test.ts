@@ -43,6 +43,11 @@ describe('CORS and CSRF', () => {
     expect(res.headers['access-control-allow-origin']).not.toBe('https://evil.test');
   });
 
+  it('marks private responses as not cacheable', async () => {
+    const res = await app({ database: up, redis: up }).inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'https://evil.test' } });
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
   it('refuses a POST from another origin before it reaches any route', async () => {
     const res = await app({ database: up, redis: up }).inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'https://evil.test' } });
     expect(res.statusCode).toBe(403);

@@ -32,6 +32,11 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}) {
     if (req.headers.origin !== deps.dashboardOrigin) return reply.code(403).send({ error: 'Forbidden origin' });
   });
 
+  // Private data must never be stored by a proxy or CDN along the way (the dashboard reaches us through Vercel).
+  app.addHook('onSend', async (req, reply) => {
+    if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) reply.header('cache-control', 'no-store');
+  });
+
   // A health check that hangs is worse than one that fails: callers cannot tell slow from dead.
   app.get('/health', async (_req, reply) => {
     const ms = deps.healthTimeoutMs ?? 2000;

@@ -43,7 +43,9 @@ The control center has its **own** Postgres and Redis, separate from the service
 
 A React app (`apps/web`) for one user: a login screen, then status counts, open incidents, every target with its checks, and a response-time chart (24 h / 7 / 30 days, hover or arrow keys to read values, table view). Status is never shown by color alone. Light and dark mode.
 
-It calls the API with `credentials: 'include'`. Set `VITE_API_URL` at build time, and the API's `DASHBOARD_ORIGIN` to the dashboard's address.
+In production the browser only talks to the dashboard's own address: Vercel forwards `/auth/*` and `/api/*` to the API (`apps/web/vercel.json`), so there is no cross-site request and the session cookie is first-party. The reason is practical: Spanish ISPs block Cloudflare IP ranges during LaLiga matches, and the API sits behind Cloudflare, so direct calls from Spain hang at those times. `VITE_API_URL` is the address the dashboard calls (the dashboard itself in production, `http://localhost:4101` for local tests); the API's `DASHBOARD_ORIGIN` must match the dashboard. API responses are `Cache-Control: no-store`.
+
+Trade-off: through Vercel, every login attempt reaches the API from Vercel's addresses, so the per-IP login limit is shared; at worst someone can lock the login for 15 minutes.
 
 ### Login
 
