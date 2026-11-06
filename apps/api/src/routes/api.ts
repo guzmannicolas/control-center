@@ -9,6 +9,7 @@ import {
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
 import { subdomainsOf } from '../subdomains.js';
 import { fetchCloudflareDnsRecords } from '../cloudflare.js';
+import { runAgentLoop } from '../agent/engine.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -169,6 +170,38 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     });
     // Whatever needs attention first.
     return views.sort((a, b) => statusRank(b.status) - statusRank(a.status) || a.name.localeCompare(b.name));
+  });
+
+  // --- Agent Execution Harness ---------------------------------------------------------------------
+  app.post('/agent/run', async (req, reply) => {
+    const body = req.body as { repo?: string; instruction?: string; model?: string };
+    const repo = body.repo?.trim() || 'control-center';
+    const instruction = body.instruction?.trim();
+
+    if (!instruction) {
+      return reply.code(400).send({ error: 'Instruction is required' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return reply.code(500).send({ error: 'GEMINI_API_KEY is not configured on the server' });
+    }
+
+    reply.raw.setHeader('Content-Type', 'text/event-stream');
+    reply.raw.setHeader('Cache-Control', 'no-cache');
+    reply.raw.setHeader('Connection', 'keep-alive');
+    reply.raw.flushHeaders?.();
+
+    try {
+      for await (const event of runAgentLoop(repo, instruction, apiKey, body.model || 'gemini-2.5-pro')) {
+        reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      reply.raw.write(`data: ${JSON.stringify({ type: 'error', content: msg })}\n\n`);
+    } finally {
+      reply.raw.end();
+    }
   });
 
   // --- Improvements: a shared backlog ----------------------------------------------------------------

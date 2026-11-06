@@ -24,6 +24,16 @@ export const LearningIcon = () => (
   <Icon><path d="M2 8l10-5l10 5l-10 5z" /><path d="M6 10.5v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" /><path d="M22 8v6" /></Icon>
 );
 
+export const AgentIcon = () => (
+  <Icon>
+    <rect x="3" y="11" width="18" height="10" rx="2" />
+    <circle cx="12" cy="5" r="2" />
+    <path d="M12 7v4" />
+    <line x1="8" y1="16" x2="8" y2="16.01" />
+    <line x1="16" y1="16" x2="16" y2="16.01" />
+  </Icon>
+);
+
 export const TerminalIcon = () => (
   <Icon>
     <polyline points="4 17 10 11 4 5" />
