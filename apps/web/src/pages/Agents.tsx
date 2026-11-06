@@ -680,129 +680,30 @@ export function AgentsPage() {
  </div>
  )}
 
- {/* Header bar */}
- <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface/80 px-4 py-3 backdrop-blur-sm">
- <div className="flex items-center gap-2">
- <span className="text-xl emoji-bw">🤖</span>
- <div>
- <h1 className="text-sm font-bold text-ink">Dev Agent</h1>
- <p className="text-[11px] text-muted">
- {provider === 'openrouter' ? '🔌 OpenRouter API' : '⚡ Google Gemini'}: Live access to VPS, Docker, and GitHub
- </p>
- </div>
- </div>
+ {/* Top Header Bar */}
+      <div className="flex items-center justify-between border-b border-line bg-surface/80 px-4 py-2.5 backdrop-blur-sm shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🤖</span>
+          <div>
+            <h1 className="text-sm font-bold text-ink">Dev Agent</h1>
+            <p className="text-[11px] text-muted">
+              {provider === 'openrouter' ? '🔌 OpenRouter API' : '⚡ Google Gemini'}: Acceso al VPS, Docker y GitHub
+            </p>
+          </div>
+        </div>
 
- <div className="flex flex-wrap items-center gap-2">
- {/* Chat Sessions Dropdown */}
- <div className="flex items-center gap-1">
- <label htmlFor="agent-session-select" className="text-[11px] font-medium text-muted uppercase">
- History:
- </label>
- <select
- id="agent-session-select"
- value={sessionId}
- onChange={(e) => handleSelectSession(e.target.value)}
- className="max-w-[170px] truncate rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
- >
- {sessions.length === 0 ? (
- <option value={sessionId}>Current chat</option>
- ) : (
- sessions.map((s) => (
- <option key={s.id} value={s.id}>
- {s.title}
- </option>
- ))
- )}
- </select>
- </div>
+        <button
+          type="button"
+          onClick={() => setShowSettingsModal(true)}
+          title="Configuración de Proveedor y API Keys"
+          className="flex items-center gap-1.5 rounded-lg border border-line bg-bg px-2.5 py-1 text-xs font-medium text-ink hover:border-accent transition"
+        >
+          <span>⚙️</span>
+          <span>{provider === 'openrouter' ? 'OpenRouter' : 'Gemini'}</span>
+        </button>
+      </div>
 
- {/* Repo selector */}
- <div className="flex items-center gap-1">
- <label htmlFor="agent-repo-select" className="text-[11px] font-medium text-muted uppercase">
- Context:
- </label>
- <select
- id="agent-repo-select"
- value={repo}
- onChange={(e) => setRepo(e.target.value)}
- disabled={isRunning}
- className="max-w-[180px] rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
- >
- <option value={GENERAL_CONTEXT}>🌐 General (Full VPS / Docker / Host)</option>
- <optgroup label={`🖥️ On VPS (${localRepos.length} repos)`}>
- {localRepos.map((r) => (
- <option key={r.name} value={r.name}>
- 🖥️ {r.name}
- </option>
- ))}
- </optgroup>
- {cloudRepos.length > 0 && (
- <optgroup label={`☁️ On GitHub (${cloudRepos.length} in cloud — auto-clone)`}>
- {cloudRepos.map((r) => (
- <option key={r.name} value={r.name}>
- ☁️ {r.name} {r.isPrivate ? '🔒' : ''}
- </option>
- ))}
- </optgroup>
- )}
- </select>
- </div>
-
- {/* Model Dropdown */}
- <div className="flex items-center gap-1">
- <label htmlFor="agent-model-select" className="text-[11px] font-medium text-muted uppercase">
- Model:
- </label>
- <select
- id="agent-model-select"
- value={model}
- onChange={(e) => setModel(e.target.value)}
- disabled={isRunning}
- className="max-w-[190px] truncate rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
- >
- {currentModelList.map((m) => (
- <option key={m.id} value={m.id}>
- {m.name}
- </option>
- ))}
- </select>
- </div>
-
- {/* Provider / API Key Settings button */}
- <button
- type="button"
- onClick={() => setShowSettingsModal(true)}
- title="API Key and Provider Settings"
- className="flex items-center gap-1.5 rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink hover:border-accent transition"
- >
- <span className="emoji-bw">⚙️</span>
- <span className="hidden sm:inline">
- {provider === 'openrouter' ? 'OpenRouter' : 'Gemini'}
- </span>
- </button>
-
- <button
- type="button"
- onClick={handleNewChat}
- className="rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink hover:border-accent transition"
- >
- + New chat
- </button>
-
- {messages.length > 0 && (
- <button
- type="button"
- onClick={handleDeleteCurrentSession}
- title="Delete this chat session"
- className="rounded-lg border border-line bg-bg px-2 py-1.5 text-xs text-muted hover:text-red-400 hover:border-red-400/40 transition"
- >
- 
- </button>
- )}
- </div>
- </div>
-
- {/* Main Conversation Stream */}
+      {/* Main Conversation Stream */}
  <div className="flex-1 overflow-y-auto px-4 py-6">
  <div className="mx-auto flex max-w-4xl flex-col gap-6">
  {messages.length === 0 ? (
@@ -936,70 +837,186 @@ export function AgentsPage() {
  </div>
  </div>
 
- {/* Input Form with Voice Dictation */}
- <div className="border-t border-line bg-surface/80 p-4 backdrop-blur-sm">
- <form
- onSubmit={(e) => {
- e.preventDefault();
- void sendPrompt(input);
- }}
- className="mx-auto flex max-w-4xl items-end gap-2"
- >
- <div className="relative flex-1">
- <textarea
- rows={2}
- value={input}
- onChange={(e) => setInput(e.target.value)}
- onKeyDown={(e) => {
- if (e.key === 'Enter' && !e.shiftKey) {
- e.preventDefault();
- void sendPrompt(input);
- }
- }}
- placeholder={
- isListening
- ? 'Listening to your voice... (speak and it will be transcribed here)'
- : repo === GENERAL_CONTEXT
- ? 'Type an instruction or dictate by voice for the VPS (Enter to send)...'
- : `Type a task or question for ${repo} (Enter to send)...`
- }
- disabled={isRunning}
- className={`w-full resize-none rounded-xl border bg-bg px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:outline-none transition ${
- isListening
- ? 'border-red-500 shadow-sm ring-1 ring-red-500/50'
- : 'border-line focus:border-accent'
- }`}
- />
- {isListening && (
- <div className="absolute right-3 top-2 flex items-center gap-1.5 text-[10px] font-semibold text-red-400">
- <span className="h-2 w-2 animate-ping rounded-full bg-red-500" />
- <span>Dictating...</span>
- </div>
- )}
- </div>
+ {/* Sticky Bottom Bar: Input + Options Toolbar */}
+      <div className="sticky bottom-0 z-20 border-t border-line bg-surface/90 p-3.5 backdrop-blur-md shadow-lg">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void sendPrompt(input);
+          }}
+          className="mx-auto flex max-w-4xl flex-col gap-2.5"
+        >
+          {/* Top row: Textarea, Microphone, Send/Stop */}
+          <div className="flex items-end gap-2 w-full">
+            <div className="relative flex-1">
+              <textarea
+                rows={2}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void sendPrompt(input);
+                  }
+                }}
+                placeholder={
+                  isListening
+                    ? 'Escuchando tu voz... (hablá y se escribirá aquí al terminar)'
+                    : repo === GENERAL_CONTEXT
+                    ? 'Escribí un mensaje o dictá por voz para el VPS (Enter para enviar)...'
+                    : `Escribí una tarea o consulta para ${repo} (Enter para enviar)...`
+                }
+                disabled={isRunning}
+                className={`w-full resize-none rounded-xl border bg-bg px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:outline-none transition ${
+                  isListening
+                    ? 'border-red-500 shadow-sm ring-1 ring-red-500/50'
+                    : 'border-line focus:border-accent'
+                }`}
+              />
+              {isListening && (
+                <div className="absolute right-3 top-2 flex items-center gap-1.5 text-[10px] font-semibold text-red-400">
+                  <span className="h-2 w-2 animate-ping rounded-full bg-red-500" />
+                  <span>Escuchando...</span>
+                </div>
+              )}
+            </div>
 
- {/* Microphone Dictate Button */}
- <button type="button" onClick={toggleListening} disabled={isRunning} title={isListening ? 'Stop voice dictation' : 'Dictate with voice (speech to text)'} className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition shrink-0 ${isListening ? 'border-red-500 bg-red-500/10 text-red-400 animate-pulse' : 'border-line bg-bg text-ink hover:border-accent hover:text-accent disabled:opacity-40'}`}><span className="emoji-bw">🎙️</span></button>
+            {/* Microphone Dictate Button */}
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={isRunning}
+              title={isListening ? 'Detener dictado por voz' : 'Dictar por voz (convierte tu voz a texto)'}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition shrink-0 ${
+                isListening
+                  ? 'border-red-500 bg-red-500/10 text-red-400 animate-pulse'
+                  : 'border-line bg-bg text-ink hover:border-accent hover:text-accent disabled:opacity-40'
+              }`}
+            >
+              🎙️
+            </button>
 
- {isRunning ? (
- <button
- type="button"
- onClick={handleStop}
- className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-500 transition shrink-0 h-10"
- >
- ⏹ Stop
- </button>
- ) : (
- <button
- type="submit"
- disabled={!input.trim()}
- className="rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40 transition shrink-0 h-10"
- >
- Send ↵
- </button>
- )}
- </form>
- </div>
- </div>
- );
+            {isRunning ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-500 transition shrink-0 h-10"
+              >
+                ⏹ Detener
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className="rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40 transition shrink-0 h-10"
+              >
+                Enviar ↵
+              </button>
+            )}
+          </div>
+
+          {/* Bottom row: History, Context, Model, New Chat */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-line/60 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* History / Sessions */}
+              <div className="flex items-center gap-1">
+                <label htmlFor="agent-session-select" className="text-[10px] font-medium text-muted uppercase">
+                  Historial:
+                </label>
+                <select
+                  id="agent-session-select"
+                  value={sessionId}
+                  onChange={(e) => handleSelectSession(e.target.value)}
+                  className="max-w-[150px] truncate rounded-lg border border-line bg-bg px-2 py-1 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+                >
+                  {sessions.length === 0 ? (
+                    <option value={sessionId}>Chat actual</option>
+                  ) : (
+                    sessions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.title}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Context / Repo */}
+              <div className="flex items-center gap-1">
+                <label htmlFor="agent-repo-select" className="text-[10px] font-medium text-muted uppercase">
+                  Contexto:
+                </label>
+                <select
+                  id="agent-repo-select"
+                  value={repo}
+                  onChange={(e) => setRepo(e.target.value)}
+                  disabled={isRunning}
+                  className="max-w-[160px] truncate rounded-lg border border-line bg-bg px-2 py-1 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+                >
+                  <option value={GENERAL_CONTEXT}>🌐 General (VPS / Docker)</option>
+                  <optgroup label={`🖥️ En el VPS (${localRepos.length} repos)`}>
+                    {localRepos.map((r) => (
+                      <option key={r.name} value={r.name}>
+                        🖥️ {r.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {cloudRepos.length > 0 && (
+                    <optgroup label={`☁️ En GitHub (${cloudRepos.length} en la nube)`}>
+                      {cloudRepos.map((r) => (
+                        <option key={r.name} value={r.name}>
+                          ☁️ {r.name} {r.isPrivate ? '🔒' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </div>
+
+              {/* Model */}
+              <div className="flex items-center gap-1">
+                <label htmlFor="agent-model-select" className="text-[10px] font-medium text-muted uppercase">
+                  Modelo:
+                </label>
+                <select
+                  id="agent-model-select"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  disabled={isRunning}
+                  className="max-w-[170px] truncate rounded-lg border border-line bg-bg px-2 py-1 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+                >
+                  {currentModelList.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 ml-auto">
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="rounded-lg border border-line bg-bg px-2.5 py-1 text-xs font-medium text-ink hover:border-accent transition"
+              >
+                + Nuevo chat
+              </button>
+
+              {messages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteCurrentSession}
+                  title="Borrar conversación actual"
+                  className="rounded-lg border border-line bg-bg px-2 py-1 text-xs text-muted hover:text-red-400 hover:border-red-400/40 transition"
+                >
+                  🗑
+                </button>
+              )}
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
