@@ -1,7 +1,7 @@
 import { PageHeader } from '../components/PageHeader.tsx';
 
 // The URL where ttyd is reached. Defaults to the same host over the dedicated terminal route or subdomain.
-const TERMINAL_URL = import.meta.env.VITE_TERMINAL_URL ?? '/terminal/';
+const TERMINAL_URL = import.meta.env.VITE_TERMINAL_URL ?? 'https://terminal.nicoguzmandev.com';
 
 export function TerminalPage() {
   return (
