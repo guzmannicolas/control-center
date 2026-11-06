@@ -73,7 +73,7 @@ export async function* runAgentLoop(
   repo: string,
   instruction: string,
   apiKey: string,
-  modelName = 'gemini-2.5-pro'
+  modelName = 'gemini-3.5-flash'
 ): AsyncGenerator<AgentStepEvent> {
   const ai = new GoogleGenAI({ apiKey });
 
@@ -93,7 +93,7 @@ Work methodically. Once the task is fully accomplished, provide a concise summar
 
   yield { type: 'thought', content: `Starting agent task in ${repo}...` };
 
-  let currentPrompt: any = instruction;
+  let currentMessage: any = instruction;
   let turns = 0;
   const MAX_TURNS = 20;
 
@@ -101,7 +101,7 @@ Work methodically. Once the task is fully accomplished, provide a concise summar
     turns++;
     let response;
     try {
-      response = await chat.sendMessage(currentPrompt);
+      response = await chat.sendMessage({ message: currentMessage });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       yield { type: 'error', content: `Model error: ${msg}` };
@@ -146,12 +146,14 @@ Work methodically. Once the task is fully accomplished, provide a concise summar
       };
 
       functionResponses.push({
-        name: callName,
-        response: { output: result.output },
+        functionResponse: {
+          name: callName,
+          response: { output: result.output },
+        },
       });
     }
 
-    currentPrompt = functionResponses;
+    currentMessage = functionResponses;
   }
 
   yield { type: 'error', content: 'Agent reached maximum execution turns limit (20).' };

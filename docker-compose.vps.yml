@@ -12,6 +12,10 @@ services:
       # Only the backup log, read-only: never the backup files, which contain secrets.
       - /home/adminnico/cms/backups/backup.log:/backups/cms/backup.log:ro
 
+  api:
+    volumes:
+      - /home/adminnico/repositories:/home/adminnico/repositories
+
 networks:
   cms:
     name: cms_cms_net

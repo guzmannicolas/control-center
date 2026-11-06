@@ -187,16 +187,21 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
       return reply.code(500).send({ error: 'GEMINI_API_KEY is not configured on the server' });
     }
 
+    // Inform Fastify that we take manual control of writing the raw response,
+    // which prevents Fastify hooks (e.g. onSend) from running and crashing the stream.
+    reply.hijack();
+
     const origin = req.headers.origin || 'https://control.nicoguzmandev.com';
-    reply.raw.setHeader('Content-Type', 'text/event-stream');
-    reply.raw.setHeader('Cache-Control', 'no-cache');
-    reply.raw.setHeader('Connection', 'keep-alive');
-    reply.raw.setHeader('Access-Control-Allow-Origin', origin);
-    reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
-    reply.raw.flushHeaders?.();
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
+    });
 
     try {
-      for await (const event of runAgentLoop(repo, instruction, apiKey, body.model || 'gemini-2.5-pro')) {
+      for await (const event of runAgentLoop(repo, instruction, apiKey, body.model || 'gemini-3.5-flash')) {
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
       }
     } catch (err: unknown) {
