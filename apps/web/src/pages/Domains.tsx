@@ -85,6 +85,24 @@ function DomainCard({ domain }: { domain: DomainView }) {
           <p className="mt-1 text-sm text-ink-2">None watched yet.</p>
         )}
       </div>
+
+      <div className="border-t border-line px-4 py-3">
+        <h3 className="text-xs text-muted">Subdomains{domain.subdomains.length > 0 && ` (${domain.subdomains.length})`}</h3>
+        {domain.subdomains.length ? (
+          <ul className="mt-1.5 grid gap-1.5">
+            {domain.subdomains.map((s) => (
+              <li key={s.host} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                <StatusIcon status={s.status} size={14} />
+                <a href={`https://${s.host}`} target="_blank" rel="noreferrer" className="break-all hover:underline">{s.host}</a>
+                <span className="sr-only">: {statusLabel(s.status)}</span>
+                <span className="text-xs text-muted">{s.targets.map((t) => t.name).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-sm text-ink-2">None watched yet.</p>
+        )}
+      </div>
     </article>
   );
 }

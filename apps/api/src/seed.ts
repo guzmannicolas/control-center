@@ -27,9 +27,9 @@ const site = (name: string, url: string, tags: string[], type: TargetType = 'web
 });
 
 const database = (
-  name: string, engine: 'postgres' | 'redis', connectionEnv: string, purpose: string, tags: string[], extra: SeedMonitor[] = [],
+  name: string, engine: 'postgres' | 'redis', connectionEnv: string, purpose: string, project: string, tags: string[], extra: SeedMonitor[] = [],
 ): SeedTarget => ({
-  name, type: 'database', config: { engine, connectionEnv, purpose }, tags,
+  name, type: 'database', config: { engine, connectionEnv, purpose, project }, tags,
   monitors: [{ checker: engine === 'postgres' ? 'postgres-health' : 'redis-health' }, ...extra],
 });
 
@@ -46,12 +46,12 @@ const targets: SeedTarget[] = [
   site('CMS panel (Niki)', 'https://blog.nikipeppers.com/server/health', ['client:niki', 'vps'], 'service'),
   site('CMS panel (Belén)', 'https://blog.susterart.com/server/health', ['client:belen', 'vps'], 'service'),
 
-  database('CMS database', 'postgres', 'MONITOR_CMS_POSTGRES_URL', "Directus: clients' content, users and settings", ['infra', 'vps', 'cms'], [
+  database('CMS database', 'postgres', 'MONITOR_CMS_POSTGRES_URL', "Directus: clients' content, users and settings", 'CMS', ['infra', 'vps', 'cms'], [
     { checker: 'backup-age', settings: { logPath: '/backups/cms/backup.log', destination: 'VPS (7 days) + encrypted Google Drive (30 days)' } },
   ]),
-  database('CMS cache', 'redis', 'MONITOR_CMS_REDIS_URL', 'Directus cache: safe to lose, rebuilt on demand', ['infra', 'vps', 'cms']),
-  database('Control Center database', 'postgres', 'MONITOR_CC_POSTGRES_URL', 'Targets, check results, incidents, users and sessions', ['infra', 'vps']),
-  database('Control Center queue', 'redis', 'MONITOR_CC_REDIS_URL', 'Check schedules and jobs, login attempt counters', ['infra', 'vps']),
+  database('CMS cache', 'redis', 'MONITOR_CMS_REDIS_URL', 'Directus cache: safe to lose, rebuilt on demand', 'CMS', ['infra', 'vps', 'cms']),
+  database('Control Center database', 'postgres', 'MONITOR_CC_POSTGRES_URL', 'Targets, check results, incidents, users and sessions', 'Control Center', ['infra', 'vps']),
+  database('Control Center queue', 'redis', 'MONITOR_CC_REDIS_URL', 'Check schedules and jobs, login attempt counters', 'Control Center', ['infra', 'vps']),
 
   // The VPN panel must stay behind Cloudflare Access: a 200 here would mean it is exposed.
   {

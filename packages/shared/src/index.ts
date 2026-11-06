@@ -14,6 +14,8 @@ export const DatabaseConfig = z.object({
   engine: z.enum(DATABASE_ENGINES),
   connectionEnv: z.string().regex(/^MONITOR_[A-Z0-9_]+$/),
   purpose: z.string().max(200).default(''),
+  // The project this database belongs to (e.g. "CMS"); the dashboard groups databases by it.
+  project: z.string().trim().min(1).max(60).optional(),
 });
 
 // ok: all good · warn: works but needs attention · fail: broken · error: the check itself could not run
@@ -106,7 +108,16 @@ export interface DomainView {
   checkedAt: string | null;
   daysLeft: number | null;
   details: DomainDetails | null;
+  // Watched sites served from the domain itself (e.g. https://example.com).
   sites: { id: string; name: string; url: string; status: CheckStatus | null }[];
+  // Watched hosts under the domain (e.g. blog.example.com), one entry per host.
+  subdomains: SubdomainView[];
+}
+
+export interface SubdomainView {
+  host: string;
+  status: CheckStatus | null; // worst status among everything watched on this host
+  targets: { id: string; name: string; url: string; status: CheckStatus | null }[];
 }
 
 export interface CheckSnapshot {
@@ -122,6 +133,7 @@ export interface DatabaseView {
   name: string;
   engine: (typeof DATABASE_ENGINES)[number];
   purpose: string;
+  project: string | null; // null = not assigned to a project
   status: CheckStatus | null;
   health: CheckSnapshot | null;
   backup: CheckSnapshot | null; // null = no backup is being watched for this database

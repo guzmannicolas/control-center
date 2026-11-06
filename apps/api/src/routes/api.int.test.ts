@@ -46,8 +46,9 @@ describe.skipIf(!url)('GET /api/domains', () => {
     expect(res.statusCode).toBe(200);
     const [first, second] = res.json();
     expect(first).toMatchObject({ name: 'sooner.com', daysLeft: 40, details: { registrar: 'Cloudflare, Inc.', transferLocked: true } });
-    expect(first.sites.map((s: { name: string; status: string }) => `${s.name}:${s.status}`)).toEqual(['Main site:ok', 'Panel:fail']);
-    expect(second).toMatchObject({ name: 'later.com', sites: [] });
+    expect(first.sites.map((s: { name: string; status: string }) => `${s.name}:${s.status}`)).toEqual(['Main site:ok']);
+    expect(first.subdomains).toMatchObject([{ host: 'panel.sooner.com', status: 'fail', targets: [{ name: 'Panel', status: 'fail' }] }]);
+    expect(second).toMatchObject({ name: 'later.com', sites: [], subdomains: [] });
   });
 
   it('is only for logged-in users', async () => {
@@ -70,7 +71,7 @@ describe.skipIf(!url)('GET /api/databases', () => {
     });
     const cookies = { cc_session: login.cookies.find((c) => c.name === 'cc_session')!.value };
 
-    const t = await prisma.target.create({ data: { name: 'Main DB', type: 'database', config: { engine: 'postgres', connectionEnv: 'MONITOR_MAIN', purpose: 'Everything' } } });
+    const t = await prisma.target.create({ data: { name: 'Main DB', type: 'database', config: { engine: 'postgres', connectionEnv: 'MONITOR_MAIN', purpose: 'Everything', project: 'Main' } } });
     const health = await prisma.monitor.create({ data: { targetId: t.id, checker: 'postgres-health', intervalSeconds: 300, lastStatus: 'ok' } });
     await prisma.result.create({ data: { monitorId: health.id, status: 'ok', durationMs: 4, message: 'PostgreSQL 16.4', metrics: { sizeBytes: 1000 }, details: { version: '16.4' } } });
     await prisma.monitor.create({ data: { targetId: t.id, checker: 'backup-age', intervalSeconds: 3600, settings: { logPath: '/x' }, lastStatus: 'warn' } });
@@ -79,9 +80,9 @@ describe.skipIf(!url)('GET /api/databases', () => {
     const res = await app.inject({ url: '/api/databases', cookies });
     expect(res.statusCode).toBe(200);
     const [main, cache] = res.json(); // the database with a warning comes first
-    expect(main).toMatchObject({ name: 'Main DB', engine: 'postgres', purpose: 'Everything', status: 'warn',
+    expect(main).toMatchObject({ name: 'Main DB', engine: 'postgres', purpose: 'Everything', project: 'Main', status: 'warn',
       health: { status: 'ok', metrics: { sizeBytes: 1000 }, details: { version: '16.4' } }, backup: { status: 'warn' } });
-    expect(cache).toMatchObject({ name: 'Cache', engine: 'redis', status: null, health: null, backup: null });
+    expect(cache).toMatchObject({ name: 'Cache', engine: 'redis', project: null, status: null, health: null, backup: null });
     expect(res.body).not.toContain('MONITOR_');
   });
 });

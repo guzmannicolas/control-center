@@ -7,6 +7,7 @@ import {
   type ResultPoint, type TargetView,
 } from '@cc/shared';
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
+import { subdomainsOf } from '../subdomains.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -115,8 +116,9 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
         daysLeft: asMetrics(last?.metrics).daysLeft ?? null,
         details: details && 'expiresOn' in details ? details : null,
         sites: sites
-          .filter((x) => x.host === name || x.host.endsWith(`.${name}`))
+          .filter((x) => x.host === name)
           .map(({ host: _host, ...site }) => site),
+        subdomains: subdomainsOf(name, sites),
       };
     });
     // Soonest renewal first: that is what needs attention.
@@ -155,6 +157,7 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
         name: t.name,
         engine: config.data.engine,
         purpose: config.data.purpose,
+        project: config.data.project ?? null,
         status: known.length ? worstStatus(known) : null,
         health: snapshot(config.data.engine === 'postgres' ? 'postgres-health' : 'redis-health'),
         backup: snapshot('backup-age'),

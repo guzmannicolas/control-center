@@ -5,6 +5,7 @@ import { api } from '../api.ts';
 import { PageHeader } from '../components/PageHeader.tsx';
 import { StatusIcon, statusLabel } from '../components/Status.tsx';
 import { ago, bytes, uptime } from '../format.ts';
+import { type ProjectGroup, groupByProject, needsAttention } from '../projects.ts';
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -133,17 +134,40 @@ function DatabaseCard({ db }: { db: DatabaseView }) {
   );
 }
 
+function ProjectSection({ group }: { group: ProjectGroup }) {
+  const n = group.databases.length;
+  return (
+    <details open={needsAttention(group.status)} className="group rounded-xl border border-line">
+      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-xl p-4 hover:bg-grid/40 [&::-webkit-details-marker]:hidden">
+        <svg aria-hidden="true" viewBox="0 0 20 20" width="16" height="16" className="shrink-0 text-ink-2 transition-transform group-open:rotate-90">
+          <path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <StatusIcon status={group.status} size={22} />
+        <h2 className="min-w-0 flex-1 text-lg font-semibold">
+          {group.project}
+          <span className="sr-only">: {statusLabel(group.status)}</span>
+        </h2>
+        <span className="text-sm text-ink-2">{n} database{n === 1 ? '' : 's'}</span>
+      </summary>
+      <div className="grid gap-3 border-t border-line p-3">
+        {group.databases.map((db) => <DatabaseCard key={db.id} db={db} />)}
+      </div>
+    </details>
+  );
+}
+
 export function DatabasesPage() {
   const databases = useQuery({ queryKey: ['databases'], queryFn: api.databases, refetchInterval: 60_000 });
   const count = databases.data?.length;
+  const groups = databases.data ? groupByProject(databases.data) : [];
   return (
     <div>
       <PageHeader
         title="Databases"
-        subtitle={count === undefined ? (databases.isError ? 'Could not load' : 'Loading…') : `${count} database${count === 1 ? '' : 's'}`}
+        subtitle={count === undefined ? (databases.isError ? 'Could not load' : 'Loading…') : `${count} database${count === 1 ? '' : 's'} in ${groups.length} project${groups.length === 1 ? '' : 's'}`}
       />
       <div className="grid gap-3">
-        {databases.data?.map((db) => <DatabaseCard key={db.id} db={db} />)}
+        {groups.map((g) => <ProjectSection key={g.project} group={g} />)}
       </div>
     </div>
   );
