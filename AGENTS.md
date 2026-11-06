@@ -2,9 +2,9 @@
 
 Context specification guide for AI assistants and development agents working on the `control-center` repository.
 
-## 0. Language Policy (Mandatory)
-- **ALL user interface (UI) copy, labels, placeholders, titles, status badges, buttons, tooltips, and documentation in Control Center MUST be in English.**
-- Never mix Spanish in user-facing components, section headers, or API contracts.
+## 0. Mandatory Project Policies
+- **Language Policy**: ALL user interface (UI) copy, labels, placeholders, titles, status badges, buttons, tooltips, and documentation in Control Center MUST be in English.
+- **No Emojis Policy**: Never use emojis in UI components, titles, buttons, status badges, placeholders, or commit messages. Use clean SVG icons, dots, or professional typography instead.
 
 ## 1. Project Overview
 Self-hosted monitoring and control hub for Nicolás Guzmán's online infrastructure: domains, websites, Vercel deployments, databases, B2B sales leads, and VPS servers. Performs scheduled background checks, logs incidents when failures occur, and provides a unified dashboard.
