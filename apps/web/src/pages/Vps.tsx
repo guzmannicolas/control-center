@@ -110,9 +110,9 @@ export function VpsPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc' }}>🖥️ Estado del VPS & Limpieza Rápida</h1>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc' }}>🖥️ VPS Health & Maintenance</h1>
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: '#94a3b8' }}>
-            Recursos en vivo de Contabo VPS (`173.212.224.70`), desglose de almacenamiento, contenedores Docker y atajos de mantenimiento.
+            Live telemetry for Contabo VPS (`173.212.224.70`), storage breakdown, Docker containers, and one-click cleanup shortcuts.
           </p>
         </div>
 
@@ -131,13 +131,13 @@ export function VpsPage() {
             cursor: 'pointer',
           }}
         >
-          {loading ? 'Actualizando...' : '↻ Actualizar Estado'}
+          {loading ? 'Refreshing...' : '↻ Refresh Status'}
         </button>
       </div>
 
       {error && (
         <div style={{ background: '#450a0a', border: '1px solid #991b1b', color: '#fecaca', padding: '0.9rem 1rem', borderRadius: '10px' }}>
-          Error obteniendo estado del VPS: {error}
+          Error retrieving VPS status: {error}
         </div>
       )}
 
@@ -147,7 +147,7 @@ export function VpsPage() {
           {/* Disk */}
           <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Disco ({data.disk.filesystem})</span>
+              <span style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Disk ({data.disk.filesystem})</span>
               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: data.disk.usedPercent > 80 ? '#f87171' : '#4ade80' }}>
                 {data.disk.usedPercent}%
               </span>
@@ -157,14 +157,14 @@ export function VpsPage() {
             </div>
             <ProgressBar percent={data.disk.usedPercent} color={data.disk.usedPercent > 80 ? '#ef4444' : '#22c55e'} />
             <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: '#6ee7b7', fontWeight: 600 }}>
-              ✔ {data.disk.availableGb} GB libres disponibles
+              ✔ {data.disk.availableGb} GB free available
             </div>
           </div>
 
           {/* Memory */}
           <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Memoria RAM</span>
+              <span style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>RAM Memory</span>
               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#60a5fa' }}>{data.memory.usedPercent}%</span>
             </div>
             <div style={{ marginTop: '0.35rem', fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc' }}>
@@ -189,12 +189,12 @@ export function VpsPage() {
 
           {/* Containers count */}
           <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
-            <div style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Contenedores Docker</div>
+            <div style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Docker Containers</div>
             <div style={{ marginTop: '0.35rem', fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc' }}>
-              {(data.containers ?? []).filter((c) => c.state === 'running').length} activos
+              {(data.containers ?? []).filter((c) => c.state === 'running').length} active
             </div>
             <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: '#64748b' }}>
-              de {(data.containers ?? []).length} contenedores totales
+              of {(data.containers ?? []).length} total containers
             </div>
           </div>
         </div>
@@ -204,9 +204,9 @@ export function VpsPage() {
       <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.9rem' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.05rem', color: '#f8fafc' }}>🧹 Atajos de Limpieza Segura (1-Click)</h2>
+            <h2 style={{ margin: 0, fontSize: '1.05rem', color: '#f8fafc' }}>🧹 Safe One-Click Cleanup Shortcuts</h2>
             <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-              Liberá espacio en disco sin afectar ningún contenedor en ejecución ni tus datos en bases de datos.
+              Reclaim disk space without touching running containers or database records.
             </p>
           </div>
           <button
@@ -224,16 +224,16 @@ export function VpsPage() {
               cursor: cleaningTarget ? 'wait' : 'pointer',
             }}
           >
-            {cleaningTarget === 'all' ? '⏳ Limpiando todo...' : '✨ Ejecutar Limpieza Completa'}
+            {cleaningTarget === 'all' ? '⏳ Cleaning all...' : '✨ Run Full Cleanup'}
           </button>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.85rem' }}>
           <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.9rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
             <div>
-              <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>🐳 Docker Prune (Imágenes & Build Cache)</div>
+              <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>🐳 Docker Prune (Images & Build Cache)</div>
               <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                Elimina imágenes huérfanas y caché de compilación de Docker sin tocar volúmenes ni contenedores activos.
+                Removes dangling images and builder cache without affecting running containers or persistent volumes.
               </div>
             </div>
             <button
@@ -251,15 +251,15 @@ export function VpsPage() {
                 cursor: cleaningTarget ? 'wait' : 'pointer',
               }}
             >
-              {cleaningTarget === 'docker' ? '⏳ Limpiando Docker...' : 'Limpiar Docker'}
+              {cleaningTarget === 'docker' ? '⏳ Cleaning Docker...' : 'Clean Docker'}
             </button>
           </div>
 
           <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.9rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
             <div>
-              <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>💻 Versiones viejas de VS Code Server</div>
+              <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>💻 Legacy VS Code Server Versions</div>
               <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                Conserva únicamente el binario más reciente en <code>~/.vscode-server/cli/servers</code> y borra los antiguos (~500 MB c/u).
+                Retains only the latest active binary in <code>~/.vscode-server/cli/servers</code> and deletes older copies (~500 MB each).
               </div>
             </div>
             <button
@@ -277,15 +277,15 @@ export function VpsPage() {
                 cursor: cleaningTarget ? 'wait' : 'pointer',
               }}
             >
-              {cleaningTarget === 'vscode' ? '⏳ Limpiando...' : 'Limpiar VS Code Server'}
+              {cleaningTarget === 'vscode' ? '⏳ Cleaning...' : 'Clean VS Code Server'}
             </button>
           </div>
 
           <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.9rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
             <div>
-              <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>📦 Cachés de paquetes (npm & pnpm)</div>
+              <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}>📦 Package Caches (npm & pnpm)</div>
               <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                Vacía <code>~/.npm/_cacache</code> y el store temporal de <code>pnpm</code> en el home del usuario.
+                Clears <code>~/.npm/_cacache</code> and temporary pnpm store artifacts.
               </div>
             </div>
             <button
@@ -303,7 +303,7 @@ export function VpsPage() {
                 cursor: cleaningTarget ? 'wait' : 'pointer',
               }}
             >
-              {cleaningTarget === 'caches' ? '⏳ Limpiando...' : 'Limpiar Cachés npm/pnpm'}
+              {cleaningTarget === 'caches' ? '⏳ Cleaning...' : 'Clean npm/pnpm Caches'}
             </button>
           </div>
         </div>
@@ -321,7 +321,7 @@ export function VpsPage() {
             }}
           >
             <strong>
-              ✔ Limpieza completada ({cleanupResult.target}): Liberados {cleanupResult.freedGb} GB ({cleanupResult.beforeUsedGb} GB → {cleanupResult.afterUsedGb} GB usados)
+              ✔ Cleanup completed ({cleanupResult.target}): Reclaimed {cleanupResult.freedGb} GB ({cleanupResult.beforeUsedGb} GB → {cleanupResult.afterUsedGb} GB used)
             </strong>
             <pre style={{ margin: '0.45rem 0 0', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.76rem', color: '#dcfce7' }}>
               {cleanupResult.log}
@@ -336,13 +336,13 @@ export function VpsPage() {
           {/* Directories */}
           <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
             <div style={{ padding: '0.85rem 1.1rem', borderBottom: '1px solid #1e293b', fontWeight: 700, color: '#f8fafc', fontSize: '0.92rem' }}>
-              📂 Uso de Disco por Carpeta (`/home/adminnico`)
+              📂 Storage Usage by Directory (`/home/adminnico`)
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
               <thead>
                 <tr style={{ background: '#0f172a', color: '#94a3b8', textAlign: 'left' }}>
-                  <th style={{ padding: '0.6rem 1rem' }}>Ruta</th>
-                  <th style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>Tamaño</th>
+                  <th style={{ padding: '0.6rem 1rem' }}>Path</th>
+                  <th style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>Size</th>
                 </tr>
               </thead>
               <tbody>
@@ -361,15 +361,15 @@ export function VpsPage() {
           {/* Docker System DF */}
           <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
             <div style={{ padding: '0.85rem 1.1rem', borderBottom: '1px solid #1e293b', fontWeight: 700, color: '#f8fafc', fontSize: '0.92rem' }}>
-              🐳 Uso de Almacenamiento Docker (`docker system df`)
+              🐳 Docker Storage Usage (`docker system df`)
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
               <thead>
                 <tr style={{ background: '#0f172a', color: '#94a3b8', textAlign: 'left' }}>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Tipo</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Total / Activos</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Tamaño</th>
-                  <th style={{ padding: '0.6rem 0.9rem' }}>Recuperable</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Type</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Total / Active</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Size</th>
+                  <th style={{ padding: '0.6rem 0.9rem' }}>Reclaimable</th>
                 </tr>
               </thead>
               <tbody>
@@ -377,7 +377,7 @@ export function VpsPage() {
                   <tr key={row.type} style={{ borderTop: '1px solid #1e293b', color: '#e2e8f0' }}>
                     <td style={{ padding: '0.6rem 0.9rem', fontWeight: 600 }}>{row.type}</td>
                     <td style={{ padding: '0.6rem 0.9rem', color: '#94a3b8' }}>
-                      {row.totalCount} ({row.active} activos)
+                      {row.totalCount} ({row.active} active)
                     </td>
                     <td style={{ padding: '0.6rem 0.9rem', fontFamily: 'monospace' }}>{row.size}</td>
                     <td style={{ padding: '0.6rem 0.9rem', fontFamily: 'monospace', color: '#4ade80' }}>{row.reclaimable}</td>
@@ -393,15 +393,15 @@ export function VpsPage() {
       {data && (
         <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
           <div style={{ padding: '0.85rem 1.1rem', borderBottom: '1px solid #1e293b', fontWeight: 700, color: '#f8fafc', fontSize: '0.92rem' }}>
-            📦 Contenedores en Ejecución en el VPS
+            📦 Containers Running on VPS
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
               <thead>
                 <tr style={{ background: '#0f172a', color: '#94a3b8', textAlign: 'left' }}>
-                  <th style={{ padding: '0.6rem 1rem' }}>Contenedor</th>
-                  <th style={{ padding: '0.6rem 1rem' }}>Imagen</th>
-                  <th style={{ padding: '0.6rem 1rem' }}>Estado</th>
+                  <th style={{ padding: '0.6rem 1rem' }}>Container</th>
+                  <th style={{ padding: '0.6rem 1rem' }}>Image</th>
+                  <th style={{ padding: '0.6rem 1rem' }}>Status</th>
                 </tr>
               </thead>
               <tbody>

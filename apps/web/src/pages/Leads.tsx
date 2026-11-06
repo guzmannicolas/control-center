@@ -4,12 +4,12 @@ import type { LeadView, LeadStatus } from '@cc/shared';
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
 
 const STATUS_BADGES: Record<LeadStatus, { label: string; bg: string; color: string; border: string }> = {
-  discovered: { label: 'Descubierto', bg: '#1e293b', color: '#94a3b8', border: '#334155' },
-  enriched: { label: 'Enriquecido (Con datos)', bg: '#1e3a8a', color: '#93c5fd', border: '#2563eb' },
-  contacted: { label: 'Contactado', bg: '#422006', color: '#facc15', border: '#854d0e' },
-  replied: { label: 'Respondió 💬', bg: '#064e3b', color: '#34d399', border: '#059669' },
-  converted: { label: '¡Cliente Ganado! 🎉', bg: '#052e16', color: '#4ade80', border: '#166534' },
-  discarded: { label: 'Descartado', bg: '#450a0a', color: '#f87171', border: '#991b1b' },
+  discovered: { label: 'Discovered', bg: '#1e293b', color: '#94a3b8', border: '#334155' },
+  enriched: { label: 'Enriched (Data ready)', bg: '#1e3a8a', color: '#93c5fd', border: '#2563eb' },
+  contacted: { label: 'Contacted', bg: '#422006', color: '#facc15', border: '#854d0e' },
+  replied: { label: 'Replied 💬', bg: '#064e3b', color: '#34d399', border: '#059669' },
+  converted: { label: 'Client Won! 🎉', bg: '#052e16', color: '#4ade80', border: '#166534' },
+  discarded: { label: 'Discarded', bg: '#450a0a', color: '#f87171', border: '#991b1b' },
 };
 
 export function LeadsPage() {
@@ -19,8 +19,8 @@ export function LeadsPage() {
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
 
   // Form states
-  const [category, setCategory] = useState('Odontología');
-  const [city, setCity] = useState('Córdoba');
+  const [category, setCategory] = useState('Odontology');
+  const [city, setCity] = useState('Cordoba');
   const [limit, setLimit] = useState(15);
   const [filterWithoutWeb, setFilterWithoutWeb] = useState(false);
   const [search, setSearch] = useState('');
@@ -29,7 +29,7 @@ export function LeadsPage() {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/leads`, { credentials: 'include' });
-      if (!res.ok) throw new Error('Error al cargar leads');
+      if (!res.ok) throw new Error('Error loading leads');
       const data = (await res.json()) as { leads: LeadView[] };
       setLeads(data.leads ?? []);
     } catch (err) {
@@ -96,7 +96,7 @@ export function LeadsPage() {
   };
 
   const deleteLead = async (id: string) => {
-    if (!confirm('¿Eliminar este prospecto?')) return;
+    if (!confirm('Delete this prospect?')) return;
     try {
       await fetch(`${API_BASE}/api/leads/${id}`, {
         method: 'DELETE',
@@ -128,10 +128,10 @@ export function LeadsPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span>🎯</span> Ventas & Prospección B2B
+            <span>🎯</span> B2B Sales & Web Prospecting
           </h1>
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: '#94a3b8' }}>
-            Scraping de comercios en Argentina, filtro de locales sin sitio web y vinculación automática a tus demos de Vercel.
+            Local business scraper, filter for companies without an existing website, and automated matching to Vercel live demos.
           </p>
         </div>
       </div>
@@ -139,16 +139,16 @@ export function LeadsPage() {
       {/* Scraper Launcher Box */}
       <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
         <h2 style={{ margin: '0 0 0.8rem', fontSize: '1.05rem', color: '#f8fafc' }}>
-          🔍 Lanzar nuevo rastreo de prospectos
+          🔍 Launch New Prospecting Scan
         </h2>
         <form onSubmit={handleScrape} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Rubro o Categoría</label>
+            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Category / Niche</label>
             <input
               type="text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              placeholder="Ej: Odontología, Barbería, Pizzería"
+              placeholder="e.g. Odontology, Barber Shop, Pizzeria"
               style={{
                 background: '#0f172a',
                 border: '1px solid #334155',
@@ -163,12 +163,12 @@ export function LeadsPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Ciudad / Zona</label>
+            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>City / Area</label>
             <input
               type="text"
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              placeholder="Ej: Córdoba, Palermo CABA, Rosario"
+              placeholder="e.g. Cordoba, Palermo Buenos Aires, Rosario"
               style={{
                 background: '#0f172a',
                 border: '1px solid #334155',
@@ -183,7 +183,7 @@ export function LeadsPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Cantidad máx.</label>
+            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Max Results</label>
             <input
               type="number"
               value={limit}
@@ -216,7 +216,7 @@ export function LeadsPage() {
               cursor: scraping ? 'wait' : 'pointer',
             }}
           >
-            {scraping ? '⏳ Rastreando en vivo...' : '🚀 Iniciar Scraping'}
+            {scraping ? '⏳ Scraping in real-time...' : '🚀 Start Scraping'}
           </button>
         </form>
       </div>
@@ -238,16 +238,16 @@ export function LeadsPage() {
               cursor: 'pointer',
             }}
           >
-            {filterWithoutWeb ? '✔ Solo negocios SIN sitio web' : 'Mostrar todos los locales'}
+            {filterWithoutWeb ? '✔ Businesses WITHOUT website only' : 'Show all businesses'}
           </button>
           <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-            Total guardados: <strong style={{ color: '#f8fafc' }}>{leads.length}</strong>
+            Total saved: <strong style={{ color: '#f8fafc' }}>{leads.length}</strong>
           </span>
         </div>
 
         <input
           type="text"
-          placeholder="Buscar por nombre, teléfono, email..."
+          placeholder="Filter by name, phone, email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
@@ -268,13 +268,13 @@ export function LeadsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
             <thead>
               <tr style={{ background: '#0f172a', color: '#94a3b8', textAlign: 'left' }}>
-                <th style={{ padding: '0.65rem 1rem' }}>Comercio</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Rubro & Zona</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Web Actual</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Contacto (WhatsApp / Email)</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Demo a ofrecer</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Estado</th>
-                <th style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>Acciones</th>
+                <th style={{ padding: '0.65rem 1rem' }}>Business</th>
+                <th style={{ padding: '0.65rem 1rem' }}>Niche & Location</th>
+                <th style={{ padding: '0.65rem 1rem' }}>Current Website</th>
+                <th style={{ padding: '0.65rem 1rem' }}>Contact (WhatsApp / Email)</th>
+                <th style={{ padding: '0.65rem 1rem' }}>Suggested Demo</th>
+                <th style={{ padding: '0.65rem 1rem' }}>Status</th>
+                <th style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -282,7 +282,7 @@ export function LeadsPage() {
                 const badge = STATUS_BADGES[lead.status] ?? STATUS_BADGES.discovered;
                 const waNumber = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : null;
                 const waMessage = encodeURIComponent(
-                  `Hola ${lead.name}! Vi sus excelentes calificaciones en Google de ${lead.city}. Quería consultarles si tienen web oficial o si les gustaría ver una propuesta que diseñamos para locales del rubro: ${lead.suggestedDemo ?? ''}`
+                  `Hello ${lead.name}! I noticed your great reviews in Google around ${lead.city}. I wanted to check if you have an official website or if you'd like to check out a live proposal we designed for businesses in your field: ${lead.suggestedDemo ?? ''}`
                 );
 
                 return (
@@ -292,7 +292,7 @@ export function LeadsPage() {
                       <div style={{ fontWeight: 700, color: '#f8fafc' }}>{lead.name}</div>
                       {lead.rating && (
                         <div style={{ fontSize: '0.74rem', color: '#eab308' }}>
-                          ★ {lead.rating} ({lead.reviewsCount} reseñas)
+                          ★ {lead.rating} ({lead.reviewsCount} reviews)
                         </div>
                       )}
                     </td>
@@ -312,7 +312,7 @@ export function LeadsPage() {
                           rel="noreferrer"
                           style={{ color: '#60a5fa', textDecoration: 'none', fontSize: '0.78rem' }}
                         >
-                          ↗ Tiene web
+                          ↗ Has website
                         </a>
                       ) : (
                         <span
@@ -325,7 +325,7 @@ export function LeadsPage() {
                             fontWeight: 700,
                           }}
                         >
-                          SIN WEB 🎯
+                          NO WEBSITE 🎯
                         </span>
                       )}
                     </td>
@@ -357,7 +357,7 @@ export function LeadsPage() {
                           </a>
                         ) : null}
                         {!lead.email && !lead.phone && (
-                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Sin datos directos</span>
+                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>No contact info yet</span>
                         )}
                       </div>
                     </td>
@@ -379,7 +379,7 @@ export function LeadsPage() {
                             gap: '0.2rem',
                           }}
                         >
-                          🌐 Ver Demo Vercel ↗
+                          🌐 Vercel Demo ↗
                         </a>
                       ) : (
                         '—'
@@ -438,7 +438,7 @@ export function LeadsPage() {
                           type="button"
                           onClick={() => void handleEnrich(lead.id)}
                           disabled={enrichingId === lead.id}
-                          title="Buscar email e Instagram en redes"
+                          title="Search public email and Instagram profile"
                           style={{
                             background: '#1e293b',
                             border: '1px solid #334155',
@@ -449,7 +449,7 @@ export function LeadsPage() {
                             cursor: 'pointer',
                           }}
                         >
-                          {enrichingId === lead.id ? '...' : '🔍 Buscar Redes'}
+                          {enrichingId === lead.id ? '...' : '🔍 Find Socials'}
                         </button>
 
                         <button
@@ -473,7 +473,7 @@ export function LeadsPage() {
               {filtered.length === 0 && !loading && (
                 <tr>
                   <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                    No hay prospectos en esta lista. ¡Iniciá un rastreo arriba para comenzar!
+                    No prospects found. Launch a new scan above to get started!
                   </td>
                 </tr>
               )}

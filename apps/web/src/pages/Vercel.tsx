@@ -34,13 +34,13 @@ const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
 function formatRelative(iso: string | null | undefined) {
   if (!iso) return '—';
   const diffSec = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diffSec < 60) return `hace ${diffSec}s`;
+  if (diffSec < 60) return `${diffSec}s ago`;
   const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) return `hace ${diffMin}m`;
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `hace ${diffHr}h`;
+  if (diffHr < 24) return `${diffHr}h ago`;
   const diffDays = Math.round(diffHr / 24);
-  return `hace ${diffDays}d`;
+  return `${diffDays}d ago`;
 }
 
 function stateBadge(state: string | undefined) {
@@ -108,17 +108,17 @@ export function VercelPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span>▲</span> Proyectos en Vercel
+            <span>▲</span> Vercel Projects
           </h1>
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: '#94a3b8' }}>
-            Estado de despliegues en tiempo real, dominios conectados y último commit en producción.
+            Real-time deployment status, connected domains, and latest production commits.
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
           <input
             type="text"
-            placeholder="Buscar proyecto, repo o dominio..."
+            placeholder="Search project, repo, or domain..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
@@ -146,7 +146,7 @@ export function VercelPage() {
               cursor: loading ? 'wait' : 'pointer',
             }}
           >
-            {loading ? 'Actualizando...' : '↻ Actualizar'}
+            {loading ? 'Refreshing...' : '↻ Refresh'}
           </button>
         </div>
       </div>
@@ -170,7 +170,7 @@ export function VercelPage() {
             fontWeight: 600,
           }}
         >
-          <span>Total Proyectos</span>
+          <span>Total Projects</span>
           <span style={{ background: '#334155', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.78rem' }}>
             {projects.length}
           </span>
@@ -225,13 +225,13 @@ export function VercelPage() {
 
       {error && (
         <div style={{ background: '#450a0a', border: '1px solid #991b1b', color: '#fecaca', padding: '0.9rem 1rem', borderRadius: '10px' }}>
-          Error cargando proyectos de Vercel: {error}
+          Error loading Vercel projects: {error}
         </div>
       )}
 
       {!loading && data && !data.configured && (
         <div style={{ background: '#422006', border: '1px solid #854d0e', color: '#fde68a', padding: '1rem', borderRadius: '10px' }}>
-          ⚠️ <code>VERCEL_TOKEN</code> no está configurado en el servidor API.
+          ⚠️ <code>VERCEL_TOKEN</code> is not configured on the API server.
         </div>
       )}
 
@@ -349,12 +349,12 @@ export function VercelPage() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', fontSize: '0.74rem', marginBottom: '0.25rem' }}>
                       <span style={{ fontFamily: 'monospace' }}>
-                        {dep.commitSha ? `#${dep.commitSha.slice(0, 7)}` : 'Deploy manual'}
+                        {dep.commitSha ? `#${dep.commitSha.slice(0, 7)}` : 'Manual deploy'}
                       </span>
                       <span>{formatRelative(dep.createdAt)}</span>
                     </div>
                     <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {dep.commitMessage ? dep.commitMessage.split('\n')[0] : 'Sin mensaje de commit'}
+                      {dep.commitMessage ? dep.commitMessage.split('\n')[0] : 'No commit message'}
                     </div>
                     {dep.errorMessage && (
                       <div style={{ marginTop: '0.35rem', color: '#f87171', fontSize: '0.75rem' }}>
@@ -385,7 +385,7 @@ export function VercelPage() {
                     rel="noreferrer"
                     style={{ color: '#93c5fd', textDecoration: 'none', fontWeight: 600 }}
                   >
-                    Abrir producción →
+                    Open production →
                   </a>
                 )}
               </div>

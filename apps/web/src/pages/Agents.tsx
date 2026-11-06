@@ -21,7 +21,6 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
-  hasAudio?: boolean;
   contextLabel: string;
   events: AgentEvent[];
   status: 'streaming' | 'done' | 'error';
@@ -167,12 +166,9 @@ export function AgentsPage() {
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
 
-  // Audio recording state
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const timerIntervalRef = useRef<number | null>(null);
+  // Speech Recognition / Voice Dictation state
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const recognitionRef = useRef<any>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -225,7 +221,7 @@ export function AgentsPage() {
     const autoTitle = firstUserMsg
       ? firstUserMsg.text.length > 36
         ? firstUserMsg.text.slice(0, 36) + '...'
-        : firstUserMsg.text || 'Mensaje de voz'
+        : firstUserMsg.text
       : 'Nueva conversación';
 
     const updatedSession: ChatSession = {
@@ -246,7 +242,6 @@ export function AgentsPage() {
       return sorted;
     });
 
-    // Sync to VPS storage in background
     fetch(`${BASE}/api/agent/sessions/${sessionId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -260,7 +255,19 @@ export function AgentsPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Sync provider change with model choices
+  // Cleanup speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
   function handleProviderChange(newProvider: 'gemini' | 'openrouter') {
     setProvider(newProvider);
     if (newProvider === 'openrouter') {
@@ -336,88 +343,82 @@ export function AgentsPage() {
     setExpandedTools((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
-  // --- Voice / Audio Recording ---
-  async function startRecording() {
+  // --- Voice Dictation (Transcribes spoken words straight into the input textarea) ---
+  function toggleListening() {
+    if (isListening) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // ignore
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert('Tu navegador no soporta reconocimiento de voz nativo (Web Speech API). Podés usar Google Chrome o Edge.');
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'es-ES';
+      recognition.continuous = true;
+      recognition.interimResults = true;
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i];
+          if (res && res[0]) {
+            transcript += res[0].transcript;
+          }
+        }
+
+        if (transcript) {
+          setInput((prev) => {
+            const separator = prev && !prev.endsWith(' ') ? ' ' : '';
+            return `${prev}${separator}${transcript}`.trim();
+          });
         }
       };
 
-      mediaRecorder.start(250);
-      setIsRecording(true);
-      setRecordingSeconds(0);
+      recognition.onerror = (err: any) => {
+        console.error('Speech recognition error:', err);
+        setIsListening(false);
+      };
 
-      const interval = window.setInterval(() => {
-        setRecordingSeconds((sec) => sec + 1);
-      }, 1000);
-      timerIntervalRef.current = interval;
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
     } catch (err) {
-      alert('No se pudo acceder al micrófono. Verificá los permisos del navegador.');
+      console.error('Failed to start speech recognition:', err);
+      setIsListening(false);
     }
   }
 
-  function stopRecording(sendDirectly = true) {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
-
-    const mr = mediaRecorderRef.current;
-    if (mr && mr.state !== 'inactive') {
-      mr.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
-        // Stop tracks
-        mr.stream.getTracks().forEach((track) => track.stop());
-
-        if (sendDirectly && audioBlob.size > 0) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64String = (reader.result as string).split(',')[1];
-            if (base64String) {
-              void sendPrompt(
-                input.trim() || 'Instrucción por audio:',
-                undefined,
-                { base64Data: base64String, mimeType: audioBlob.type || 'audio/webm' }
-              );
-            }
-          };
-          reader.readAsDataURL(audioBlob);
-        }
-      };
-      mr.stop();
-    }
-    setIsRecording(false);
-  }
-
-  function cancelRecording() {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
-    const mr = mediaRecorderRef.current;
-    if (mr && mr.state !== 'inactive') {
-      mr.onstop = () => {
-        mr.stream.getTracks().forEach((track) => track.stop());
-      };
-      mr.stop();
-    }
-    setIsRecording(false);
-  }
-
-  async function sendPrompt(
-    promptText: string,
-    overrideRepo?: string,
-    audioInput?: { base64Data: string; mimeType: string }
-  ) {
+  async function sendPrompt(promptText: string, overrideRepo?: string) {
     const trimmed = promptText.trim();
-    if ((!trimmed && !audioInput) || isRunning) return;
+    if (!trimmed || isRunning) return;
+
+    if (isListening) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // ignore
+      }
+      setIsListening(false);
+    }
 
     const targetRepo = overrideRepo ?? repo;
     if (overrideRepo && overrideRepo !== repo) {
@@ -441,8 +442,7 @@ export function AgentsPage() {
     const userMsg: ChatMessage = {
       id: userMsgId,
       role: 'user',
-      text: trimmed || (audioInput ? '🎙️ [Mensaje de voz]' : ''),
-      hasAudio: Boolean(audioInput),
+      text: trimmed,
       contextLabel,
       events: [],
       status: 'done',
@@ -464,7 +464,6 @@ export function AgentsPage() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Use custom API key if configured
     const userApiKey = provider === 'openrouter' ? settings.openrouterApiKey : settings.geminiApiKey;
 
     try {
@@ -476,7 +475,6 @@ export function AgentsPage() {
         body: JSON.stringify({
           repo: targetRepo,
           instruction: trimmed,
-          audio: audioInput,
           provider,
           apiKey: userApiKey || undefined,
           model,
@@ -630,7 +628,7 @@ export function AgentsPage() {
                         : 'border-line bg-bg text-muted hover:text-ink'
                     }`}
                   >
-                    OpenRouter (Router Multi-LLM)
+                    OpenRouter (Multi-LLM)
                   </button>
                 </div>
               </div>
@@ -819,8 +817,8 @@ export function AgentsPage() {
               </div>
               <h2 className="text-base font-semibold text-ink">¿En qué trabajamos hoy?</h2>
               <p className="mt-1 max-w-lg text-xs text-muted">
-                Tus conversaciones quedan guardadas automáticamente. Podés escribir o grabar tu voz para consultar
-                el estado del VPS, espacio, Docker, o interactuar con cualquier repositorio.
+                Tus conversaciones quedan guardadas automáticamente. Podés escribir o dictar tu mensaje por voz
+                para consultar el estado del VPS, espacio, Docker, o interactuar con cualquier repositorio.
               </p>
 
               <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -855,7 +853,6 @@ export function AgentsPage() {
                     </span>
                     <span>•</span>
                     <span>{m.contextLabel}</span>
-                    {m.hasAudio && <span>• 🎙️ Audio</span>}
                   </div>
 
                   {m.role === 'user' ? (
@@ -944,45 +941,16 @@ export function AgentsPage() {
         </div>
       </div>
 
-      {/* Input Form with Audio Microphone */}
+      {/* Input Form with Voice Dictation */}
       <div className="border-t border-line bg-surface/80 p-4 backdrop-blur-sm">
-        {isRecording ? (
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-              </span>
-              <span className="text-sm font-semibold text-red-400">
-                Grabando audio... ({recordingSeconds}s)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={cancelRecording}
-                className="rounded-lg border border-line bg-bg px-3 py-1.5 text-xs text-muted hover:text-ink transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => stopRecording(true)}
-                className="rounded-lg bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-500 transition"
-              >
-                Enviar Audio 🎙️
-              </button>
-            </div>
-          </div>
-        ) : (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void sendPrompt(input);
-            }}
-            className="mx-auto flex max-w-4xl items-end gap-2"
-          >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void sendPrompt(input);
+          }}
+          className="mx-auto flex max-w-4xl items-end gap-2"
+        >
+          <div className="relative flex-1">
             <textarea
               rows={2}
               value={input}
@@ -994,44 +962,60 @@ export function AgentsPage() {
                 }
               }}
               placeholder={
-                repo === GENERAL_CONTEXT
-                  ? 'Escribí un mensaje o grabá audio para el VPS en general (Enter para enviar)...'
+                isListening
+                  ? 'Escuchando tu voz... (hablá y se escribirá aquí)'
+                  : repo === GENERAL_CONTEXT
+                  ? 'Escribí un mensaje o dictá por voz para el VPS (Enter para enviar)...'
                   : `Escribí una tarea o consulta para ${repo} (Enter para enviar)...`
               }
               disabled={isRunning}
-              className="flex-1 resize-none rounded-xl border border-line bg-bg px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+              className={`w-full resize-none rounded-xl border bg-bg px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:outline-none transition ${
+                isListening
+                  ? 'border-red-500 shadow-sm ring-1 ring-red-500/50'
+                  : 'border-line focus:border-accent'
+              }`}
             />
+            {isListening && (
+              <div className="absolute right-3 top-2 flex items-center gap-1.5 text-[10px] font-semibold text-red-400">
+                <span className="h-2 w-2 animate-ping rounded-full bg-red-500" />
+                <span>Dictando...</span>
+              </div>
+            )}
+          </div>
 
-            {/* Microphone Button */}
+          {/* Microphone Dictate Button */}
+          <button
+            type="button"
+            onClick={toggleListening}
+            disabled={isRunning}
+            title={isListening ? 'Detener dictado por voz' : 'Dictar por voz (convierte tu voz a texto)'}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition shrink-0 ${
+              isListening
+                ? 'border-red-500 bg-red-500/10 text-red-400 animate-pulse'
+                : 'border-line bg-bg text-ink hover:border-accent hover:text-accent disabled:opacity-40'
+            }`}
+          >
+            🎙️
+          </button>
+
+          {isRunning ? (
             <button
               type="button"
-              onClick={startRecording}
-              disabled={isRunning}
-              title="Grabar mensaje de voz / audio"
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-bg text-base text-ink hover:border-accent hover:text-accent disabled:opacity-40 transition shrink-0"
+              onClick={handleStop}
+              className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-500 transition shrink-0 h-10"
             >
-              🎙️
+              ⏹ Detener
             </button>
-
-            {isRunning ? (
-              <button
-                type="button"
-                onClick={handleStop}
-                className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-500 transition shrink-0 h-10"
-              >
-                ⏹ Detener
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim()}
-                className="rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40 transition shrink-0 h-10"
-              >
-                Enviar ↵
-              </button>
-            )}
-          </form>
-        )}
+          ) : (
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className="rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40 transition shrink-0 h-10"
+            >
+              Enviar ↵
+            </button>
+          )}
+        </form>
       </div>
     </div>
   );

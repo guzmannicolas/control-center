@@ -225,7 +225,6 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     const body = req.body as {
       repo?: string;
       instruction?: string;
-      audio?: { base64Data: string; mimeType: string };
       apiKey?: string;
       provider?: 'gemini' | 'openrouter';
       model?: string;
@@ -233,10 +232,9 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     };
     const repo = body.repo?.trim() || GENERAL_CONTEXT;
     const instruction = body.instruction?.trim() || '';
-    const hasAudio = Boolean(body.audio?.base64Data);
 
-    if (!instruction && !hasAudio) {
-      return reply.code(400).send({ error: 'Instruction or audio is required' });
+    if (!instruction) {
+      return reply.code(400).send({ error: 'Instruction is required' });
     }
 
     const provider = body.provider || 'gemini';
@@ -272,7 +270,6 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
       for await (const event of runAgentLoop({
         repo,
         instruction,
-        audio: body.audio,
         apiKey,
         provider,
         modelName: body.model || 'auto',

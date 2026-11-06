@@ -14,15 +14,9 @@ export interface ChatTurnMessage {
   text: string;
 }
 
-export interface AudioInput {
-  base64Data: string;
-  mimeType: string;
-}
-
 export interface RunAgentOptions {
   repo: string;
-  instruction?: string;
-  audio?: AudioInput;
+  instruction: string;
   apiKey?: string;
   provider?: 'gemini' | 'openrouter';
   modelName?: string;
@@ -195,14 +189,13 @@ async function* runOpenRouterLoop(
   apiKey: string,
   modelName: string,
   priorHistory: ChatTurnMessage[],
-  systemInstruction: string,
-  audio?: AudioInput
+  systemInstruction: string
 ): AsyncGenerator<AgentStepEvent> {
   const chosenModel = modelName && modelName !== 'auto' ? modelName : 'meta-llama/llama-3.3-70b-instruct';
 
   interface OpenRouterMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';
-    content: string | null | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    content: string | null;
     tool_calls?: Array<{
       id: string;
       type: 'function';
@@ -224,21 +217,9 @@ async function* runOpenRouterLoop(
     }
   }
 
-  // If audio is provided for OpenRouter, note that most text models accept audio via base64 data URLs if multimodal, or we instruct them
-  let userContent: OpenRouterMessage['content'] = instruction;
-  if (audio?.base64Data) {
-    userContent = [
-      ...(instruction ? [{ type: 'text', text: instruction }] : []),
-      {
-        type: 'image_url', // OpenRouter / OpenAI format accepts data URLs in multimodal endpoints
-        image_url: { url: `data:${audio.mimeType};base64,${audio.base64Data}` },
-      },
-    ];
-  }
-
   messages.push({
     role: 'user',
-    content: userContent,
+    content: instruction,
   });
 
   let turns = 0;
@@ -349,12 +330,10 @@ async function* runGeminiLoop(
   apiKey: string,
   modelName: string,
   priorHistory: ChatTurnMessage[],
-  systemInstruction: string,
-  audio?: AudioInput
+  systemInstruction: string
 ): AsyncGenerator<AgentStepEvent> {
   const ai = new GoogleGenAI({ apiKey });
 
-  // Preferred model or fallback pool
   const preferred = modelName === 'auto' || !modelName ? 'gemini-2.5-flash' : modelName;
   const modelPool = [preferred, ...FALLBACK_MODEL_POOL.filter((m) => m !== preferred)];
   let activeModelIdx = 0;
@@ -369,25 +348,9 @@ async function* runGeminiLoop(
     }
   }
 
-  const userParts: any[] = [];
-  if (instruction) {
-    userParts.push({ text: instruction });
-  }
-  if (audio?.base64Data) {
-    userParts.push({
-      inlineData: {
-        data: audio.base64Data,
-        mimeType: audio.mimeType || 'audio/webm',
-      },
-    });
-  }
-  if (userParts.length === 0) {
-    userParts.push({ text: 'Por favor procesá esta solicitud.' });
-  }
-
   contents.push({
     role: 'user',
-    parts: userParts,
+    parts: [{ text: instruction }],
   });
 
   let turns = 0;
@@ -505,8 +468,7 @@ async function* runGeminiLoop(
 export async function* runAgentLoop(options: RunAgentOptions): AsyncGenerator<AgentStepEvent> {
   const {
     repo,
-    instruction = '',
-    audio,
+    instruction,
     apiKey,
     provider = 'gemini',
     modelName = 'auto',
@@ -534,8 +496,8 @@ export async function* runAgentLoop(options: RunAgentOptions): AsyncGenerator<Ag
   }
 
   if (provider === 'openrouter') {
-    yield* runOpenRouterLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction, audio);
+    yield* runOpenRouterLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction);
   } else {
-    yield* runGeminiLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction, audio);
+    yield* runGeminiLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction);
   }
 }
