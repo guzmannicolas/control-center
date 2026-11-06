@@ -474,7 +474,7 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
   app.post('/leads/scrape', async (req, reply) => {
     const parsed = ScrapeInput.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'Categoría y ciudad requeridas' });
+    if (!parsed.success) return reply.code(400).send({ error: 'Category and city are required' });
 
     const { category, city, limit } = parsed.data;
     const places = await scrapeGoogleMapsPlaces(category, city, limit);
@@ -511,7 +511,7 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   app.post('/leads/:id/enrich', async (req, reply) => {
     const { id } = req.params as { id: string };
     const lead = await prisma.lead.findUnique({ where: { id } });
-    if (!lead) return reply.code(404).send({ error: 'Lead no encontrado' });
+    if (!lead) return reply.code(404).send({ error: 'Lead not found' });
 
     const enriched = await enrichLeadSocials(lead.name, lead.city);
     const updated = await prisma.lead.update({
