@@ -18,6 +18,13 @@ import {
   deleteChatSession,
   type StoredChatSession,
 } from '../agent/tools.js';
+import {
+  fetchVercelProjects,
+  getBackupsOverview,
+  runManualBackup,
+  getVpsStatus,
+  runVpsCleanup,
+} from '../ops.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -361,5 +368,39 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
       checkedAt: r.checkedAt.toISOString(), status: r.status as CheckStatus, durationMs: r.durationMs,
       message: r.message, metrics: asMetrics(r.metrics),
     }));
+  });
+
+  // --- Vercel Projects -----------------------------------------------------------------------------
+  app.get('/vercel/projects', async (req) => {
+    const q = req.query as { refresh?: string };
+    const projects = await fetchVercelProjects(q.refresh === '1' || q.refresh === 'true');
+    return {
+      configured: Boolean(process.env.VERCEL_TOKEN),
+      projects,
+      fetchedAt: new Date().toISOString(),
+    };
+  });
+
+  // --- Backups -------------------------------------------------------------------------------------
+  app.get('/backups', async () => {
+    return getBackupsOverview();
+  });
+
+  app.post('/backups/run', async () => {
+    return runManualBackup();
+  });
+
+  // --- VPS Health & Cleanup ------------------------------------------------------------------------
+  app.get('/vps/status', async () => {
+    return getVpsStatus();
+  });
+
+  const CleanupBody = z.object({
+    target: z.enum(['docker', 'vscode', 'caches', 'all']),
+  });
+  app.post('/vps/cleanup', async (req, reply) => {
+    const parsed = CleanupBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid cleanup target' });
+    return runVpsCleanup(parsed.data.target);
   });
 };

@@ -40,3 +40,26 @@ export const TerminalIcon = () => (
     <line x1="12" y1="19" x2="20" y2="19" />
   </Icon>
 );
+
+export const VercelIcon = () => (
+  <Icon>
+    <polygon points="12 4 21 19.5 3 19.5" />
+  </Icon>
+);
+
+export const BackupIcon = () => (
+  <Icon>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </Icon>
+);
+
+export const VpsIcon = () => (
+  <Icon>
+    <rect x="2" y="3" width="20" height="7" rx="1.5" />
+    <rect x="2" y="14" width="20" height="7" rx="1.5" />
+    <line x1="6" y1="6.5" x2="6.01" y2="6.5" />
+    <line x1="6" y1="17.5" x2="6.01" y2="17.5" />
+  </Icon>
+);
