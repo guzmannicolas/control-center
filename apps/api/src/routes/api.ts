@@ -547,6 +547,51 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     return { lead: updated };
   });
 
+  const BatchDeleteInput = z.object({
+    ids: z.array(z.string()).optional(),
+    all: z.boolean().optional(),
+    status: z.string().optional(),
+  });
+
+  app.post('/leads/batch-delete', async (req, reply) => {
+    const parsed = BatchDeleteInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid batch delete parameters' });
+
+    const { ids, all, status } = parsed.data;
+    const where: Record<string, unknown> = {};
+
+    if (all) {
+      if (status) where.status = status;
+    } else if (ids && ids.length > 0) {
+      where.id = { in: ids };
+    } else {
+      return reply.code(400).send({ error: 'No target leads specified for deletion' });
+    }
+
+    const res = await prisma.lead.deleteMany({ where });
+    return { ok: true, count: res.count };
+  });
+
+  const BatchUpdateInput = z.object({
+    ids: z.array(z.string()).min(1),
+    status: z.enum(['discovered', 'enriched', 'contacted', 'replied', 'converted', 'discarded']),
+  });
+
+  app.post('/leads/batch-update', async (req, reply) => {
+    const parsed = BatchUpdateInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid batch update parameters' });
+
+    const { ids, status } = parsed.data;
+    const res = await prisma.lead.updateMany({
+      where: { id: { in: ids } },
+      data: {
+        status,
+        contactedAt: status === 'contacted' ? new Date() : undefined,
+      },
+    });
+    return { ok: true, count: res.count };
+  });
+
   app.delete('/leads/:id', async (req) => {
     const { id } = req.params as { id: string };
     await prisma.lead.delete({ where: { id } });
