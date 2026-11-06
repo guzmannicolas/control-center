@@ -19,14 +19,14 @@ const AVAILABLE_REPOS = [
 ];
 
 const AVAILABLE_MODELS = [
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Recommended for coding)' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Fast)' },
-  { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet (Configured via Anthropic API)' },
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Recommended - Fast & Powerful)' },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash-Lite (Super fast)' },
+  { id: 'gemini-flash-lite-latest', name: 'Gemini Flash-Lite Latest' },
 ];
 
 export function AgentsPage() {
   const [repo, setRepo] = useState('control-center');
-  const [model, setModel] = useState('gemini-2.5-pro');
+  const [model, setModel] = useState('gemini-3.5-flash');
   const [instruction, setInstruction] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -54,8 +54,15 @@ export function AgentsPage() {
       });
 
       if (!res.ok) {
-        const errorText = await res.text();
-        setEvents((prev) => [...prev, { type: 'error', content: `HTTP ${res.status}: ${errorText}` }]);
+        if (res.status === 401) {
+          setEvents((prev) => [
+            ...prev,
+            { type: 'error', content: 'Session expired or not logged in. Please reload the page or log in again.' },
+          ]);
+        } else {
+          const errorText = await res.text();
+          setEvents((prev) => [...prev, { type: 'error', content: `HTTP ${res.status}: ${errorText}` }]);
+        }
         setIsRunning(false);
         return;
       }
@@ -87,7 +94,13 @@ export function AgentsPage() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setEvents((prev) => [...prev, { type: 'error', content: `Network error: ${msg}` }]);
+      setEvents((prev) => [
+        ...prev,
+        {
+          type: 'error',
+          content: `Connection error: ${msg}. If this persists, verify you are logged in to Control Center.`,
+        },
+      ]);
     } finally {
       setIsRunning(false);
     }
