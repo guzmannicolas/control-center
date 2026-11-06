@@ -187,9 +187,12 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
       return reply.code(500).send({ error: 'GEMINI_API_KEY is not configured on the server' });
     }
 
+    const origin = req.headers.origin || 'https://control.nicoguzmandev.com';
     reply.raw.setHeader('Content-Type', 'text/event-stream');
     reply.raw.setHeader('Cache-Control', 'no-cache');
     reply.raw.setHeader('Connection', 'keep-alive');
+    reply.raw.setHeader('Access-Control-Allow-Origin', origin);
+    reply.raw.setHeader('Access-Control-Allow-Credentials', 'true');
     reply.raw.flushHeaders?.();
 
     try {
