@@ -216,3 +216,61 @@ export interface LeadView {
   updatedAt: string;
   contactedAt: string | null;
 }
+
+// --- Deployments & CI/CD --------------------------------------------------------------------------
+
+export type DeploymentStatus = 'queued' | 'running' | 'success' | 'failed';
+
+export interface DeploymentRecord {
+  id: string;
+  repo: string;
+  branch: string;
+  commitHash: string | null;
+  commitMessage: string | null;
+  author: string | null;
+  status: DeploymentStatus;
+  trigger: 'webhook' | 'manual';
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  error: string | null;
+  log: string;
+}
+
+export interface DeploymentOverview {
+  webhookUrl: string;
+  secretConfigured: boolean;
+  availableRepos: string[];
+  recentDeployments: DeploymentRecord[];
+}
+
+// --- Cloudflare Operations ------------------------------------------------------------------------
+
+export interface CloudflareZoneSummary {
+  id: string;
+  name: string;
+  status: string;
+  paused: boolean;
+  type: string;
+  nameServers: string[];
+  securityLevel?: string;
+}
+
+export interface CloudflareDnsItem {
+  id: string;
+  type: string;
+  name: string;
+  content: string;
+  proxiable: boolean;
+  proxied: boolean;
+  ttl: number;
+  comment?: string;
+}
+
+export interface CloudflareOverview {
+  configured: boolean;
+  zones: CloudflareZoneSummary[];
+  activeZoneId: string | null;
+  dnsRecords: CloudflareDnsItem[];
+  securityLevel: string;
+}

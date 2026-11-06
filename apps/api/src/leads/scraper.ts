@@ -79,11 +79,12 @@ export async function fetchLiveGoogleMaps(category: string, city: string, limit 
 
   const html = await initialRes.text();
   const match = html.match(/<link href="(\/search\?tbm=map[^"]+)" as="fetch"/);
-  if (!match) {
+  const linkPath = match?.[1];
+  if (!linkPath) {
     throw new Error('Google Maps data link not found in initial page');
   }
 
-  const dataUrl = `https://www.google.com${match[1].replace(/&amp;/g, '&')}`;
+  const dataUrl = `https://www.google.com${linkPath.replace(/&amp;/g, '&')}`;
   const dataRes = await fetch(dataUrl, {
     headers: {
       ...BROWSER_HEADERS,

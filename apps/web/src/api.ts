@@ -1,5 +1,17 @@
 import type {
-  DatabaseView, DomainView, ImprovementInput, ImprovementView, IncidentView, LearningProgressView, Overview, ResultPoint, User,
+  CloudflareOverview,
+  CloudflareDnsItem,
+  DeploymentOverview,
+  DeploymentRecord,
+  DatabaseView,
+  DomainView,
+  ImprovementInput,
+  ImprovementView,
+  IncidentView,
+  LearningProgressView,
+  Overview,
+  ResultPoint,
+  User,
 } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
@@ -52,4 +64,36 @@ export const api = {
     request<LearningProgressView>(`/api/learning/progress/${moduleId}`, { method: 'PUT', body: JSON.stringify({ score }) }),
   resetModule: (moduleId: string) => request<void>(`/api/learning/progress/${moduleId}`, { method: 'DELETE' }),
   results: (monitorId: string, hours: number) => request<ResultPoint[]>(`/api/monitors/${monitorId}/results?hours=${hours}`),
+
+  // Deployments (CI/CD)
+  deployments: () => request<DeploymentOverview>('/api/deployments'),
+  deployment: (id: string) => request<DeploymentRecord>(`/api/deployments/${id}`),
+  triggerDeployment: (repo: string, branch = 'main') =>
+    request<{ ok: true; deployment: DeploymentRecord }>('/api/deployments/trigger', {
+      method: 'POST',
+      body: JSON.stringify({ repo, branch }),
+    }),
+
+  // Cloudflare
+  cloudflareOverview: (zoneId?: string) =>
+    request<CloudflareOverview>(`/api/cloudflare/overview${zoneId ? `?zoneId=${zoneId}` : ''}`),
+  purgeCloudflareCache: (zoneId: string, purgeEverything = true, files?: string[]) =>
+    request<{ ok: true }>('/api/cloudflare/purge-cache', {
+      method: 'POST',
+      body: JSON.stringify({ zoneId, purgeEverything, files }),
+    }),
+  createCloudflareDns: (record: { zoneId: string; type: string; name: string; content: string; proxied: boolean; ttl?: number; comment?: string }) =>
+    request<{ ok: true; record: CloudflareDnsItem }>('/api/cloudflare/dns', {
+      method: 'POST',
+      body: JSON.stringify(record),
+    }),
+  deleteCloudflareDns: (zoneId: string, recordId: string) =>
+    request<{ ok: true }>(`/api/cloudflare/dns/${recordId}?zoneId=${zoneId}`, {
+      method: 'DELETE',
+    }),
+  setCloudflareSecurityLevel: (zoneId: string, level: string) =>
+    request<{ ok: true }>('/api/cloudflare/security-level', {
+      method: 'PATCH',
+      body: JSON.stringify({ zoneId, level }),
+    }),
 };

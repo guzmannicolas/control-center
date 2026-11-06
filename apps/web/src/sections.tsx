@@ -2,7 +2,9 @@ import type { ComponentType } from 'react';
 import {
   AgentIcon,
   BackupIcon,
+  CloudflareIcon,
   DatabaseIcon,
+  DeployIcon,
   DomainIcon,
   ImprovementIcon,
   LearningIcon,
@@ -23,6 +25,8 @@ import { VercelPage } from './pages/Vercel.tsx';
 import { BackupsPage } from './pages/Backups.tsx';
 import { VpsPage } from './pages/Vps.tsx';
 import { LeadsPage } from './pages/Leads.tsx';
+import { DeploysPage } from './pages/Deploys.tsx';
+import { CloudflarePage } from './pages/Cloudflare.tsx';
 
 export interface Section {
   path: string;
@@ -35,6 +39,8 @@ export interface Section {
 export const SECTIONS: Section[] = [
   { path: '/', label: 'Overview', Icon: OverviewIcon, Page: OverviewPage },
   { path: '/leads', label: 'Sales', Icon: LeadsIcon, Page: LeadsPage },
+  { path: '/deploys', label: 'Deploys', Icon: DeployIcon, Page: DeploysPage },
+  { path: '/cloudflare', label: 'Cloudflare', Icon: CloudflareIcon, Page: CloudflarePage },
   { path: '/vercel', label: 'Vercel', Icon: VercelIcon, Page: VercelPage },
   { path: '/vps', label: 'VPS', Icon: VpsIcon, Page: VpsPage },
   { path: '/backups', label: 'Backups', Icon: BackupIcon, Page: BackupsPage },
