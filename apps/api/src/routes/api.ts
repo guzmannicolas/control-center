@@ -10,7 +10,14 @@ import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
 import { subdomainsOf } from '../subdomains.js';
 import { fetchCloudflareDnsRecords } from '../cloudflare.js';
 import { runAgentLoop, type ChatTurnMessage } from '../agent/engine.js';
-import { GENERAL_CONTEXT, listAvailableRepos } from '../agent/tools.js';
+import {
+  GENERAL_CONTEXT,
+  listAvailableRepos,
+  loadChatSessions,
+  upsertChatSession,
+  deleteChatSession,
+  type StoredChatSession,
+} from '../agent/tools.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -177,6 +184,29 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   app.get('/agent/repos', async () => {
     const repos = await listAvailableRepos();
     return { repos };
+  });
+
+  app.get('/agent/sessions', async () => {
+    return { sessions: loadChatSessions() };
+  });
+
+  app.put('/agent/sessions/:id', async (req) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as Partial<StoredChatSession>;
+    const session: StoredChatSession = {
+      id,
+      title: body.title?.slice(0, 120) || 'Conversación',
+      repo: body.repo || GENERAL_CONTEXT,
+      model: body.model || 'auto',
+      updatedAt: new Date().toISOString(),
+      messages: Array.isArray(body.messages) ? body.messages : [],
+    };
+    return { sessions: upsertChatSession(session) };
+  });
+
+  app.delete('/agent/sessions/:id', async (req) => {
+    const { id } = req.params as { id: string };
+    return { sessions: deleteChatSession(id) };
   });
 
   app.post('/agent/run', async (req, reply) => {

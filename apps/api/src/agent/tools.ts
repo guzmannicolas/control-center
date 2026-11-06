@@ -8,6 +8,7 @@ const execAsync = promisify(exec);
 // Allowed repositories directory on the VPS
 export const REPOS_BASE = process.env.REPOS_BASE ?? '/home/adminnico/repositories';
 export const GENERAL_CONTEXT = '__general__';
+const SESSIONS_FILE = resolve(REPOS_BASE, '.agent-sessions.json');
 
 export interface AgentToolCall {
   id: string;
@@ -29,6 +30,47 @@ export interface AgentRepoOption {
   isPrivate: boolean;
   local: boolean;
   updatedAt?: string;
+}
+
+export interface StoredChatSession {
+  id: string;
+  title: string;
+  repo: string;
+  model: string;
+  updatedAt: string;
+  messages: unknown[];
+}
+
+export function loadChatSessions(): StoredChatSession[] {
+  try {
+    if (!existsSync(SESSIONS_FILE)) return [];
+    const raw = readFileSync(SESSIONS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as StoredChatSession[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function upsertChatSession(session: StoredChatSession): StoredChatSession[] {
+  const current = loadChatSessions().filter((s) => s.id !== session.id);
+  const next = [session, ...current].slice(0, 30); // Keep last 30 sessions
+  try {
+    writeFileSync(SESSIONS_FILE, JSON.stringify(next, null, 2), 'utf8');
+  } catch {
+    // Ignore write errors if directory is not writable in test env
+  }
+  return next;
+}
+
+export function deleteChatSession(id: string): StoredChatSession[] {
+  const next = loadChatSessions().filter((s) => s.id !== id);
+  try {
+    writeFileSync(SESSIONS_FILE, JSON.stringify(next, null, 2), 'utf8');
+  } catch {
+    // Ignore write errors
+  }
+  return next;
 }
 
 let cachedRepos: { expiresAt: number; data: AgentRepoOption[] } | null = null;
@@ -134,14 +176,25 @@ export async function ensureRepoCloned(repo: string): Promise<{ cloned: boolean;
     return { cloned: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Redact token from any error output
     const safeMsg = githubToken ? msg.replaceAll(githubToken, '***') : msg;
     return { cloned: false, error: safeMsg };
   }
 }
 
 export function sanitizePath(repo: string, relPath: string): string {
-  const baseDir = !repo || repo === GENERAL_CONTEXT ? resolve(REPOS_BASE) : resolve(REPOS_BASE, repo);
+  if (!repo || repo === GENERAL_CONTEXT) {
+    if (relPath.startsWith('/home/adminnico') || relPath.startsWith('/host')) {
+      return resolve(relPath);
+    }
+    const baseDir = resolve(REPOS_BASE);
+    const target = resolve(baseDir, relPath.replace(/^\/+/, ''));
+    if (!target.startsWith('/home/adminnico') && !target.startsWith('/host') && !target.startsWith(baseDir)) {
+      throw new Error(`Path traversal denied: ${relPath}`);
+    }
+    return target;
+  }
+
+  const baseDir = resolve(REPOS_BASE, repo);
   const cleanRel = relPath.replace(/^\/+/, '');
   const target = resolve(baseDir, cleanRel);
   if (!target.startsWith(baseDir)) {
@@ -155,7 +208,7 @@ export async function executeTool(
   call: AgentToolCall
 ): Promise<AgentToolResult> {
   const { id, name, args } = call;
-  const cwd = !repo || repo === GENERAL_CONTEXT ? resolve(REPOS_BASE) : resolve(REPOS_BASE, repo);
+  const cwd = !repo || repo === GENERAL_CONTEXT ? '/home/adminnico' : resolve(REPOS_BASE, repo);
 
   try {
     switch (name) {
@@ -211,7 +264,7 @@ export async function executeTool(
           return { toolCallId: id, name, output: 'Command blocked by security policy', isError: true };
         }
         const { stdout, stderr } = await execAsync(cmd, {
-          cwd,
+          cwd: existsSync(cwd) ? cwd : REPOS_BASE,
           timeout: 45_000,
           maxBuffer: 1024 * 1024 * 2, // 2MB
         });

@@ -26,7 +26,18 @@ interface ChatMessage {
   status: 'streaming' | 'done' | 'error';
 }
 
+interface ChatSession {
+  id: string;
+  title: string;
+  repo: string;
+  model: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+
 const GENERAL_CONTEXT = '__general__';
+const STORAGE_KEY = 'cc_agent_sessions_v1';
+const ACTIVE_SESSION_KEY = 'cc_agent_active_session_v1';
 
 const FALLBACK_REPOS: RepoOption[] = [
   { name: 'control-center', fullName: 'guzmannicolas/control-center', description: 'Control Center', isPrivate: false, local: true },
@@ -46,9 +57,9 @@ const AVAILABLE_MODELS = [
 
 const QUICK_PROMPTS = [
   {
-    label: '🩺 Chequear salud del VPS',
+    label: '🩺 Chequear salud y espacio del VPS',
     repo: GENERAL_CONTEXT,
-    prompt: 'Chequeá el estado general del VPS: uso de RAM y swap (free -h), espacio en disco (df -h), uptime/carga y qué repositorios locales hay en /home/adminnico/repositories.',
+    prompt: 'Chequeá el estado general del VPS: uso de RAM y swap (free -h), qué consume más espacio en disco (df -h /host, docker system df y du en /home/adminnico) y qué contenedores están corriendo.',
   },
   {
     label: '📂 Estado Git de todos los repos',
@@ -56,18 +67,47 @@ const QUICK_PROMPTS = [
     prompt: 'Revisá todos los repositorios dentro de /home/adminnico/repositories y decime en qué rama está cada uno y si alguno tiene cambios sin commitear.',
   },
   {
-    label: '🔍 Analizar arquitectura del repo actual',
+    label: '🔍 Analizar arquitectura de Control Center',
     repo: 'control-center',
     prompt: 'Inspeccioná la estructura del repositorio, leé el package.json y haceme un resumen técnico de su arquitectura y scripts disponibles.',
   },
 ];
 
+function loadLocalSessions(): ChatSession[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ChatSession[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalSessions(sessions: ChatSession[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(0, 30)));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
 export function AgentsPage() {
   const [repos, setRepos] = useState<RepoOption[]>(FALLBACK_REPOS);
-  const [repo, setRepo] = useState<string>(GENERAL_CONTEXT);
-  const [model, setModel] = useState<string>('auto');
+  const [sessions, setSessions] = useState<ChatSession[]>(() => loadLocalSessions());
+  const [sessionId, setSessionId] = useState<string>(() => {
+    const savedActive = localStorage.getItem(ACTIVE_SESSION_KEY);
+    const local = loadLocalSessions();
+    if (savedActive && local.some((s) => s.id === savedActive)) return savedActive;
+    return local[0]?.id ?? `session-${Date.now()}`;
+  });
+
+  const activeSession = sessions.find((s) => s.id === sessionId);
+
+  const [repo, setRepo] = useState<string>(activeSession?.repo ?? GENERAL_CONTEXT);
+  const [model, setModel] = useState<string>(activeSession?.model ?? 'auto');
   const [input, setInput] = useState<string>('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(activeSession?.messages ?? []);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
 
@@ -76,6 +116,7 @@ export function AgentsPage() {
 
   const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
 
+  // Fetch available repos (local + GitHub cloud) and saved server chat sessions
   useEffect(() => {
     let active = true;
     fetch(`${BASE}/api/agent/repos`, { credentials: 'include' })
@@ -85,13 +126,66 @@ export function AgentsPage() {
           setRepos(data.repos);
         }
       })
-      .catch(() => {
-        // Keep fallback repos
-      });
+      .catch(() => {});
+
+    fetch(`${BASE}/api/agent/sessions`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { sessions?: ChatSession[] } | null) => {
+        if (!active || !data?.sessions || data.sessions.length === 0) return;
+        setSessions((prev) => {
+          const map = new Map<string, ChatSession>();
+          for (const s of data.sessions!) map.set(s.id, s);
+          for (const s of prev) {
+            const existing = map.get(s.id);
+            if (!existing || s.messages.length >= existing.messages.length) {
+              map.set(s.id, s);
+            }
+          }
+          const merged = Array.from(map.values()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+          saveLocalSessions(merged);
+          return merged;
+        });
+      })
+      .catch(() => {});
+
     return () => {
       active = false;
     };
   }, [BASE]);
+
+  // Persist current session to localStorage & server whenever messages change
+  useEffect(() => {
+    localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
+    if (messages.length === 0) return;
+
+    const firstUserMsg = messages.find((m) => m.role === 'user')?.text ?? 'Conversación';
+    const title = firstUserMsg.length > 55 ? `${firstUserMsg.slice(0, 55)}…` : firstUserMsg;
+    const updatedSession: ChatSession = {
+      id: sessionId,
+      title,
+      repo,
+      model,
+      updatedAt: new Date().toISOString(),
+      messages,
+    };
+
+    setSessions((prev) => {
+      const next = [updatedSession, ...prev.filter((s) => s.id !== sessionId)].slice(0, 30);
+      saveLocalSessions(next);
+      return next;
+    });
+
+    // Sync to server when not actively mid-stream (or when finished)
+    const anyStreaming = messages.some((m) => m.status === 'streaming');
+    if (!anyStreaming) {
+      fetch(`${BASE}/api/agent/sessions/${encodeURIComponent(sessionId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(updatedSession),
+      }).catch(() => {});
+    }
+  }, [messages, sessionId, repo, model, BASE]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -109,10 +203,44 @@ export function AgentsPage() {
     setIsRunning(false);
   }
 
-  function handleClearChat() {
+  function handleSelectSession(targetId: string) {
     if (isRunning) handleStop();
+    const found = sessions.find((s) => s.id === targetId);
+    if (found) {
+      setSessionId(found.id);
+      setMessages(found.messages);
+      setRepo(found.repo || GENERAL_CONTEXT);
+      setModel(found.model || 'auto');
+      setExpandedTools({});
+    }
+  }
+
+  function handleNewChat() {
+    if (isRunning) handleStop();
+    const newId = `session-${Date.now()}`;
+    setSessionId(newId);
     setMessages([]);
     setExpandedTools({});
+  }
+
+  function handleDeleteCurrentSession() {
+    if (isRunning) handleStop();
+    const idToDelete = sessionId;
+    const remaining = sessions.filter((s) => s.id !== idToDelete);
+    setSessions(remaining);
+    saveLocalSessions(remaining);
+    fetch(`${BASE}/api/agent/sessions/${encodeURIComponent(idToDelete)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    }).catch(() => {});
+
+    if (remaining[0]) {
+      setSessionId(remaining[0].id);
+      setMessages(remaining[0].messages);
+      setRepo(remaining[0].repo || GENERAL_CONTEXT);
+    } else {
+      handleNewChat();
+    }
   }
 
   async function sendPrompt(promptText: string, overrideRepo?: string) {
@@ -131,7 +259,6 @@ export function AgentsPage() {
         ? '🌐 General / VPS'
         : `${repos.find((r) => r.name === targetRepo)?.local === false ? '☁️' : '🖥️'} ${targetRepo}`;
 
-    // Build history from previous completed messages
     const history = messages
       .filter((m) => m.text.trim().length > 0)
       .map((m) => ({
@@ -263,21 +390,45 @@ export function AgentsPage() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col bg-bg">
-      {/* Top Bar: Context & Model Selectors */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface px-4 py-3 shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15 text-accent font-bold text-sm">
+      {/* Top Bar: History, Context & Model Selectors */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line bg-surface px-4 py-2.5 shadow-xs">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent font-bold text-xs">
             AI
           </div>
           <div>
             <h1 className="text-sm font-semibold text-ink leading-tight">Agent Harness</h1>
-            <p className="text-[11px] text-muted">Chat autónomo con acceso al VPS y tus repositorios de GitHub</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Saved Conversations Dropdown */}
+          {sessions.length > 0 && (
+            <div className="flex items-center gap-1">
+              <label htmlFor="agent-session-select" className="text-[11px] font-medium text-muted uppercase">
+                Chat:
+              </label>
+              <select
+                id="agent-session-select"
+                value={sessions.some((s) => s.id === sessionId) ? sessionId : ''}
+                onChange={(e) => {
+                  if (e.target.value) handleSelectSession(e.target.value);
+                }}
+                disabled={isRunning}
+                className="max-w-[200px] truncate rounded-lg border border-line bg-bg px-2 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+              >
+                {!sessions.some((s) => s.id === sessionId) && <option value="">✨ Nueva conversación</option>}
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    💬 {s.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Context / Repository Dropdown */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <label htmlFor="agent-repo-select" className="text-[11px] font-medium text-muted uppercase">
               Contexto:
             </label>
@@ -288,7 +439,7 @@ export function AgentsPage() {
               disabled={isRunning}
               className="rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
             >
-              <option value={GENERAL_CONTEXT}>🌐 General / Todo el VPS (Sin repo específico)</option>
+              <option value={GENERAL_CONTEXT}>🌐 General / Todo el VPS (Sin repo)</option>
               <optgroup label={`🖥️ En el VPS (${localRepos.length} locales)`}>
                 {localRepos.map((r) => (
                   <option key={r.name} value={r.name}>
@@ -309,7 +460,7 @@ export function AgentsPage() {
           </div>
 
           {/* Model Dropdown */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <label htmlFor="agent-model-select" className="text-[11px] font-medium text-muted uppercase">
               Modelo:
             </label>
@@ -328,19 +479,28 @@ export function AgentsPage() {
             </select>
           </div>
 
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className="rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink hover:border-accent transition"
+          >
+            + Nuevo chat
+          </button>
+
           {messages.length > 0 && (
             <button
               type="button"
-              onClick={handleClearChat}
-              className="rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-muted hover:text-ink hover:border-ink/30 transition"
+              onClick={handleDeleteCurrentSession}
+              title="Borrar esta conversación"
+              className="rounded-lg border border-line bg-bg px-2 py-1.5 text-xs text-muted hover:text-red-400 hover:border-red-400/40 transition"
             >
-              + Nuevo chat
+              🗑
             </button>
           )}
         </div>
       </div>
 
-      {/* Main Conversation Stream (Large Output Area) */}
+      {/* Main Conversation Stream */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-4xl flex-col gap-6">
           {messages.length === 0 ? (
@@ -350,9 +510,8 @@ export function AgentsPage() {
               </div>
               <h2 className="text-base font-semibold text-ink">¿En qué trabajamos hoy?</h2>
               <p className="mt-1 max-w-lg text-xs text-muted">
-                Podés hacer consultas generales sobre la salud del VPS sin elegir repositorio, trabajar sobre los repos
-                locales o elegir cualquier repositorio de tu cuenta de GitHub (se clona automáticamente si no está en el
-                VPS).
+                Tus conversaciones quedan guardadas automáticamente. Podés consultar el estado y espacio del VPS en
+                modo General, o elegir cualquier repositorio local o de GitHub.
               </p>
 
               <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -381,7 +540,6 @@ export function AgentsPage() {
                 );
               }
 
-              // Group tool calls & tool results for cleaner rendering
               const thoughts = msg.events.filter((e) => e.type === 'thought');
               const toolCalls = msg.events.filter((e) => e.type === 'tool_call');
               const toolResults = msg.events.filter((e) => e.type === 'tool_result');
@@ -405,7 +563,6 @@ export function AgentsPage() {
                       )}
                     </div>
 
-                    {/* Tool Calls & Intermediate Steps */}
                     {(toolCalls.length > 0 || thoughts.length > 0) && (
                       <div className="mb-3 space-y-2">
                         {thoughts.map((t, idx) => (
@@ -453,14 +610,12 @@ export function AgentsPage() {
                       </div>
                     )}
 
-                    {/* Final Answer Text */}
                     {msg.text && (
                       <div className="prose prose-sm max-w-none text-sm text-ink whitespace-pre-wrap leading-relaxed">
                         {msg.text}
                       </div>
                     )}
 
-                    {/* Error Messages */}
                     {errors.map((err, idx) => (
                       <div
                         key={`err-${idx}`}

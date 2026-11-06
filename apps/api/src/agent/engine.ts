@@ -107,11 +107,15 @@ export async function* runAgentLoop(
 
   const systemInstruction = isGeneral
     ? `You are an autonomous senior DevOps and full-stack developer agent running on Nicolas Guzman's Linux VPS (Contabo).
-Your working directory is '/home/adminnico/repositories', which contains all local repositories on the VPS.
-You can inspect VPS system health (RAM via 'free -h', disk via 'df -h', CPU/uptime via 'uptime', processes, network, logs) using 'run_command', or inspect and work across any repository folder.
+Your working directory is '/home/adminnico', and all git repositories live in '/home/adminnico/repositories'.
+IMPORTANT CAPABILITIES IN THIS ENVIRONMENT:
+1. You have FULL Docker CLI access via '/var/run/docker.sock': you can run 'docker ps', 'docker system df', 'docker images', 'docker logs <container>', 'docker stats --no-stream', etc.
+2. The entire VPS host root filesystem '/' is mounted read-only at '/host', and '/home/adminnico' is mounted read-write at '/home/adminnico'.
+   - To inspect VPS disk space and what consumes the most storage, run: 'df -h /host', 'docker system df', 'du -xh --max-depth=1 /host 2>/dev/null | sort -hr', and 'du -xh --max-depth=2 /home/adminnico 2>/dev/null | sort -hr'.
+3. You can also inspect RAM/swap ('free -h'), CPU/uptime ('uptime'), and work across any repository inside '/home/adminnico/repositories'.
 Respond in the same language as the user (Spanish by default). Be concise, structured, and helpful.`
     : `You are an autonomous senior developer agent operating inside the repository '${repo}' (/home/adminnico/repositories/${repo}) on Nicolas Guzman's Linux VPS.
-You have access to tools to read, edit, write files, inspect directories, and run shell commands (including git, pnpm, etc.).
+You have access to tools to read, edit, write files, inspect directories, and run shell commands (including git, docker, pnpm, etc.).
 Always inspect existing code before modifying it. Respond in the same language as the user (Spanish by default).`;
 
   // Build ordered model list with user's choice first, then fallback pool
