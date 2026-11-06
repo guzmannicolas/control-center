@@ -41,7 +41,7 @@ export function Shell({ user }: { user: User }) {
           <span className="font-semibold">Control Center</span>
           <button onClick={() => logout.mutate()} className="ml-auto text-sm text-ink-2 hover:text-ink md:hidden">Sign out</button>
         </div>
-        <ul className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:px-3">
+        <ul className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:overflow-y-auto md:px-3 md:flex-1">
           {SECTIONS.map(({ path: to, label, Icon }) => {
             const active = to === current?.path;
             return (

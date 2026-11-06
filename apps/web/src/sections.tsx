@@ -39,10 +39,10 @@ export interface Section {
 export const SECTIONS: Section[] = [
   { path: '/', label: 'Overview', Icon: OverviewIcon, Page: OverviewPage },
   { path: '/leads', label: 'Sales', Icon: LeadsIcon, Page: LeadsPage },
-  { path: '/deploys', label: 'Deploys', Icon: DeployIcon, Page: DeploysPage },
-  { path: '/cloudflare', label: 'Cloudflare', Icon: CloudflareIcon, Page: CloudflarePage },
-  { path: '/vercel', label: 'Vercel', Icon: VercelIcon, Page: VercelPage },
   { path: '/vps', label: 'VPS', Icon: VpsIcon, Page: VpsPage },
+  { path: '/deploys', label: 'Deploys', Icon: DeployIcon, Page: DeploysPage },
+  { path: '/vercel', label: 'Vercel', Icon: VercelIcon, Page: VercelPage },
+  { path: '/cloudflare', label: 'Cloudflare', Icon: CloudflareIcon, Page: CloudflarePage },
   { path: '/backups', label: 'Backups', Icon: BackupIcon, Page: BackupsPage },
   { path: '/domains', label: 'Domains', Icon: DomainIcon, Page: DomainsPage },
   { path: '/databases', label: 'Databases', Icon: DatabaseIcon, Page: DatabasesPage },
