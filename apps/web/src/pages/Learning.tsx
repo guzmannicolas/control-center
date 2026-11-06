@@ -24,7 +24,7 @@ function Badge({ module, earned }: { module: LearningModule; earned?: LearningPr
  aria-hidden
  className={`grid size-10 place-items-center rounded-full text-lg font-bold ${earned ? 'bg-series text-white' : 'border border-dashed border-muted text-muted'}`}
  >
- {earned ? '' : module.badge[0]}
+ {earned ? '✓' : module.badge[0]}
  </span>
  <span className="mt-3 font-semibold">{module.badge}</span>
  <span className="text-sm text-ink-2">{module.title}</span>
@@ -119,7 +119,7 @@ function Quiz({ module, earned }: { module: LearningModule; earned?: LearningPro
  </div>
  {checked && (
  <p className={`mt-1.5 text-sm ${wrong ? 'text-critical' : 'text-ink-2'}`}>
- {wrong ? ' Not quite. ' : ' Right. '}{q.why}
+ {wrong ? '✕ Not quite. ' : '✓ Right. '}{q.why}
  </p>
  )}
  </fieldset>
@@ -152,7 +152,7 @@ function ModulePage({ module }: { module: LearningModule }) {
  <article className="pb-10">
  <Link to="/learning" className="mt-6 inline-block text-sm text-ink-2 hover:text-ink">← All badges</Link>
  <header className="pt-3 pb-5">
- <p className="text-sm text-muted">{module.badge} · {module.minutes} min{earned ? ' · badge earned ' : ''}</p>
+ <p className="text-sm text-muted">{module.badge} · {module.minutes} min{earned ? ' · badge earned ✓' : ''}</p>
  <h1 className="mt-1 text-2xl font-semibold">{module.title}</h1>
  <ul className="mt-2 flex flex-wrap gap-1.5">
  {module.tech.map((t) => <li key={t} className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-2">{t}</li>)}

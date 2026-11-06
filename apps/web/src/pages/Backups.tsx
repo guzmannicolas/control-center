@@ -83,7 +83,9 @@ export function BackupsPage() {
  {/* Header */}
  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
  <div>
- <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc' }}> Backups & Recovery</h1>
+ <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+  <span className="emoji-bw">💾</span> Backups & Recovery
+</h1>
  <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: '#94a3b8' }}>
  PostgreSQL dumps (Directus CMS), media volumes, and encrypted Google Drive sync (`gcrypt`).
  </p>
@@ -135,7 +137,7 @@ export function BackupsPage() {
 
  {data?.rcloneNotice && (
  <div style={{ background: '#422006', border: '1px solid #854d0e', color: '#fde68a', padding: '0.9rem 1rem', borderRadius: '10px', fontSize: '0.88rem' }}>
- ️ <strong>Cloud Synchronization Notice (rclone):</strong> {data.rcloneNotice}
+ <span className="emoji-bw">⚠️</span> <strong>Cloud Synchronization Notice (rclone):</strong> {data.rcloneNotice}
  <div style={{ marginTop: '0.35rem', color: '#fef08a', fontSize: '0.8rem' }}>
  Local backups on the VPS are running fine every day. To re-authorize Google Drive uploads, run <code>rclone config reconnect gdrive:</code> in the Terminal tab.
  </div>
@@ -153,7 +155,7 @@ export function BackupsPage() {
  fontSize: '0.84rem',
  }}
  >
- <strong>{runResult.ok ? ' Backup executed:' : ' Error running backup:'}</strong>
+ <strong>{runResult.ok ? '✔ Backup executed:' : '✖ Error running backup:'}</strong>
  <pre style={{ margin: '0.5rem 0 0', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.78rem' }}>
  {runResult.output}
  </pre>

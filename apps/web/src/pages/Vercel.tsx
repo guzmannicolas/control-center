@@ -216,7 +216,7 @@ export function VercelPage() {
  fontWeight: 600,
  }}
  >
- <span> ERROR</span>
+ <span>✖ ERROR</span>
  <span style={{ background: '#7f1d1d', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.78rem' }}>
  {errorCount}
  </span>
@@ -231,7 +231,7 @@ export function VercelPage() {
 
  {!loading && data && !data.configured && (
  <div style={{ background: '#422006', border: '1px solid #854d0e', color: '#fde68a', padding: '1rem', borderRadius: '10px' }}>
- ️ <code>VERCEL_TOKEN</code> is not configured on the API server.
+ <span className="emoji-bw">⚠️</span> <code>VERCEL_TOKEN</code> is not configured on the API server.
  </div>
  )}
 
@@ -284,7 +284,7 @@ export function VercelPage() {
  </div>
  {p.repo && (
  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem', fontFamily: 'monospace' }}>
- {p.repo} {dep?.branch ? `(${dep.branch})` : ''}
+ <><span className="emoji-bw mr-1">🐙</span> {p.repo} {dep?.branch ? `(${dep.branch})` : ''}</>
  </div>
  )}
  </div>
@@ -358,7 +358,7 @@ export function VercelPage() {
  </div>
  {dep.errorMessage && (
  <div style={{ marginTop: '0.35rem', color: '#f87171', fontSize: '0.75rem' }}>
- {dep.errorMessage}
+ ✖ {dep.errorMessage}
  </div>
  )}
  </div>

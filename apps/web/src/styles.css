@@ -65,3 +65,10 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
+
+/* Indicative monochromatic emojis for sober, clean UI */
+.emoji-bw {
+  filter: grayscale(100%);
+  display: inline-block;
+  opacity: 0.9;
+}

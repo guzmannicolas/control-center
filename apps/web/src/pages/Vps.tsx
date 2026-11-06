@@ -110,7 +110,9 @@ export function VpsPage() {
  {/* Header */}
  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
  <div>
- <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc' }}>️ VPS Health & Maintenance</h1>
+ <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+  <span className="emoji-bw">🖥️</span> VPS Health & Maintenance
+</h1>
  <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: '#94a3b8' }}>
  Live telemetry for Contabo VPS (`173.212.224.70`), storage breakdown, Docker containers, and one-click cleanup shortcuts.
  </p>
@@ -204,7 +206,9 @@ export function VpsPage() {
  <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.9rem' }}>
  <div>
- <h2 style={{ margin: 0, fontSize: '1.05rem', color: '#f8fafc' }}> Safe One-Click Cleanup Shortcuts</h2>
+ <h2 style={{ margin: 0, fontSize: '1.05rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+  <span className="emoji-bw">🧹</span> Safe One-Click Cleanup Shortcuts
+</h2>
  <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
  Reclaim disk space without touching running containers or database records.
  </p>
@@ -231,7 +235,7 @@ export function VpsPage() {
  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.85rem' }}>
  <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.9rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
  <div>
- <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}> Docker Prune (Images & Build Cache)</div>
+ <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}><span className="emoji-bw mr-1.5">🐳</span> Docker Prune (Images & Build Cache)</div>
  <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.25rem' }}>
  Removes dangling images and builder cache without affecting running containers or persistent volumes.
  </div>
@@ -257,7 +261,7 @@ export function VpsPage() {
 
  <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.9rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
  <div>
- <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}> Legacy VS Code Server Versions</div>
+ <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}><span className="emoji-bw mr-1.5">💻</span> Legacy VS Code Server Versions</div>
  <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.25rem' }}>
  Retains only the latest active binary in <code>~/.vscode-server/cli/servers</code> and deletes older copies (~500 MB each).
  </div>
@@ -283,7 +287,7 @@ export function VpsPage() {
 
  <div style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.9rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
  <div>
- <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}> Package Caches (npm & pnpm)</div>
+ <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.9rem' }}><span className="emoji-bw mr-1.5">📦</span> Package Caches (npm & pnpm)</div>
  <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '0.25rem' }}>
  Clears <code>~/.npm/_cacache</code> and temporary pnpm store artifacts.
  </div>
@@ -321,7 +325,7 @@ export function VpsPage() {
  }}
  >
  <strong>
- Cleanup completed ({cleanupResult.target}): Reclaimed {cleanupResult.freedGb} GB ({cleanupResult.beforeUsedGb} GB → {cleanupResult.afterUsedGb} GB used)
+ ✔ Cleanup completed ({cleanupResult.target}): Reclaimed {cleanupResult.freedGb} GB ({cleanupResult.beforeUsedGb} GB → {cleanupResult.afterUsedGb} GB used)
  </strong>
  <pre style={{ margin: '0.45rem 0 0', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.76rem', color: '#dcfce7' }}>
  {cleanupResult.log}
@@ -336,7 +340,7 @@ export function VpsPage() {
  {/* Directories */}
  <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
  <div style={{ padding: '0.85rem 1.1rem', borderBottom: '1px solid #1e293b', fontWeight: 700, color: '#f8fafc', fontSize: '0.92rem' }}>
- Storage Usage by Directory (`/home/adminnico`)
+ <span className="emoji-bw mr-1.5">📂</span> Storage Usage by Directory (`/home/adminnico`)
  </div>
  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
  <thead>
@@ -361,7 +365,7 @@ export function VpsPage() {
  {/* Docker System DF */}
  <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
  <div style={{ padding: '0.85rem 1.1rem', borderBottom: '1px solid #1e293b', fontWeight: 700, color: '#f8fafc', fontSize: '0.92rem' }}>
- Docker Storage Usage (`docker system df`)
+ <span className="emoji-bw mr-1.5">🐳</span> Docker Storage Usage (`docker system df`)
  </div>
  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
  <thead>
@@ -393,8 +397,8 @@ export function VpsPage() {
  {data && (
  <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
  <div style={{ padding: '0.85rem 1.1rem', borderBottom: '1px solid #1e293b', fontWeight: 700, color: '#f8fafc', fontSize: '0.92rem' }}>
- Containers Running on VPS
- </div>
+ <span className="emoji-bw mr-1.5">📦</span> Containers Running on VPS
+          </div>
  <div style={{ overflowX: 'auto' }}>
  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
  <thead>

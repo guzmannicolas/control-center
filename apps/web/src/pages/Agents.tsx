@@ -56,7 +56,7 @@ const FALLBACK_REPOS: RepoOption[] = [
 ];
 
 const GEMINI_MODELS = [
- { id: 'auto', name: ' Auto (Smart Pool Anti-429 — Recommended)' },
+ { id: 'auto', name: '⚡ Auto (Smart Pool Anti-429 — Recommended)' },
  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Balanced)' },
  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite (Fast)' },
  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
@@ -80,12 +80,12 @@ const QUICK_PROMPTS = [
  prompt: 'Check overall VPS status: RAM and swap usage (free -h), what consumes most disk space (df -h /host, docker system df and du in /home/adminnico), and which containers are running.',
  },
  {
- label: ' Git status of all repositories',
+ label: '📂 Git status of all repositories',
  repo: GENERAL_CONTEXT,
  prompt: 'Inspect all git repositories under /home/adminnico/repositories and tell me the current branch for each one and if any has uncommitted changes.',
  },
  {
- label: ' Analyze Control Center architecture',
+ label: '🔍 Analyze Control Center architecture',
  repo: 'control-center',
  prompt: 'Inspect repository structure, read package.json, and provide a technical architecture summary and available scripts.',
  },
@@ -431,9 +431,7 @@ export function AgentsPage() {
  const userMsgId = `user-${Date.now()}`;
  const assistantMsgId = `assistant-${Date.now() + 1}`;
  const contextLabel =
- targetRepo === GENERAL_CONTEXT
- ? ' General / VPS'
- : `${repos.find((r) => r.name === targetRepo)?.local === false ? '️' : '️'} ${targetRepo}`;
+ targetRepo === GENERAL_CONTEXT ? '🌐 General / VPS' : `${repos.find((r) => r.name === targetRepo)?.local === false ? '☁️' : '🖥️'} ${targetRepo}`;
 
  const history = messages
  .filter((m) => m.text.trim().length > 0)
@@ -585,15 +583,9 @@ export function AgentsPage() {
  <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-2xl">
  <div className="flex items-center justify-between pb-4 border-b border-line">
  <h3 className="text-base font-semibold text-ink flex items-center gap-2">
- ️ Configuración de Proveedor y API Keys
+ <span className="emoji-bw">⚙️</span> Provider & API Key Settings
  </h3>
- <button
- type="button"
- onClick={() => setShowSettingsModal(false)}
- className="text-muted hover:text-ink text-sm p-1"
- >
- 
- </button>
+ <button type="button" onClick={() => setShowSettingsModal(false)} className="text-muted hover:text-ink text-sm p-1 font-bold">✕</button>
  </div>
 
  <form
@@ -608,7 +600,7 @@ export function AgentsPage() {
  >
  <div>
  <label className="block font-medium text-ink mb-1">
- Proveedor Activo:
+ <span className="emoji-bw mr-1">🌐</span> Active Provider:
  </label>
  <div className="grid grid-cols-2 gap-2">
  <button
@@ -691,11 +683,11 @@ export function AgentsPage() {
  {/* Header bar */}
  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface/80 px-4 py-3 backdrop-blur-sm">
  <div className="flex items-center gap-2">
- <span className="text-xl"></span>
+ <span className="text-xl emoji-bw">🤖</span>
  <div>
  <h1 className="text-sm font-bold text-ink">Dev Agent</h1>
  <p className="text-[11px] text-muted">
- {provider === 'openrouter' ? ' OpenRouter API' : ' Google Gemini'}: Live access to VPS, Docker, and GitHub
+ {provider === 'openrouter' ? '🔌 OpenRouter API' : '⚡ Google Gemini'}: Live access to VPS, Docker, and GitHub
  </p>
  </div>
  </div>
@@ -736,19 +728,19 @@ export function AgentsPage() {
  disabled={isRunning}
  className="max-w-[180px] rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
  >
- <option value={GENERAL_CONTEXT}> General (Full VPS / Docker / Host)</option>
- <optgroup label={`️ On VPS (${localRepos.length} repos)`}>
+ <option value={GENERAL_CONTEXT}>🌐 General (Full VPS / Docker / Host)</option>
+ <optgroup label={`🖥️ On VPS (${localRepos.length} repos)`}>
  {localRepos.map((r) => (
  <option key={r.name} value={r.name}>
- ️ {r.name}
+ 🖥️ {r.name}
  </option>
  ))}
  </optgroup>
  {cloudRepos.length > 0 && (
- <optgroup label={`️ On GitHub (${cloudRepos.length} in cloud — auto-clone)`}>
+ <optgroup label={`☁️ On GitHub (${cloudRepos.length} in cloud — auto-clone)`}>
  {cloudRepos.map((r) => (
  <option key={r.name} value={r.name}>
- ️ {r.name} {r.isPrivate ? '' : ''}
+ ☁️ {r.name} {r.isPrivate ? '🔒' : ''}
  </option>
  ))}
  </optgroup>
@@ -783,7 +775,7 @@ export function AgentsPage() {
  title="API Key and Provider Settings"
  className="flex items-center gap-1.5 rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink hover:border-accent transition"
  >
- <span>️</span>
+ <span className="emoji-bw">⚙️</span>
  <span className="hidden sm:inline">
  {provider === 'openrouter' ? 'OpenRouter' : 'Gemini'}
  </span>
@@ -898,7 +890,7 @@ export function AgentsPage() {
  className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-white/5 transition"
  >
  <div className="flex items-center gap-2 truncate">
- <span className="text-amber-400 font-semibold"> {tc.toolName}</span>
+ <span className="text-amber-400 font-semibold"><span className="emoji-bw mr-1">⚡</span>{tc.toolName}</span>
  <span className="truncate text-gray-400">{argSummary}</span>
  </div>
  <span className="ml-2 shrink-0 text-[10px] text-gray-400">
@@ -987,19 +979,7 @@ export function AgentsPage() {
  </div>
 
  {/* Microphone Dictate Button */}
- <button
- type="button"
- onClick={toggleListening}
- disabled={isRunning}
- title={isListening ? 'Stop voice dictation' : 'Dictate with voice (speech to text)'}
- className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition shrink-0 ${
- isListening
- ? 'border-red-500 bg-red-500/10 text-red-400 animate-pulse'
- : 'border-line bg-bg text-ink hover:border-accent hover:text-accent disabled:opacity-40'
- }`}
- >
- ️
- </button>
+ <button type="button" onClick={toggleListening} disabled={isRunning} title={isListening ? 'Stop voice dictation' : 'Dictate with voice (speech to text)'} className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition shrink-0 ${isListening ? 'border-red-500 bg-red-500/10 text-red-400 animate-pulse' : 'border-line bg-bg text-ink hover:border-accent hover:text-accent disabled:opacity-40'}`}><span className="emoji-bw">🎙️</span></button>
 
  {isRunning ? (
  <button

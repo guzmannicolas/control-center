@@ -7,8 +7,8 @@ const STATUS_BADGES: Record<LeadStatus, { label: string; bg: string; color: stri
  discovered: { label: 'Discovered', bg: '#1e293b', color: '#94a3b8', border: '#334155' },
  enriched: { label: 'Enriched (Data ready)', bg: '#1e3a8a', color: '#93c5fd', border: '#2563eb' },
  contacted: { label: 'Contacted', bg: '#422006', color: '#facc15', border: '#854d0e' },
- replied: { label: 'Replied ', bg: '#064e3b', color: '#34d399', border: '#059669' },
- converted: { label: 'Client Won! ', bg: '#052e16', color: '#4ade80', border: '#166534' },
+ replied: { label: 'Replied 💬', bg: '#064e3b', color: '#34d399', border: '#059669' },
+ converted: { label: 'Client Won! ✦', bg: '#052e16', color: '#4ade80', border: '#166534' },
  discarded: { label: 'Discarded', bg: '#450a0a', color: '#f87171', border: '#991b1b' },
 };
 
@@ -128,7 +128,7 @@ export function LeadsPage() {
  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
  <div>
  <h1 style={{ margin: 0, fontSize: '1.5rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
- <span></span> B2B Sales & Web Prospecting
+ <span className="emoji-bw">🎯</span> B2B Sales & Web Prospecting
  </h1>
  <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: '#94a3b8' }}>
  Local business scraper, filter for companies without an existing website, and automated matching to Vercel live demos.
@@ -216,7 +216,7 @@ export function LeadsPage() {
  cursor: scraping ? 'wait' : 'pointer',
  }}
  >
- {scraping ? '⏳ Scraping in real-time...' : ' Start Scraping'}
+ {scraping ? '⏳ Scraping in real-time...' : <><span className="emoji-bw mr-1.5">🚀</span> Start Scraping</>}
  </button>
  </form>
  </div>
@@ -238,7 +238,7 @@ export function LeadsPage() {
  cursor: 'pointer',
  }}
  >
- {filterWithoutWeb ? ' Businesses WITHOUT website only' : 'Show all businesses'}
+ {filterWithoutWeb ? '✔ Businesses WITHOUT website only' : 'Show all businesses'}
  </button>
  <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
  Total saved: <strong style={{ color: '#f8fafc' }}>{leads.length}</strong>
@@ -292,7 +292,7 @@ export function LeadsPage() {
  <div style={{ fontWeight: 700, color: '#f8fafc' }}>{lead.name}</div>
  {lead.rating && (
  <div style={{ fontSize: '0.74rem', color: '#eab308' }}>
- {lead.rating} ({lead.reviewsCount} reviews)
+ ★ {lead.rating} ({lead.reviewsCount} reviews)
  </div>
  )}
  </td>
@@ -325,8 +325,8 @@ export function LeadsPage() {
  fontWeight: 700,
  }}
  >
- NO WEBSITE 
- </span>
+ NO WEBSITE <span className="emoji-bw">🎯</span>
+                          </span>
  )}
  </td>
 
@@ -343,7 +343,7 @@ export function LeadsPage() {
  href={`mailto:${lead.email}`}
  style={{ color: '#34d399', fontSize: '0.78rem', textDecoration: 'none' }}
  >
- ️ {lead.email}
+ <span className="emoji-bw mr-1">✉️</span> {lead.email}
  </a>
  ) : null}
  {lead.instagram ? (
@@ -379,7 +379,7 @@ export function LeadsPage() {
  gap: '0.2rem',
  }}
  >
- Vercel Demo ↗
+ <span className="emoji-bw mr-1">🌐</span> Vercel Demo ↗
  </a>
  ) : (
  '—'
@@ -449,7 +449,7 @@ export function LeadsPage() {
  cursor: 'pointer',
  }}
  >
- {enrichingId === lead.id ? '...' : ' Find Socials'}
+ {enrichingId === lead.id ? '...' : <><span className="emoji-bw mr-1">🔍</span> Find Socials</>}
  </button>
 
  <button
