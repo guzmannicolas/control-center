@@ -363,7 +363,8 @@ export function LeadsPage() {
               {filtered.map((lead) => {
                 const badge = STATUS_BADGES[lead.status] ?? STATUS_BADGES.discovered;
                 const waNumber = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : null;
-                const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address}`)}`;
+                const metaSource = (lead.metadata as { sourceUrl?: string })?.sourceUrl;
+                const mapsSearchUrl = metaSource || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address}`)}`;
                 const waMessage = encodeURIComponent(
                   `Hola ${lead.name}! Vi sus excelentes calificaciones en Google de ${lead.city}. Quería consultarles si tienen web oficial o si les gustaría ver una propuesta que diseñamos para locales del rubro: ${lead.suggestedDemo ?? ''}`
                 );

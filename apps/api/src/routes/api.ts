@@ -497,6 +497,9 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
           hasWebsite: p.hasWebsite,
           suggestedDemo: demo,
           status: 'discovered',
+          metadata: {
+            sourceUrl: p.sourceUrl,
+          },
         },
       });
       saved.push(lead);
