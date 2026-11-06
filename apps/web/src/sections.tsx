@@ -34,7 +34,7 @@ export interface Section {
 // Every part of the control center is one entry here: the menu, the URLs and the pages come from this list.
 export const SECTIONS: Section[] = [
   { path: '/', label: 'Overview', Icon: OverviewIcon, Page: OverviewPage },
-  { path: '/leads', label: 'Ventas', Icon: LeadsIcon, Page: LeadsPage },
+  { path: '/leads', label: 'Sales', Icon: LeadsIcon, Page: LeadsPage },
   { path: '/vercel', label: 'Vercel', Icon: VercelIcon, Page: VercelPage },
   { path: '/vps', label: 'VPS', Icon: VpsIcon, Page: VpsPage },
   { path: '/backups', label: 'Backups', Icon: BackupIcon, Page: BackupsPage },

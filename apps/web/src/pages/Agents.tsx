@@ -56,11 +56,11 @@ const FALLBACK_REPOS: RepoOption[] = [
 ];
 
 const GEMINI_MODELS = [
-  { id: 'auto', name: '⚡ Auto (Smart Pool Anti-429 — Recomendado)' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Equilibrado)' },
-  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite (Rápido)' },
+  { id: 'auto', name: '⚡ Auto (Smart Pool Anti-429 — Recommended)' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Balanced)' },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite (Fast)' },
   { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Razonamiento profundo)' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Deep Reasoning)' },
 ];
 
 const OPENROUTER_MODELS = [
@@ -69,25 +69,25 @@ const OPENROUTER_MODELS = [
   { id: 'openai/gpt-4o', name: 'GPT-4o (OpenAI)' },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
   { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3' },
-  { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1 (Razonamiento)' },
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (vía OpenRouter)' },
+  { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1 (Reasoning)' },
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (via OpenRouter)' },
 ];
 
 const QUICK_PROMPTS = [
   {
-    label: '🩺 Chequear salud y espacio del VPS',
+    label: '🩺 Check VPS health & disk space',
     repo: GENERAL_CONTEXT,
-    prompt: 'Chequeá el estado general del VPS: uso de RAM y swap (free -h), qué consume más espacio en disco (df -h /host, docker system df y du en /home/adminnico) y qué contenedores están corriendo.',
+    prompt: 'Check overall VPS status: RAM and swap usage (free -h), what consumes most disk space (df -h /host, docker system df and du in /home/adminnico), and which containers are running.',
   },
   {
-    label: '📂 Estado Git de todos los repos',
+    label: '📂 Git status of all repositories',
     repo: GENERAL_CONTEXT,
-    prompt: 'Revisá todos los repositorios dentro de /home/adminnico/repositories y decime en qué rama está cada uno y si alguno tiene cambios sin commitear.',
+    prompt: 'Inspect all git repositories under /home/adminnico/repositories and tell me the current branch for each one and if any has uncommitted changes.',
   },
   {
-    label: '🔍 Analizar arquitectura de Control Center',
+    label: '🔍 Analyze Control Center architecture',
     repo: 'control-center',
-    prompt: 'Inspeccioná la estructura del repositorio, leé el package.json y haceme un resumen técnico de su arquitectura y scripts disponibles.',
+    prompt: 'Inspect repository structure, read package.json, and provide a technical architecture summary and available scripts.',
   },
 ];
 
@@ -645,23 +645,23 @@ export function AgentsPage() {
                   className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-ink placeholder:text-muted focus:border-accent focus:outline-none"
                 />
                 <span className="text-[11px] text-muted mt-1 block">
-                  Permite usar Llama 3, Claude 3.5, GPT-4o, DeepSeek R1, etc. desde OpenRouter.
+                  Enables Llama 3, Claude 3.5, GPT-4o, DeepSeek R1, etc. via OpenRouter.
                 </span>
               </div>
 
               <div>
                 <label className="block font-medium text-ink mb-1">
-                  Gemini API Key (Opcional):
+                  Gemini API Key (Optional):
                 </label>
                 <input
                   type="password"
                   name="geminiKey"
                   defaultValue={settings.geminiApiKey}
-                  placeholder="Dejar vacío para usar la key del servidor"
+                  placeholder="Leave empty to use server environment key"
                   className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-ink placeholder:text-muted focus:border-accent focus:outline-none"
                 />
                 <span className="text-[11px] text-muted mt-1 block">
-                  Si la dejás vacía, usará la variable <code>GEMINI_API_KEY</code> del servidor VPS.
+                  If left blank, the API will use the <code>GEMINI_API_KEY</code> variable configured on the VPS.
                 </span>
               </div>
 
@@ -671,13 +671,13 @@ export function AgentsPage() {
                   onClick={() => setShowSettingsModal(false)}
                   className="rounded-lg border border-line bg-bg px-3 py-1.5 text-muted hover:text-ink"
                 >
-                  Cancelar
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   className="rounded-lg bg-accent px-4 py-1.5 font-semibold text-white hover:opacity-90"
                 >
-                  Guardar
+                  Save
                 </button>
               </div>
             </form>
@@ -690,9 +690,9 @@ export function AgentsPage() {
         <div className="flex items-center gap-2">
           <span className="text-xl">🤖</span>
           <div>
-            <h1 className="text-sm font-bold text-ink">Agente de Desarrollo</h1>
+            <h1 className="text-sm font-bold text-ink">Dev Agent</h1>
             <p className="text-[11px] text-muted">
-              {provider === 'openrouter' ? '🔌 OpenRouter API' : '⚡ Google Gemini'}: Acceso al VPS, Docker y GitHub
+              {provider === 'openrouter' ? '🔌 OpenRouter API' : '⚡ Google Gemini'}: Live access to VPS, Docker, and GitHub
             </p>
           </div>
         </div>
@@ -701,7 +701,7 @@ export function AgentsPage() {
           {/* Chat Sessions Dropdown */}
           <div className="flex items-center gap-1">
             <label htmlFor="agent-session-select" className="text-[11px] font-medium text-muted uppercase">
-              Historial:
+              History:
             </label>
             <select
               id="agent-session-select"
@@ -710,7 +710,7 @@ export function AgentsPage() {
               className="max-w-[170px] truncate rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
             >
               {sessions.length === 0 ? (
-                <option value={sessionId}>Chat actual</option>
+                <option value={sessionId}>Current chat</option>
               ) : (
                 sessions.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -724,7 +724,7 @@ export function AgentsPage() {
           {/* Repo selector */}
           <div className="flex items-center gap-1">
             <label htmlFor="agent-repo-select" className="text-[11px] font-medium text-muted uppercase">
-              Contexto:
+              Context:
             </label>
             <select
               id="agent-repo-select"
@@ -733,8 +733,8 @@ export function AgentsPage() {
               disabled={isRunning}
               className="max-w-[180px] rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
             >
-              <option value={GENERAL_CONTEXT}>🌐 General (Todo el VPS / Docker / Disco)</option>
-              <optgroup label={`🖥️ En el VPS (${localRepos.length} repositorios)`}>
+              <option value={GENERAL_CONTEXT}>🌐 General (Full VPS / Docker / Host)</option>
+              <optgroup label={`🖥️ On VPS (${localRepos.length} repos)`}>
                 {localRepos.map((r) => (
                   <option key={r.name} value={r.name}>
                     🖥️ {r.name}
@@ -742,7 +742,7 @@ export function AgentsPage() {
                 ))}
               </optgroup>
               {cloudRepos.length > 0 && (
-                <optgroup label={`☁️ En GitHub (${cloudRepos.length} en la nube — auto-clone)`}>
+                <optgroup label={`☁️ On GitHub (${cloudRepos.length} in cloud — auto-clone)`}>
                   {cloudRepos.map((r) => (
                     <option key={r.name} value={r.name}>
                       ☁️ {r.name} {r.isPrivate ? '🔒' : ''}
@@ -756,7 +756,7 @@ export function AgentsPage() {
           {/* Model Dropdown */}
           <div className="flex items-center gap-1">
             <label htmlFor="agent-model-select" className="text-[11px] font-medium text-muted uppercase">
-              Modelo:
+              Model:
             </label>
             <select
               id="agent-model-select"
@@ -777,7 +777,7 @@ export function AgentsPage() {
           <button
             type="button"
             onClick={() => setShowSettingsModal(true)}
-            title="Ajustes de API Key y Proveedor"
+            title="API Key and Provider Settings"
             className="flex items-center gap-1.5 rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink hover:border-accent transition"
           >
             <span>⚙️</span>
@@ -791,14 +791,14 @@ export function AgentsPage() {
             onClick={handleNewChat}
             className="rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink hover:border-accent transition"
           >
-            + Nuevo chat
+            + New chat
           </button>
 
           {messages.length > 0 && (
             <button
               type="button"
               onClick={handleDeleteCurrentSession}
-              title="Borrar esta conversación"
+              title="Delete this chat session"
               className="rounded-lg border border-line bg-bg px-2 py-1.5 text-xs text-muted hover:text-red-400 hover:border-red-400/40 transition"
             >
               🗑
@@ -815,10 +815,10 @@ export function AgentsPage() {
               <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-surface text-xl shadow-xs">
                 🤖
               </div>
-              <h2 className="text-base font-semibold text-ink">¿En qué trabajamos hoy?</h2>
+              <h2 className="text-base font-semibold text-ink">What are we building today?</h2>
               <p className="mt-1 max-w-lg text-xs text-muted">
-                Tus conversaciones quedan guardadas automáticamente. Podés escribir o dictar tu mensaje por voz
-                para consultar el estado del VPS, espacio, Docker, o interactuar con cualquier repositorio.
+                Your chats are saved automatically. Type or dictate your request by voice to check VPS health,
+                manage Docker containers, or run tasks against any local or remote repository.
               </p>
 
               <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -849,7 +849,7 @@ export function AgentsPage() {
                 >
                   <div className="flex items-center gap-1.5 text-[10px] text-muted">
                     <span className="font-semibold text-ink">
-                      {m.role === 'user' ? 'Vos' : 'Agente'}
+                      {m.role === 'user' ? 'You' : 'Agent'}
                     </span>
                     <span>•</span>
                     <span>{m.contextLabel}</span>
@@ -899,7 +899,7 @@ export function AgentsPage() {
                                     <span className="truncate text-gray-400">{argSummary}</span>
                                   </div>
                                   <span className="ml-2 shrink-0 text-[10px] text-gray-400">
-                                    {matchingResult ? (isExpanded ? '▼ Ocultar salida' : '▶ Ver salida') : '⏳...'}
+                                    {matchingResult ? (isExpanded ? '▼ Hide output' : '▶ View output') : '⏳...'}
                                   </span>
                                 </button>
 
@@ -928,7 +928,7 @@ export function AgentsPage() {
                       {m.status === 'streaming' && (
                         <div className="flex items-center gap-2 text-xs text-accent">
                           <span className="inline-block h-2 w-2 animate-ping rounded-full bg-accent" />
-                          <span>El agente está trabajando...</span>
+                          <span>The agent is working...</span>
                         </div>
                       )}
                     </div>
@@ -963,10 +963,10 @@ export function AgentsPage() {
               }}
               placeholder={
                 isListening
-                  ? 'Escuchando tu voz... (hablá y se escribirá aquí)'
+                  ? 'Listening to your voice... (speak and it will be transcribed here)'
                   : repo === GENERAL_CONTEXT
-                  ? 'Escribí un mensaje o dictá por voz para el VPS (Enter para enviar)...'
-                  : `Escribí una tarea o consulta para ${repo} (Enter para enviar)...`
+                  ? 'Type an instruction or dictate by voice for the VPS (Enter to send)...'
+                  : `Type a task or question for ${repo} (Enter to send)...`
               }
               disabled={isRunning}
               className={`w-full resize-none rounded-xl border bg-bg px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:outline-none transition ${
@@ -978,7 +978,7 @@ export function AgentsPage() {
             {isListening && (
               <div className="absolute right-3 top-2 flex items-center gap-1.5 text-[10px] font-semibold text-red-400">
                 <span className="h-2 w-2 animate-ping rounded-full bg-red-500" />
-                <span>Dictando...</span>
+                <span>Dictating...</span>
               </div>
             )}
           </div>
@@ -988,7 +988,7 @@ export function AgentsPage() {
             type="button"
             onClick={toggleListening}
             disabled={isRunning}
-            title={isListening ? 'Detener dictado por voz' : 'Dictar por voz (convierte tu voz a texto)'}
+            title={isListening ? 'Stop voice dictation' : 'Dictate with voice (speech to text)'}
             className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition shrink-0 ${
               isListening
                 ? 'border-red-500 bg-red-500/10 text-red-400 animate-pulse'
@@ -1004,7 +1004,7 @@ export function AgentsPage() {
               onClick={handleStop}
               className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-500 transition shrink-0 h-10"
             >
-              ⏹ Detener
+              ⏹ Stop
             </button>
           ) : (
             <button
@@ -1012,7 +1012,7 @@ export function AgentsPage() {
               disabled={!input.trim()}
               className="rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40 transition shrink-0 h-10"
             >
-              Enviar ↵
+              Send ↵
             </button>
           )}
         </form>

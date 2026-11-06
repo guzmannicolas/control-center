@@ -2,8 +2,12 @@
 
 Context specification guide for AI assistants and development agents working on the `control-center` repository.
 
+## 0. Language Policy (Mandatory)
+- **ALL user interface (UI) copy, labels, placeholders, titles, status badges, buttons, tooltips, and documentation in Control Center MUST be in English.**
+- Never mix Spanish in user-facing components, section headers, or API contracts.
+
 ## 1. Project Overview
-Self-hosted monitoring and control hub for Nicolás Guzmán's online infrastructure: domains, websites, Vercel deployments, databases, and VPS servers. Performs scheduled background checks, logs incidents when failures occur, and provides a unified dashboard.
+Self-hosted monitoring and control hub for Nicolás Guzmán's online infrastructure: domains, websites, Vercel deployments, databases, B2B sales leads, and VPS servers. Performs scheduled background checks, logs incidents when failures occur, and provides a unified dashboard.
 
 - **Production:** Internal API listening on `127.0.0.1:4100` (`docker-compose.vps.yml`), published via Cloudflare Tunnel at `https://control-api.nicoguzmandev.com`.
 - **Dashboard:** Single-user React app served with secure session cookies (`credentials: include`).
@@ -30,7 +34,12 @@ control-center/
 - **Language:** TypeScript 6.
 - **Backend:** Node.js, Fastify 5, Prisma 7 (@prisma/adapter-pg), BullMQ 6, Redis 7 (ioredis), PostgreSQL 16 (pg).
 - **Dashboard:** React 19, Vite 8, TanStack React Query 5, Tailwind CSS 4.
-- **Available Checkers:** `http-uptime`, `ssl-expiry`, `domain-expiry` (RDAP), `postgres-health`, `redis-health`, `backup-age`.
+- **Features & Checkers:**
+  - `http-uptime`, `ssl-expiry`, `domain-expiry` (RDAP), `postgres-health`, `redis-health`, `backup-age`.
+  - Vercel Projects & Deployment integration.
+  - Live VPS health, disk usage metrics, and one-click maintenance cleanup tools.
+  - Local backups monitoring & on-demand execution.
+  - B2B Sales Prospecting & Google Maps lead enrichment.
 - **Security:** Constant-time salted scrypt password hashing. `HttpOnly`, `Secure`, `SameSite=Lax` session cookies. Redis-based brute force protection.
 
 ---
@@ -62,3 +71,4 @@ docker compose logs -f api
 2. **Database Health Checker Role:** Monitored databases configure a read-only `cc_monitor` user assigned to system role `pg_monitor`; it cannot read user tables.
 3. **Resilient Checkers:** Checker crashes or timeouts result in an `error` status rather than bringing down the worker service.
 4. **Git:** Remote repository at `https://github.com/guzmannicolas/control-center.git`, branch `main`.
+5. **English Standard:** All newly created pages, components, and messages must be in English.
