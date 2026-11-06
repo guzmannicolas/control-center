@@ -9,7 +9,8 @@ import {
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
 import { subdomainsOf } from '../subdomains.js';
 import { fetchCloudflareDnsRecords } from '../cloudflare.js';
-import { runAgentLoop } from '../agent/engine.js';
+import { runAgentLoop, type ChatTurnMessage } from '../agent/engine.js';
+import { GENERAL_CONTEXT, listAvailableRepos } from '../agent/tools.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -173,9 +174,19 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   });
 
   // --- Agent Execution Harness ---------------------------------------------------------------------
+  app.get('/agent/repos', async () => {
+    const repos = await listAvailableRepos();
+    return { repos };
+  });
+
   app.post('/agent/run', async (req, reply) => {
-    const body = req.body as { repo?: string; instruction?: string; model?: string };
-    const repo = body.repo?.trim() || 'control-center';
+    const body = req.body as {
+      repo?: string;
+      instruction?: string;
+      model?: string;
+      history?: ChatTurnMessage[];
+    };
+    const repo = body.repo?.trim() || GENERAL_CONTEXT;
     const instruction = body.instruction?.trim();
 
     if (!instruction) {
@@ -201,7 +212,8 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     });
 
     try {
-      for await (const event of runAgentLoop(repo, instruction, apiKey, body.model || 'gemini-3.5-flash')) {
+      const history = Array.isArray(body.history) ? body.history : [];
+      for await (const event of runAgentLoop(repo, instruction, apiKey, body.model || 'auto', history)) {
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
       }
     } catch (err: unknown) {
