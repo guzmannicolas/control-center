@@ -163,3 +163,44 @@ model LearningProgress {
   @@id([userId, moduleId])
   @@map("learning_progress")
 }
+
+
+enum LeadStatus {
+  discovered
+  enriched
+  contacted
+  replied
+  converted
+  discarded
+}
+
+// B2B Leads for automated sales pipelines (web design, AI automations, ERP, etc.)
+model Lead {
+  id              String      @id @default(uuid()) @db.Uuid
+  name            String
+  query           String      @default("")
+  category        String      @default("")
+  city            String      @default("")
+  address         String      @default("")
+  rating          Float?
+  reviewsCount    Int         @default(0) @map("reviews_count")
+  phone           String?
+  phoneFormatted  String?     @map("phone_formatted")
+  email           String?
+  website         String?
+  instagram       String?
+  facebook        String?
+  hasWebsite      Boolean     @default(false) @map("has_website")
+  status          LeadStatus  @default(discovered)
+  suggestedDemo   String?     @map("suggested_demo")
+  notes           String      @default("")
+  metadata        Json        @default("{}")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  contactedAt     DateTime?   @map("contacted_at") @db.Timestamptz(3)
+
+  @@index([status])
+  @@index([category, city])
+  @@index([hasWebsite])
+  @@map("leads")
+}

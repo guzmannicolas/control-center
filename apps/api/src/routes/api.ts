@@ -25,6 +25,11 @@ import {
   getVpsStatus,
   runVpsCleanup,
 } from '../ops.js';
+import {
+  scrapeGoogleMapsPlaces,
+  enrichLeadSocials,
+  guessSuggestedDemo,
+} from '../leads/scraper.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -423,5 +428,128 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     const parsed = CleanupBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Invalid cleanup target' });
     return runVpsCleanup(parsed.data.target);
+  });
+
+  // --- Leads / B2B Sales Prospecting ---------------------------------------------------------------
+  app.get('/leads', async (req) => {
+    const q = req.query as {
+      status?: string;
+      category?: string;
+      city?: string;
+      hasWebsite?: string;
+      search?: string;
+    };
+
+    const where: Record<string, unknown> = {};
+    if (q.status) where.status = q.status;
+    if (q.category) where.category = { contains: q.category, mode: 'insensitive' };
+    if (q.city) where.city = { contains: q.city, mode: 'insensitive' };
+    if (q.hasWebsite !== undefined) where.hasWebsite = q.hasWebsite === 'true';
+    if (q.search) {
+      where.OR = [
+        { name: { contains: q.search, mode: 'insensitive' } },
+        { phone: { contains: q.search } },
+        { email: { contains: q.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const leads = await prisma.lead.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+
+    return {
+      leads: leads.map((l) => ({
+        ...l,
+        createdAt: l.createdAt.toISOString(),
+        updatedAt: l.updatedAt.toISOString(),
+        contactedAt: l.contactedAt?.toISOString() ?? null,
+      })),
+    };
+  });
+
+  const ScrapeInput = z.object({
+    category: z.string().trim().min(2),
+    city: z.string().trim().min(2),
+    limit: z.coerce.number().min(1).max(50).default(15),
+  });
+
+  app.post('/leads/scrape', async (req, reply) => {
+    const parsed = ScrapeInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Categoría y ciudad requeridas' });
+
+    const { category, city, limit } = parsed.data;
+    const places = await scrapeGoogleMapsPlaces(category, city, limit);
+
+    const saved = [];
+    for (const p of places) {
+      const demo = guessSuggestedDemo(p.category, category);
+      const lead = await prisma.lead.create({
+        data: {
+          name: p.name,
+          query: `${category} en ${city}`,
+          category,
+          city,
+          address: p.address,
+          rating: p.rating,
+          reviewsCount: p.reviewsCount,
+          phone: p.phone,
+          phoneFormatted: p.phoneFormatted,
+          website: p.website,
+          hasWebsite: p.hasWebsite,
+          suggestedDemo: demo,
+          status: 'discovered',
+        },
+      });
+      saved.push(lead);
+    }
+
+    return { count: saved.length, leads: saved };
+  });
+
+  app.post('/leads/:id/enrich', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const lead = await prisma.lead.findUnique({ where: { id } });
+    if (!lead) return reply.code(404).send({ error: 'Lead no encontrado' });
+
+    const enriched = await enrichLeadSocials(lead.name, lead.city);
+    const updated = await prisma.lead.update({
+      where: { id },
+      data: {
+        email: enriched.email ?? lead.email,
+        instagram: enriched.instagram ?? lead.instagram,
+        facebook: enriched.facebook ?? lead.facebook,
+        status: enriched.email || lead.phone ? 'enriched' : lead.status,
+      },
+    });
+
+    return { lead: updated };
+  });
+
+  app.patch('/leads/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = req.body as Partial<{
+      status: 'discovered' | 'enriched' | 'contacted' | 'replied' | 'converted' | 'discarded';
+      notes: string;
+      email: string;
+      phone: string;
+    }>;
+
+    const updated = await prisma.lead.update({
+      where: { id },
+      data: {
+        ...body,
+        contactedAt: body.status === 'contacted' ? new Date() : undefined,
+      },
+    });
+
+    return { lead: updated };
+  });
+
+  app.delete('/leads/:id', async (req) => {
+    const { id } = req.params as { id: string };
+    await prisma.lead.delete({ where: { id } });
+    return { ok: true };
   });
 };

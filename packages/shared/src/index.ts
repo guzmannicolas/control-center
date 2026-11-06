@@ -186,3 +186,33 @@ export interface LearningProgressView {
   score: number;
   completedAt: string;
 }
+
+// --- Leads & B2B Sales Prospecting ----------------------------------------------------------------
+
+export const LEAD_STATUSES = ['discovered', 'enriched', 'contacted', 'replied', 'converted', 'discarded'] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+export interface LeadView {
+  id: string;
+  name: string;
+  query: string;
+  category: string;
+  city: string;
+  address: string;
+  rating: number | null;
+  reviewsCount: number;
+  phone: string | null;
+  phoneFormatted: string | null;
+  email: string | null;
+  website: string | null;
+  instagram: string | null;
+  facebook: string | null;
+  hasWebsite: boolean;
+  status: LeadStatus;
+  suggestedDemo: string | null;
+  notes: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  contactedAt: string | null;
+}
