@@ -93,9 +93,16 @@ function DomainCard({ domain }: { domain: DomainView }) {
             {domain.subdomains.map((s) => (
               <li key={s.host} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
                 <StatusIcon status={s.status} size={14} />
-                <a href={`https://${s.host}`} target="_blank" rel="noreferrer" className="break-all hover:underline">{s.host}</a>
+                <a href={`https://${s.host}`} target="_blank" rel="noreferrer" className="break-all font-medium hover:underline">{s.host}</a>
                 <span className="sr-only">: {statusLabel(s.status)}</span>
-                <span className="text-xs text-muted">{s.targets.map((t) => t.name).join(' · ')}</span>
+                {s.dnsType && (
+                  <span className="rounded bg-grid/60 px-1.5 py-0.2 text-[10px] font-mono text-muted uppercase">
+                    {s.dnsType}{s.proxied ? ' · proxied' : ''}
+                  </span>
+                )}
+                {s.targets.length > 0 && (
+                  <span className="text-xs text-muted">{s.targets.map((t) => t.name).join(' · ')}</span>
+                )}
               </li>
             ))}
           </ul>

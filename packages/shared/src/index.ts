@@ -117,6 +117,8 @@ export interface DomainView {
 export interface SubdomainView {
   host: string;
   status: CheckStatus | null; // worst status among everything watched on this host
+  dnsType?: string;
+  proxied?: boolean;
   targets: { id: string; name: string; url: string; status: CheckStatus | null }[];
 }
 

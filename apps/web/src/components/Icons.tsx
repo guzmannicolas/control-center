@@ -23,3 +23,10 @@ export const ImprovementIcon = () => (
 export const LearningIcon = () => (
   <Icon><path d="M2 8l10-5l10 5l-10 5z" /><path d="M6 10.5v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" /><path d="M22 8v6" /></Icon>
 );
+
+export const TerminalIcon = () => (
+  <Icon>
+    <polyline points="4 17 10 11 4 5" />
+    <line x1="12" y1="19" x2="20" y2="19" />
+  </Icon>
+);

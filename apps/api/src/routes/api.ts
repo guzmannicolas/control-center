@@ -8,6 +8,7 @@ import {
 } from '@cc/shared';
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
 import { subdomainsOf } from '../subdomains.js';
+import { fetchCloudflareDnsRecords } from '../cloudflare.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -81,7 +82,8 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   });
 
   app.get('/domains', async (): Promise<DomainView[]> => {
-    const targets = await prisma.target.findMany({
+    const [targets, cloudflareDnsMap] = await Promise.all([
+      prisma.target.findMany({
       where: { enabled: true },
       orderBy: { name: 'asc' },
       include: {
@@ -90,7 +92,9 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
           include: { results: { take: 1, orderBy: { checkedAt: 'desc' }, select: { message: true, metrics: true, details: true } } },
         },
       },
-    });
+    }),
+      fetchCloudflareDnsRecords(process.env.CLOUDFLARE_API_TOKEN),
+    ]);
     const hostOf = (config: unknown) => {
       const url = (config as { url?: string }).url;
       return url ? new URL(url).hostname : null;
@@ -118,7 +122,7 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
         sites: sites
           .filter((x) => x.host === name)
           .map(({ host: _host, ...site }) => site),
-        subdomains: subdomainsOf(name, sites),
+        subdomains: subdomainsOf(name, sites, cloudflareDnsMap.get(name) ?? []),
       };
     });
     // Soonest renewal first: that is what needs attention.

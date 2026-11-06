@@ -9,6 +9,7 @@ const Env = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DASHBOARD_ORIGIN: z.url(),
   COOKIE_SECURE: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  CLOUDFLARE_API_TOKEN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof Env>;

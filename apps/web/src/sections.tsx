@@ -1,10 +1,11 @@
 import type { ComponentType } from 'react';
-import { DatabaseIcon, DomainIcon, ImprovementIcon, LearningIcon, OverviewIcon } from './components/Icons.tsx';
+import { DatabaseIcon, DomainIcon, ImprovementIcon, LearningIcon, OverviewIcon, TerminalIcon } from './components/Icons.tsx';
 import { DatabasesPage } from './pages/Databases.tsx';
+import { DomainsPage } from './pages/Domains.tsx';
 import { ImprovementsPage } from './pages/Improvements.tsx';
 import { LearningPage } from './pages/Learning.tsx';
-import { DomainsPage } from './pages/Domains.tsx';
 import { OverviewPage } from './pages/Overview.tsx';
+import { TerminalPage } from './pages/Terminal.tsx';
 
 export interface Section {
   path: string;
@@ -20,4 +21,5 @@ export const SECTIONS: Section[] = [
   { path: '/databases', label: 'Databases', Icon: DatabaseIcon, Page: DatabasesPage },
   { path: '/improvements', label: 'Improvements', Icon: ImprovementIcon, Page: ImprovementsPage },
   { path: '/learning', label: 'Learning', Icon: LearningIcon, Page: LearningPage },
+  { path: '/terminal', label: 'Terminal', Icon: TerminalIcon, Page: TerminalPage },
 ];
