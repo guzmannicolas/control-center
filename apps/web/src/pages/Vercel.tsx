@@ -85,7 +85,7 @@ export function VercelPage() {
     void loadProjects(false);
   }, []);
 
-  const projects = data?.projects ?? [];
+  const projects = Array.isArray(data?.projects) ? data.projects : [];
   const readyCount = projects.filter((p) => p.latestDeployment?.state === 'READY').length;
   const errorCount = projects.filter((p) => p.latestDeployment?.state === 'ERROR').length;
 
@@ -96,8 +96,8 @@ export function VercelPage() {
       const q = search.toLowerCase();
       return (
         p.name.toLowerCase().includes(q) ||
-        (p.repo?.toLowerCase().includes(q) ?? false) ||
-        p.domains.some((d) => d.toLowerCase().includes(q))
+        (typeof p.repo === 'string' && p.repo.toLowerCase().includes(q)) ||
+        (p.domains ?? []).some((d) => d.toLowerCase().includes(q))
       );
     }
     return true;

@@ -12,30 +12,35 @@ const CMS_BACKUP_SCRIPT = '/home/adminnico/cms/scripts/backup.sh';
 
 // --- 1. Vercel Projects & Deployments --------------------------------------------------------------
 
-export interface VercelProjectView {
+export interface VercelProjectSummary {
   id: string;
   name: string;
   framework: string | null;
   nodeVersion: string | null;
   updatedAt: string;
-  repo: { org: string; repo: string; type: string } | null;
+  repo: string | null;
+  productionUrl: string | null;
   domains: string[];
   latestDeployment: {
     id: string;
     url: string;
+    state: string;
     readyState: string;
+    target: string | null;
     createdAt: string;
+    readyAt: string | null;
     commitMessage: string | null;
-    commitRef: string | null;
     commitSha: string | null;
+    branch: string | null;
+    errorMessage: string | null;
   } | null;
 }
 
-let vercelCache: { expiresAt: number; data: VercelProjectView[] } | null = null;
+let vercelCache: { expiresAt: number; data: VercelProjectSummary[] } | null = null;
 
 export async function fetchVercelProjects(forceRefresh = false): Promise<{
   configured: boolean;
-  projects: VercelProjectView[];
+  projects: VercelProjectSummary[];
   error?: string;
 }> {
   const token = process.env.VERCEL_TOKEN;
@@ -48,7 +53,6 @@ export async function fetchVercelProjects(forceRefresh = false): Promise<{
   }
 
   try {
-    // First discover teamId if any from /v2/teams
     let teamId = process.env.VERCEL_TEAM_ID ?? '';
     if (!teamId) {
       try {
@@ -92,24 +96,29 @@ export async function fetchVercelProjects(forceRefresh = false): Promise<{
             url?: string;
             readyState?: string;
             createdAt?: number;
+            ready?: number;
             alias?: string[];
             meta?: Record<string, string>;
+            errorMessage?: string;
           };
         };
         latestDeployments?: Array<{
           id?: string;
           url?: string;
           readyState?: string;
+          target?: string | null;
           createdAt?: number;
+          ready?: number;
           alias?: string[];
           meta?: Record<string, string>;
+          errorMessage?: string;
         }>;
       }>;
     };
 
-    const projects: VercelProjectView[] = (body.projects ?? []).map((p) => {
+    const projects: VercelProjectSummary[] = (body.projects ?? []).map((p) => {
       const prod = p.targets?.production;
-      const latest = prod ?? p.latestDeployments?.[0];
+      const latest = p.latestDeployments?.[0] ?? prod;
       const aliases = prod?.alias ?? p.latestDeployments?.[0]?.alias ?? [];
       const domains = Array.from(
         new Set(
@@ -119,26 +128,32 @@ export async function fetchVercelProjects(forceRefresh = false): Promise<{
         )
       ).slice(0, 4);
 
+      const primaryDomain = domains[0] ?? latest?.url ?? null;
       const meta = latest?.meta ?? {};
+      const state = latest?.readyState ?? 'UNKNOWN';
+
       return {
         id: p.id,
         name: p.name,
         framework: p.framework ?? null,
         nodeVersion: p.nodeVersion ?? null,
         updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
-        repo: p.link?.repo
-          ? { org: p.link.org ?? 'guzmannicolas', repo: p.link.repo, type: p.link.type ?? 'github' }
-          : null,
+        repo: p.link?.repo ? `${p.link.org ?? 'guzmannicolas'}/${p.link.repo}` : null,
+        productionUrl: primaryDomain ? `https://${primaryDomain}` : null,
         domains,
         latestDeployment: latest?.id
           ? {
               id: latest.id,
               url: latest.url ?? `${p.name}.vercel.app`,
-              readyState: latest.readyState ?? 'UNKNOWN',
+              state,
+              readyState: state,
+              target: 'production',
               createdAt: latest.createdAt ? new Date(latest.createdAt).toISOString() : new Date().toISOString(),
+              readyAt: latest.ready ? new Date(latest.ready).toISOString() : null,
               commitMessage: meta.githubCommitMessage ?? null,
-              commitRef: meta.githubCommitRef ?? null,
               commitSha: meta.githubCommitSha ? meta.githubCommitSha.slice(0, 7) : null,
+              branch: meta.githubCommitRef ?? null,
+              errorMessage: latest.errorMessage ?? null,
             }
           : null,
       };
@@ -155,26 +170,27 @@ export async function fetchVercelProjects(forceRefresh = false): Promise<{
 
 // --- 2. Backups & Status ---------------------------------------------------------------------------
 
-export interface BackupFileItem {
+export interface BackupFileEntry {
   name: string;
-  kind: 'daily-archive' | 'sql-snapshot' | 'config-json' | 'other';
   sizeBytes: number;
   sizeHuman: string;
-  createdAt: string;
+  modifiedAt: string;
   ageHours: number;
+  kind: 'full-tar' | 'postgres-sql' | 'meta-json' | 'other';
 }
 
 export interface BackupsOverview {
-  status: 'ok' | 'degraded' | 'down';
-  statusMessage: string;
+  backupDir: string;
+  scriptPath: string;
+  scriptExists: boolean;
   schedule: string;
   destination: string;
-  totalSizeBytes: number;
+  status: 'ok' | 'warning' | 'critical';
+  latestBackupAt: string | null;
+  latestAgeHours: number | null;
   totalSizeHuman: string;
-  lastBackupAt: string | null;
-  lastBackupAgeHours: number | null;
   rcloneNotice: string | null;
-  files: BackupFileItem[];
+  files: BackupFileEntry[];
   recentLogLines: string[];
 }
 
@@ -186,7 +202,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function getBackupsOverview(): BackupsOverview {
-  const files: BackupFileItem[] = [];
+  const files: BackupFileEntry[] = [];
   let totalSizeBytes = 0;
 
   if (existsSync(CMS_BACKUPS_DIR)) {
@@ -198,20 +214,21 @@ export function getBackupsOverview(): BackupsOverview {
         const st = statSync(full);
         totalSizeBytes += st.size;
         const ageHours = Math.round(((Date.now() - st.mtimeMs) / 3_600_000) * 10) / 10;
-        const kind: BackupFileItem['kind'] = e.name.startsWith('cms-') && e.name.endsWith('.tar')
-          ? 'daily-archive'
-          : e.name.endsWith('.sql.gz')
-            ? 'sql-snapshot'
-            : e.name.endsWith('.json')
-              ? 'config-json'
-              : 'other';
+        const kind: BackupFileEntry['kind'] =
+          e.name.startsWith('cms-') && e.name.endsWith('.tar')
+            ? 'full-tar'
+            : e.name.endsWith('.sql.gz')
+              ? 'postgres-sql'
+              : e.name.endsWith('.json')
+                ? 'meta-json'
+                : 'other';
 
         files.push({
           name: e.name,
           kind,
           sizeBytes: st.size,
           sizeHuman: formatBytes(st.size),
-          createdAt: st.mtime.toISOString(),
+          modifiedAt: st.mtime.toISOString(),
           ageHours,
         });
       }
@@ -220,9 +237,9 @@ export function getBackupsOverview(): BackupsOverview {
     }
   }
 
-  files.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  files.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
 
-  const dailyArchives = files.filter((f) => f.kind === 'daily-archive');
+  const dailyArchives = files.filter((f) => f.kind === 'full-tar');
   const latestDaily = dailyArchives[0] ?? files[0] ?? null;
 
   let recentLogLines: string[] = [];
@@ -238,7 +255,11 @@ export function getBackupsOverview(): BackupsOverview {
       recentLogLines = allLines.slice(-25);
       if (allLines.some((l) => l.includes('shared Google Drive client_id'))) {
         rcloneNotice =
-          'rclone usa el client_id compartido de Google Drive (se recomienda crear un client_id propio en Google Cloud antes de fin de 2026).';
+          'rclone usa el client_id compartido de Google Drive (se recomienda configurar un client_id propio).';
+      }
+      if (allLines.slice(-10).some((l) => l.includes('Failed to copy') || l.includes('token expired'))) {
+        rcloneNotice =
+          'Se detectó un error reciente subiendo a Google Drive (rclone). Los backups locales en el VPS están al día.';
       }
     } catch {
       // Ignore log read errors
@@ -246,46 +267,39 @@ export function getBackupsOverview(): BackupsOverview {
   }
 
   let status: BackupsOverview['status'] = 'ok';
-  let statusMessage = 'Backup diario al día y sincronizado con Google Drive (gcrypt)';
-
-  if (!latestDaily) {
-    status = 'down';
-    statusMessage = 'No se encontraron archivos de backup en /home/adminnico/cms/backups';
-  } else if (latestDaily.ageHours > 48) {
-    status = 'down';
-    statusMessage = `El último backup tiene ${latestDaily.ageHours}h de antigüedad (> 48h)`;
+  if (!latestDaily || latestDaily.ageHours > 50) {
+    status = 'critical';
   } else if (latestDaily.ageHours > 26) {
-    status = 'degraded';
-    statusMessage = `El último backup tiene ${latestDaily.ageHours}h de antigüedad`;
+    status = 'warning';
   }
 
   return {
+    backupDir: CMS_BACKUPS_DIR,
+    scriptPath: CMS_BACKUP_SCRIPT,
+    scriptExists: existsSync(CMS_BACKUP_SCRIPT),
+    schedule: 'Diario 03:30 hs (Cron) · Retención: 7d local / 30d nube',
+    destination: 'Google Drive encriptado (gcrypt:daily/)',
     status,
-    statusMessage,
-    schedule: 'Todos los días a las 03:30 hs (Cron) — Retención: 7 días local / 30 días Google Drive',
-    destination: 'Local (/home/adminnico/cms/backups) + Google Drive Encriptado (gcrypt:daily/)',
-    totalSizeBytes,
+    latestBackupAt: latestDaily?.modifiedAt ?? null,
+    latestAgeHours: latestDaily?.ageHours ?? null,
     totalSizeHuman: formatBytes(totalSizeBytes),
-    lastBackupAt: latestDaily?.createdAt ?? null,
-    lastBackupAgeHours: latestDaily?.ageHours ?? null,
     rcloneNotice,
     files,
     recentLogLines,
   };
 }
 
-export async function runManualBackup(): Promise<{ ok: boolean; output: string; overview: BackupsOverview }> {
+export async function runManualBackup(): Promise<{ ok: boolean; output: string }> {
   try {
     if (!existsSync(CMS_BACKUP_SCRIPT)) {
       return {
         ok: false,
-        output: `Backup script not found at ${CMS_BACKUP_SCRIPT}`,
-        overview: getBackupsOverview(),
+        output: `Script de backup no encontrado en ${CMS_BACKUP_SCRIPT}`,
       };
     }
 
     const { stdout, stderr } = await execAsync(
-      `HOME="${HOME_DIR}" bash "${CMS_BACKUP_SCRIPT}" >> "${CMS_BACKUPS_DIR}/backup.log" 2>&1 && tail -n 5 "${CMS_BACKUPS_DIR}/backup.log"`,
+      `HOME="${HOME_DIR}" bash "${CMS_BACKUP_SCRIPT}" >> "${CMS_BACKUPS_DIR}/backup.log" 2>&1 && tail -n 8 "${CMS_BACKUPS_DIR}/backup.log"`,
       {
         cwd: '/home/adminnico/cms',
         timeout: 120_000,
@@ -295,14 +309,12 @@ export async function runManualBackup(): Promise<{ ok: boolean; output: string; 
     return {
       ok: true,
       output: (stdout + '\n' + stderr).trim() || 'Backup ejecutado correctamente.',
-      overview: getBackupsOverview(),
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
       output: `Error ejecutando backup: ${msg}`,
-      overview: getBackupsOverview(),
     };
   }
 }
@@ -311,42 +323,88 @@ export async function runManualBackup(): Promise<{ ok: boolean; output: string; 
 
 export interface VpsStatusView {
   hostname: string;
-  os: string;
-  uptimeSeconds: number;
-  cpuCores: number;
+  uptimeHuman: string;
   loadAvg: [number, number, number];
+  cpuCores: number;
   memory: {
-    ramTotalMb: number;
-    ramUsedMb: number;
-    ramAvailableMb: number;
-    ramPercent: number;
-    swapTotalMb: number;
-    swapUsedMb: number;
-    swapPercent: number;
-  };
-  disk: {
     totalGb: number;
     usedGb: number;
-    availGb: number;
-    usePercent: number;
+    availableGb: number;
+    usedPercent: number;
+    swapTotalGb: number;
+    swapUsedGb: number;
   };
-  storageBreakdown: Array<{ label: string; path: string; sizeHuman: string }>;
-  dockerDf: Array<{ type: string; totalCount: string; active: string; size: string; reclaimable: string }>;
-  containers: Array<{ id: string; name: string; image: string; state: string; status: string }>;
+  disk: {
+    filesystem: string;
+    totalGb: number;
+    usedGb: number;
+    availableGb: number;
+    usedPercent: number;
+  };
+  dockerStorage: Array<{
+    type: string;
+    totalCount: string;
+    active: string;
+    size: string;
+    reclaimable: string;
+  }>;
+  topDirectories: Array<{
+    path: string;
+    sizeHuman: string;
+  }>;
+  containers: Array<{
+    name: string;
+    image: string;
+    status: string;
+    state: string;
+  }>;
 }
+
+let dirCache: { expiresAt: number; data: Array<{ path: string; sizeHuman: string }> } | null = null;
 
 async function safeDu(targetPath: string): Promise<string> {
   if (!existsSync(targetPath)) return '0 B';
   try {
-    const { stdout } = await execAsync(`du -sh "${targetPath}" 2>/dev/null | cut -f1`, { timeout: 6000 });
+    const { stdout } = await execAsync(`du -sh "${targetPath}" 2>/dev/null | cut -f1`, { timeout: 5000 });
     return stdout.trim() || '0 B';
   } catch {
     return '0 B';
   }
 }
 
-export async function getVpsStatus(): Promise<VpsStatusView> {
-  // 1. Hostname & OS
+function formatUptime(sec: number): string {
+  const days = Math.floor(sec / 86400);
+  const hours = Math.floor((sec % 86400) / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+async function getDiskStats(): Promise<VpsStatusView['disk']> {
+  const targetMount = existsSync('/host') ? '/host' : '/';
+  let filesystem = '/dev/sda1';
+  let totalGb = 72;
+  let usedGb = 15;
+  let availableGb = 57;
+  let usedPercent = 21;
+
+  try {
+    const { stdout } = await execAsync(`df -B1 "${targetMount}" | tail -n 1`, { timeout: 4000 });
+    const parts = stdout.trim().split(/\s+/);
+    if (parts.length >= 5) {
+      filesystem = parts[0] || '/dev/sda1';
+      totalGb = Math.round((parseInt(parts[1]!, 10) / 1073741824) * 10) / 10;
+      usedGb = Math.round((parseInt(parts[2]!, 10) / 1073741824) * 10) / 10;
+      availableGb = Math.round((parseInt(parts[3]!, 10) / 1073741824) * 10) / 10;
+      usedPercent = parseInt(parts[4]!.replace('%', ''), 10) || 0;
+    }
+  } catch {}
+
+  return { filesystem, totalGb, usedGb, availableGb, usedPercent };
+}
+
+export async function getVpsStatus(forceRefreshDirs = false): Promise<VpsStatusView> {
   let hostname = os.hostname();
   if (existsSync('/host/etc/hostname')) {
     try {
@@ -354,21 +412,11 @@ export async function getVpsStatus(): Promise<VpsStatusView> {
     } catch {}
   }
 
-  let osName = 'Linux VPS';
-  const osReleasePath = existsSync('/host/etc/os-release') ? '/host/etc/os-release' : '/etc/os-release';
-  if (existsSync(osReleasePath)) {
-    try {
-      const raw = readFileSync(osReleasePath, 'utf8');
-      const m = raw.match(/^PRETTY_NAME="?([^"\n]+)"?/m);
-      if (m?.[1]) osName = m[1];
-    } catch {}
-  }
-
-  // 2. Memory & Swap from /proc/meminfo
-  let ramTotalMb = Math.round(os.totalmem() / (1024 * 1024));
-  let ramAvailableMb = Math.round(os.freemem() / (1024 * 1024));
-  let swapTotalMb = 0;
-  let swapFreeMb = 0;
+  // Memory & Swap
+  let totalKb = Math.round(os.totalmem() / 1024);
+  let availKb = Math.round(os.freemem() / 1024);
+  let swapTotalKb = 0;
+  let swapFreeKb = 0;
 
   if (existsSync('/proc/meminfo')) {
     try {
@@ -377,65 +425,50 @@ export async function getVpsStatus(): Promise<VpsStatusView> {
         const m = meminfo.match(new RegExp(`^${key}:\\s+(\\d+)`, 'm'));
         return m?.[1] ? parseInt(m[1], 10) : 0;
       };
-      const totalKb = kb('MemTotal');
-      const availKb = kb('MemAvailable');
-      if (totalKb > 0) {
-        ramTotalMb = Math.round(totalKb / 1024);
-        ramAvailableMb = Math.round(availKb / 1024);
+      const t = kb('MemTotal');
+      const a = kb('MemAvailable');
+      if (t > 0) {
+        totalKb = t;
+        availKb = a;
       }
-      swapTotalMb = Math.round(kb('SwapTotal') / 1024);
-      swapFreeMb = Math.round(kb('SwapFree') / 1024);
+      swapTotalKb = kb('SwapTotal');
+      swapFreeKb = kb('SwapFree');
     } catch {}
   }
 
-  const ramUsedMb = Math.max(0, ramTotalMb - ramAvailableMb);
-  const ramPercent = ramTotalMb > 0 ? Math.round((ramUsedMb / ramTotalMb) * 100) : 0;
-  const swapUsedMb = Math.max(0, swapTotalMb - swapFreeMb);
-  const swapPercent = swapTotalMb > 0 ? Math.round((swapUsedMb / swapTotalMb) * 100) : 0;
+  const totalGb = Math.round((totalKb / 1048576) * 10) / 10;
+  const availableGb = Math.round((availKb / 1048576) * 10) / 10;
+  const usedGb = Math.round(Math.max(0, totalGb - availableGb) * 10) / 10;
+  const usedPercent = totalKb > 0 ? Math.round(((totalKb - availKb) / totalKb) * 100) : 0;
+  const swapTotalGb = Math.round((swapTotalKb / 1048576) * 10) / 10;
+  const swapUsedGb = Math.round((Math.max(0, swapTotalKb - swapFreeKb) / 1048576) * 10) / 10;
 
-  // 3. Disk space (/host or /)
-  const targetMount = existsSync('/host') ? '/host' : '/';
-  let totalGb = 72;
-  let usedGb = 15;
-  let availGb = 57;
-  let usePercent = 21;
+  const disk = await getDiskStats();
 
-  try {
-    const { stdout } = await execAsync(`df -B1 "${targetMount}" | tail -n 1`, { timeout: 5000 });
-    const parts = stdout.trim().split(/\s+/);
-    if (parts.length >= 5) {
-      totalGb = Math.round((parseInt(parts[1]!, 10) / 1e9) * 10) / 10;
-      usedGb = Math.round((parseInt(parts[2]!, 10) / 1e9) * 10) / 10;
-      availGb = Math.round((parseInt(parts[3]!, 10) / 1e9) * 10) / 10;
-      usePercent = parseInt(parts[4]!.replace('%', ''), 10) || 0;
-    }
-  } catch {}
+  // Directory sizes (cached for 45s so page loads fast)
+  let topDirectories: Array<{ path: string; sizeHuman: string }>;
+  if (!forceRefreshDirs && dirCache && dirCache.expiresAt > Date.now()) {
+    topDirectories = dirCache.data;
+  } else {
+    const paths = [
+      '/home/adminnico/repositories',
+      '/home/adminnico/.vscode-server',
+      '/home/adminnico/.local',
+      '/home/adminnico/cms/backups',
+      '/home/adminnico/.npm',
+      '/home/adminnico/.cache',
+    ];
+    const sizes = await Promise.all(paths.map((p) => safeDu(p)));
+    topDirectories = paths.map((p, i) => ({ path: p, sizeHuman: sizes[i] ?? '0 B' }));
+    dirCache = { expiresAt: Date.now() + 45_000, data: topDirectories };
+  }
 
-  // 4. Storage breakdown in parallel
-  const [homeSize, reposSize, vscodeSize, backupsSize, localShareSize, npmCacheSize] = await Promise.all([
-    safeDu('/home/adminnico'),
-    safeDu('/home/adminnico/repositories'),
-    safeDu('/home/adminnico/.vscode-server'),
-    safeDu('/home/adminnico/cms/backups'),
-    safeDu('/home/adminnico/.local'),
-    safeDu('/home/adminnico/.npm'),
-  ]);
-
-  const storageBreakdown = [
-    { label: 'Home total (/home/adminnico)', path: '/home/adminnico', sizeHuman: homeSize },
-    { label: 'Repositorios Git', path: '/home/adminnico/repositories', sizeHuman: reposSize },
-    { label: 'VS Code Remote Server', path: '/home/adminnico/.vscode-server', sizeHuman: vscodeSize },
-    { label: 'Binarios y librerías (.local)', path: '/home/adminnico/.local', sizeHuman: localShareSize },
-    { label: 'Backups locales de CMS', path: '/home/adminnico/cms/backups', sizeHuman: backupsSize },
-    { label: 'Caché de NPM (.npm)', path: '/home/adminnico/.npm', sizeHuman: npmCacheSize },
-  ];
-
-  // 5. Docker system df & running containers
-  const dockerDf: VpsStatusView['dockerDf'] = [];
+  // Docker storage & containers
+  const dockerStorage: VpsStatusView['dockerStorage'] = [];
   const containers: VpsStatusView['containers'] = [];
 
   try {
-    const { stdout: dfOut } = await execAsync('docker system df --format "{{json .}}"', { timeout: 8000 });
+    const { stdout: dfOut } = await execAsync('docker system df --format "{{json .}}"', { timeout: 6000 });
     for (const line of dfOut.trim().split('\n').filter(Boolean)) {
       const row = JSON.parse(line) as {
         Type?: string;
@@ -444,7 +477,7 @@ export async function getVpsStatus(): Promise<VpsStatusView> {
         Size?: string;
         Reclaimable?: string;
       };
-      dockerDf.push({
+      dockerStorage.push({
         type: row.Type ?? '',
         totalCount: String(row.TotalCount ?? '0'),
         active: String(row.Active ?? '0'),
@@ -455,17 +488,15 @@ export async function getVpsStatus(): Promise<VpsStatusView> {
   } catch {}
 
   try {
-    const { stdout: psOut } = await execAsync('docker ps -a --format "{{json .}}"', { timeout: 6000 });
+    const { stdout: psOut } = await execAsync('docker ps -a --format "{{json .}}"', { timeout: 5000 });
     for (const line of psOut.trim().split('\n').filter(Boolean)) {
       const c = JSON.parse(line) as {
-        ID?: string;
         Names?: string;
         Image?: string;
         State?: string;
         Status?: string;
       };
       containers.push({
-        id: c.ID ?? '',
         name: c.Names ?? '',
         image: c.Image ?? '',
         state: c.State ?? '',
@@ -477,39 +508,38 @@ export async function getVpsStatus(): Promise<VpsStatusView> {
   const load = os.loadavg();
   return {
     hostname,
-    os: osName,
-    uptimeSeconds: Math.round(os.uptime()),
-    cpuCores: os.cpus().length,
+    uptimeHuman: formatUptime(os.uptime()),
     loadAvg: [
       Math.round((load[0] ?? 0) * 100) / 100,
       Math.round((load[1] ?? 0) * 100) / 100,
       Math.round((load[2] ?? 0) * 100) / 100,
     ],
+    cpuCores: os.cpus().length,
     memory: {
-      ramTotalMb,
-      ramUsedMb,
-      ramAvailableMb,
-      ramPercent,
-      swapTotalMb,
-      swapUsedMb,
-      swapPercent,
-    },
-    disk: {
       totalGb,
       usedGb,
-      availGb,
-      usePercent,
+      availableGb,
+      usedPercent,
+      swapTotalGb,
+      swapUsedGb,
     },
-    storageBreakdown,
-    dockerDf,
+    disk,
+    dockerStorage,
+    topDirectories,
     containers,
   };
 }
 
-export async function runVpsCleanup(
-  target: 'docker' | 'vscode' | 'caches' | 'all'
-): Promise<{ ok: boolean; log: string; status: VpsStatusView }> {
+export async function runVpsCleanup(target: 'docker' | 'vscode' | 'caches' | 'all'): Promise<{
+  ok: boolean;
+  target: string;
+  beforeUsedGb: number;
+  afterUsedGb: number;
+  freedGb: number;
+  log: string;
+}> {
   const logs: string[] = [];
+  const beforeDisk = await getDiskStats();
 
   try {
     if (target === 'docker' || target === 'all') {
@@ -525,10 +555,13 @@ export async function runVpsCleanup(
       if (existsSync(serversDir)) {
         const entries = readdirSync(serversDir, { withFileTypes: true })
           .filter((e) => e.isDirectory() && e.name.startsWith('Stable-'))
-          .map((e) => ({ name: e.name, full: join(serversDir, e.name), mtime: statSync(join(serversDir, e.name)).mtimeMs }))
+          .map((e) => ({
+            name: e.name,
+            full: join(serversDir, e.name),
+            mtime: statSync(join(serversDir, e.name)).mtimeMs,
+          }))
           .sort((a, b) => b.mtime - a.mtime);
 
-        // Keep the newest one, remove older ones
         for (const old of entries.slice(1)) {
           await execAsync(`rm -rf "${old.full}"`);
           removedCount++;
@@ -548,12 +581,29 @@ export async function runVpsCleanup(
       logs.push('📦 Cachés de paquetes (npm, pnpm, /tmp) limpiadas correctamente.');
     }
 
-    const status = await getVpsStatus();
-    return { ok: true, log: logs.join('\n\n'), status };
+    dirCache = null;
+    const afterDisk = await getDiskStats();
+    const freedGb = Math.max(0, Math.round((beforeDisk.usedGb - afterDisk.usedGb) * 100) / 100);
+
+    return {
+      ok: true,
+      target,
+      beforeUsedGb: beforeDisk.usedGb,
+      afterUsedGb: afterDisk.usedGb,
+      freedGb,
+      log: logs.join('\n\n'),
+    };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     logs.push(`✖ Error: ${msg}`);
-    const status = await getVpsStatus();
-    return { ok: false, log: logs.join('\n\n'), status };
+    const afterDisk = await getDiskStats();
+    return {
+      ok: false,
+      target,
+      beforeUsedGb: beforeDisk.usedGb,
+      afterUsedGb: afterDisk.usedGb,
+      freedGb: Math.max(0, Math.round((beforeDisk.usedGb - afterDisk.usedGb) * 100) / 100),
+      log: logs.join('\n\n'),
+    };
   }
 }

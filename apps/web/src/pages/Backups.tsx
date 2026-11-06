@@ -227,7 +227,7 @@ export function BackupsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.files.map((f) => (
+                {(data.files ?? []).map((f) => (
                   <tr key={f.name} style={{ borderTop: '1px solid #1e293b', color: '#e2e8f0' }}>
                     <td style={{ padding: '0.65rem 1rem', fontFamily: 'monospace', fontWeight: 600 }}>{f.name}</td>
                     <td style={{ padding: '0.65rem 1rem' }}>

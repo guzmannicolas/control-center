@@ -191,10 +191,10 @@ export function VpsPage() {
           <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
             <div style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Contenedores Docker</div>
             <div style={{ marginTop: '0.35rem', fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc' }}>
-              {data.containers.filter((c) => c.state === 'running').length} activos
+              {(data.containers ?? []).filter((c) => c.state === 'running').length} activos
             </div>
             <div style={{ marginTop: '0.45rem', fontSize: '0.78rem', color: '#64748b' }}>
-              de {data.containers.length} contenedores totales
+              de {(data.containers ?? []).length} contenedores totales
             </div>
           </div>
         </div>
@@ -346,7 +346,7 @@ export function VpsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.topDirectories.map((d) => (
+                {(data.topDirectories ?? []).map((d) => (
                   <tr key={d.path} style={{ borderTop: '1px solid #1e293b', color: '#e2e8f0' }}>
                     <td style={{ padding: '0.6rem 1rem', fontFamily: 'monospace' }}>{d.path}</td>
                     <td style={{ padding: '0.6rem 1rem', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#93c5fd' }}>
@@ -373,7 +373,7 @@ export function VpsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.dockerStorage.map((row) => (
+                {(data.dockerStorage ?? []).map((row) => (
                   <tr key={row.type} style={{ borderTop: '1px solid #1e293b', color: '#e2e8f0' }}>
                     <td style={{ padding: '0.6rem 0.9rem', fontWeight: 600 }}>{row.type}</td>
                     <td style={{ padding: '0.6rem 0.9rem', color: '#94a3b8' }}>
@@ -405,7 +405,7 @@ export function VpsPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.containers.map((c) => (
+                {(data.containers ?? []).map((c) => (
                   <tr key={c.name} style={{ borderTop: '1px solid #1e293b', color: '#e2e8f0' }}>
                     <td style={{ padding: '0.6rem 1rem', fontFamily: 'monospace', fontWeight: 600 }}>{c.name}</td>
                     <td style={{ padding: '0.6rem 1rem', fontFamily: 'monospace', color: '#94a3b8' }}>{c.image}</td>

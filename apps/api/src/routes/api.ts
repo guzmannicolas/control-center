@@ -373,10 +373,9 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   // --- Vercel Projects -----------------------------------------------------------------------------
   app.get('/vercel/projects', async (req) => {
     const q = req.query as { refresh?: string };
-    const projects = await fetchVercelProjects(q.refresh === '1' || q.refresh === 'true');
+    const result = await fetchVercelProjects(q.refresh === '1' || q.refresh === 'true');
     return {
-      configured: Boolean(process.env.VERCEL_TOKEN),
-      projects,
+      ...result,
       fetchedAt: new Date().toISOString(),
     };
   });
