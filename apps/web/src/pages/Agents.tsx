@@ -21,6 +21,7 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  hasAudio?: boolean;
   contextLabel: string;
   events: AgentEvent[];
   status: 'streaming' | 'done' | 'error';
@@ -30,6 +31,7 @@ interface ChatSession {
   id: string;
   title: string;
   repo: string;
+  provider?: 'gemini' | 'openrouter';
   model: string;
   updatedAt: string;
   messages: ChatMessage[];
@@ -38,6 +40,13 @@ interface ChatSession {
 const GENERAL_CONTEXT = '__general__';
 const STORAGE_KEY = 'cc_agent_sessions_v1';
 const ACTIVE_SESSION_KEY = 'cc_agent_active_session_v1';
+const SETTINGS_KEY = 'cc_agent_settings_v1';
+
+interface ProviderSettings {
+  provider: 'gemini' | 'openrouter';
+  geminiApiKey: string;
+  openrouterApiKey: string;
+}
 
 const FALLBACK_REPOS: RepoOption[] = [
   { name: 'control-center', fullName: 'guzmannicolas/control-center', description: 'Control Center', isPrivate: false, local: true },
@@ -47,12 +56,22 @@ const FALLBACK_REPOS: RepoOption[] = [
   { name: 'susterart', fullName: 'guzmannicolas/susterart', description: 'Suster Art', isPrivate: true, local: true },
 ];
 
-const AVAILABLE_MODELS = [
+const GEMINI_MODELS = [
   { id: 'auto', name: '⚡ Auto (Smart Pool Anti-429 — Recomendado)' },
-  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Equilibrado)' },
-  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
-  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash-Lite (Ultra Rápido)' },
-  { id: 'gemini-flash-lite-latest', name: 'Gemini Flash-Lite Latest' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Equilibrado)' },
+  { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite (Rápido)' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Razonamiento profundo)' },
+];
+
+const OPENROUTER_MODELS = [
+  { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B Instruct (Meta)' },
+  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (Anthropic)' },
+  { id: 'openai/gpt-4o', name: 'GPT-4o (OpenAI)' },
+  { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
+  { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3' },
+  { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1 (Razonamiento)' },
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (vía OpenRouter)' },
 ];
 
 const QUICK_PROMPTS = [
@@ -78,7 +97,7 @@ function loadLocalSessions(): ChatSession[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as ChatSession[]) : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -86,15 +105,47 @@ function loadLocalSessions(): ChatSession[] {
 
 function saveLocalSessions(sessions: ChatSession[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(0, 30)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
   } catch {
-    // Ignore storage quota errors
+    // ignore
+  }
+}
+
+function loadSettings(): ProviderSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        provider: parsed.provider === 'openrouter' ? 'openrouter' : 'gemini',
+        geminiApiKey: parsed.geminiApiKey || '',
+        openrouterApiKey: parsed.openrouterApiKey || '',
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return {
+    provider: 'gemini',
+    geminiApiKey: '',
+    openrouterApiKey: '',
+  };
+}
+
+function saveSettings(settings: ProviderSettings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // ignore
   }
 }
 
 export function AgentsPage() {
-  const [repos, setRepos] = useState<RepoOption[]>(FALLBACK_REPOS);
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadLocalSessions());
+  const [repos, setRepos] = useState<RepoOption[]>(FALLBACK_REPOS);
+  const [settings, setSettings] = useState<ProviderSettings>(() => loadSettings());
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+
   const [sessionId, setSessionId] = useState<string>(() => {
     const savedActive = localStorage.getItem(ACTIVE_SESSION_KEY);
     const local = loadLocalSessions();
@@ -104,19 +155,31 @@ export function AgentsPage() {
 
   const activeSession = sessions.find((s) => s.id === sessionId);
 
+  const [provider, setProvider] = useState<'gemini' | 'openrouter'>(
+    activeSession?.provider ?? settings.provider
+  );
   const [repo, setRepo] = useState<string>(activeSession?.repo ?? GENERAL_CONTEXT);
-  const [model, setModel] = useState<string>(activeSession?.model ?? 'auto');
+  const [model, setModel] = useState<string>(
+    activeSession?.model ?? (provider === 'openrouter' ? 'meta-llama/llama-3.3-70b-instruct' : 'auto')
+  );
   const [input, setInput] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>(activeSession?.messages ?? []);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+
+  // Audio recording state
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<number | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
 
-  // Fetch available repos (local + GitHub cloud) and saved server chat sessions
+  // Fetch available repos and saved server chat sessions
   useEffect(() => {
     let active = true;
     fetch(`${BASE}/api/agent/repos`, { credentials: 'include' })
@@ -158,44 +221,71 @@ export function AgentsPage() {
     localStorage.setItem(ACTIVE_SESSION_KEY, sessionId);
     if (messages.length === 0) return;
 
-    const firstUserMsg = messages.find((m) => m.role === 'user')?.text ?? 'Conversación';
-    const title = firstUserMsg.length > 55 ? `${firstUserMsg.slice(0, 55)}…` : firstUserMsg;
+    const firstUserMsg = messages.find((m) => m.role === 'user');
+    const autoTitle = firstUserMsg
+      ? firstUserMsg.text.length > 36
+        ? firstUserMsg.text.slice(0, 36) + '...'
+        : firstUserMsg.text || 'Mensaje de voz'
+      : 'Nueva conversación';
+
     const updatedSession: ChatSession = {
       id: sessionId,
-      title,
+      title: activeSession?.title ?? autoTitle,
       repo,
+      provider,
       model,
       updatedAt: new Date().toISOString(),
       messages,
     };
 
     setSessions((prev) => {
-      const next = [updatedSession, ...prev.filter((s) => s.id !== sessionId)].slice(0, 30);
-      saveLocalSessions(next);
-      return next;
+      const idx = prev.findIndex((s) => s.id === sessionId);
+      const next = idx >= 0 ? [...prev.slice(0, idx), updatedSession, ...prev.slice(idx + 1)] : [updatedSession, ...prev];
+      const sorted = next.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      saveLocalSessions(sorted);
+      return sorted;
     });
 
-    // Sync to server when not actively mid-stream (or when finished)
-    const anyStreaming = messages.some((m) => m.status === 'streaming');
-    if (!anyStreaming) {
-      fetch(`${BASE}/api/agent/sessions/${encodeURIComponent(sessionId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(updatedSession),
-      }).catch(() => {});
-    }
-  }, [messages, sessionId, repo, model, BASE]);
+    // Sync to VPS storage in background
+    fetch(`${BASE}/api/agent/sessions/${sessionId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(updatedSession),
+    }).catch(() => {});
+  }, [messages, sessionId, repo, provider, model, BASE]);
 
+  // Scroll to bottom on new events
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const localRepos = repos.filter((r) => r.local);
-  const cloudRepos = repos.filter((r) => !r.local);
+  // Sync provider change with model choices
+  function handleProviderChange(newProvider: 'gemini' | 'openrouter') {
+    setProvider(newProvider);
+    if (newProvider === 'openrouter') {
+      if (!OPENROUTER_MODELS.some((m) => m.id === model)) {
+        setModel('meta-llama/llama-3.3-70b-instruct');
+      }
+    } else {
+      if (!GEMINI_MODELS.some((m) => m.id === model)) {
+        setModel('auto');
+      }
+    }
+    const newSettings = { ...settings, provider: newProvider };
+    setSettings(newSettings);
+    saveSettings(newSettings);
+  }
 
-  function toggleToolExpand(key: string) {
-    setExpandedTools((prev) => ({ ...prev, [key]: !prev[key] }));
+  function handleSaveSettings(newGeminiKey: string, newOpenRouterKey: string) {
+    const updated: ProviderSettings = {
+      provider,
+      geminiApiKey: newGeminiKey.trim(),
+      openrouterApiKey: newOpenRouterKey.trim(),
+    };
+    setSettings(updated);
+    saveSettings(updated);
+    setShowSettingsModal(false);
   }
 
   function handleStop() {
@@ -208,10 +298,10 @@ export function AgentsPage() {
     const found = sessions.find((s) => s.id === targetId);
     if (found) {
       setSessionId(found.id);
-      setMessages(found.messages);
       setRepo(found.repo || GENERAL_CONTEXT);
+      if (found.provider) setProvider(found.provider);
       setModel(found.model || 'auto');
-      setExpandedTools({});
+      setMessages(found.messages || []);
     }
   }
 
@@ -220,7 +310,7 @@ export function AgentsPage() {
     const newId = `session-${Date.now()}`;
     setSessionId(newId);
     setMessages([]);
-    setExpandedTools({});
+    setInput('');
   }
 
   function handleDeleteCurrentSession() {
@@ -229,23 +319,105 @@ export function AgentsPage() {
     const remaining = sessions.filter((s) => s.id !== idToDelete);
     setSessions(remaining);
     saveLocalSessions(remaining);
-    fetch(`${BASE}/api/agent/sessions/${encodeURIComponent(idToDelete)}`, {
+
+    fetch(`${BASE}/api/agent/sessions/${idToDelete}`, {
       method: 'DELETE',
       credentials: 'include',
     }).catch(() => {});
 
-    if (remaining[0]) {
-      setSessionId(remaining[0].id);
-      setMessages(remaining[0].messages);
-      setRepo(remaining[0].repo || GENERAL_CONTEXT);
+    if (remaining.length > 0) {
+      handleSelectSession(remaining[0]!.id);
     } else {
       handleNewChat();
     }
   }
 
-  async function sendPrompt(promptText: string, overrideRepo?: string) {
+  function toggleToolExpand(key: string) {
+    setExpandedTools((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  // --- Voice / Audio Recording ---
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.start(250);
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      const interval = window.setInterval(() => {
+        setRecordingSeconds((sec) => sec + 1);
+      }, 1000);
+      timerIntervalRef.current = interval;
+    } catch (err) {
+      alert('No se pudo acceder al micrófono. Verificá los permisos del navegador.');
+    }
+  }
+
+  function stopRecording(sendDirectly = true) {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') {
+      mr.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+        // Stop tracks
+        mr.stream.getTracks().forEach((track) => track.stop());
+
+        if (sendDirectly && audioBlob.size > 0) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64String = (reader.result as string).split(',')[1];
+            if (base64String) {
+              void sendPrompt(
+                input.trim() || 'Instrucción por audio:',
+                undefined,
+                { base64Data: base64String, mimeType: audioBlob.type || 'audio/webm' }
+              );
+            }
+          };
+          reader.readAsDataURL(audioBlob);
+        }
+      };
+      mr.stop();
+    }
+    setIsRecording(false);
+  }
+
+  function cancelRecording() {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') {
+      mr.onstop = () => {
+        mr.stream.getTracks().forEach((track) => track.stop());
+      };
+      mr.stop();
+    }
+    setIsRecording(false);
+  }
+
+  async function sendPrompt(
+    promptText: string,
+    overrideRepo?: string,
+    audioInput?: { base64Data: string; mimeType: string }
+  ) {
     const trimmed = promptText.trim();
-    if (!trimmed || isRunning) return;
+    if ((!trimmed && !audioInput) || isRunning) return;
 
     const targetRepo = overrideRepo ?? repo;
     if (overrideRepo && overrideRepo !== repo) {
@@ -269,7 +441,8 @@ export function AgentsPage() {
     const userMsg: ChatMessage = {
       id: userMsgId,
       role: 'user',
-      text: trimmed,
+      text: trimmed || (audioInput ? '🎙️ [Mensaje de voz]' : ''),
+      hasAudio: Boolean(audioInput),
       contextLabel,
       events: [],
       status: 'done',
@@ -291,6 +464,9 @@ export function AgentsPage() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Use custom API key if configured
+    const userApiKey = provider === 'openrouter' ? settings.openrouterApiKey : settings.geminiApiKey;
+
     try {
       const res = await fetch(`${BASE}/api/agent/run`, {
         method: 'POST',
@@ -300,32 +476,38 @@ export function AgentsPage() {
         body: JSON.stringify({
           repo: targetRepo,
           instruction: trimmed,
+          audio: audioInput,
+          provider,
+          apiKey: userApiKey || undefined,
           model,
           history,
         }),
       });
 
       if (!res.ok) {
-        const errorText =
-          res.status === 401
-            ? 'Sesión expirada o no iniciada. Recargá la página para volver a autenticarte.'
-            : `HTTP ${res.status}: ${await res.text()}`;
-
+        let errContent = `HTTP error ${res.status}`;
+        try {
+          const errJson = await res.json();
+          if (errJson?.error) errContent = errJson.error;
+        } catch {
+          // ignore
+        }
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMsgId
-              ? { ...m, status: 'error', events: [...m.events, { type: 'error', content: errorText }] }
-              : m
+            m.id === assistantMsgId ? { ...m, status: 'error', text: errContent } : m
           )
         );
         setIsRunning(false);
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('No readable stream');
+      if (!res.body) {
+        setIsRunning(false);
+        return;
+      }
 
-      const decoder = new TextDecoder();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
       let buffer = '';
 
       while (true) {
@@ -336,98 +518,212 @@ export function AgentsPage() {
         const lines = buffer.split('\n\n');
         buffer = lines.pop() ?? '';
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const event = JSON.parse(line.slice(6)) as AgentEvent;
-              setMessages((prev) =>
-                prev.map((m) => {
-                  if (m.id !== assistantMsgId) return m;
-                  const nextEvents = [...m.events, event];
-                  const nextText = event.type === 'final' ? event.content : m.text;
-                  const nextStatus =
-                    event.type === 'error' ? 'error' : event.type === 'final' ? 'done' : m.status;
-                  return { ...m, events: nextEvents, text: nextText, status: nextStatus };
-                })
-              );
-            } catch {
-              // Ignore malformed SSE chunk
-            }
+        for (const block of lines) {
+          const trimmedLine = block.trim();
+          if (!trimmedLine.startsWith('data: ')) continue;
+          const jsonStr = trimmedLine.replace('data: ', '').trim();
+          if (!jsonStr) continue;
+
+          try {
+            const event: AgentEvent = JSON.parse(jsonStr);
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantMsgId) return m;
+
+                const nextEvents = [...m.events, event];
+                let nextText = m.text;
+                let nextStatus = m.status;
+
+                if (event.type === 'final') {
+                  nextText = event.content;
+                  nextStatus = 'done';
+                } else if (event.type === 'error') {
+                  nextText = event.content;
+                  nextStatus = 'error';
+                }
+
+                return {
+                  ...m,
+                  events: nextEvents,
+                  text: nextText,
+                  status: nextStatus,
+                };
+              })
+            );
+          } catch {
+            // ignore JSON parse error in streaming chunks
           }
         }
       }
-
-      setMessages((prev) =>
-        prev.map((m) => (m.id === assistantMsgId && m.status === 'streaming' ? { ...m, status: 'done' } : m))
-      );
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
+      if ((err as Error)?.name !== 'AbortError') {
+        const errorMsg = err instanceof Error ? err.message : String(err);
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantMsgId
-              ? { ...m, status: 'done', text: m.text || '⏹️ Ejecución detenida por el usuario.' }
-              : m
-          )
-        );
-      } else {
-        const msg = err instanceof Error ? err.message : String(err);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId
-              ? {
-                  ...m,
-                  status: 'error',
-                  events: [...m.events, { type: 'error', content: `Error de conexión: ${msg}` }],
-                }
-              : m
+            m.id === assistantMsgId ? { ...m, status: 'error', text: `Error: ${errorMsg}` } : m
           )
         );
       }
     } finally {
       setIsRunning(false);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantMsgId && m.status === 'streaming' ? { ...m, status: 'done' } : m))
+      );
     }
   }
 
+  const localRepos = repos.filter((r) => r.local);
+  const cloudRepos = repos.filter((r) => !r.local);
+  const currentModelList = provider === 'openrouter' ? OPENROUTER_MODELS : GEMINI_MODELS;
+
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col bg-bg">
-      {/* Top Bar: History, Context & Model Selectors */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line bg-surface px-4 py-2.5 shadow-xs">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent font-bold text-xs">
-            AI
+    <div className="flex h-full flex-col bg-bg">
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-line">
+              <h3 className="text-base font-semibold text-ink flex items-center gap-2">
+                ⚙️ Configuración de Proveedor y API Keys
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(false)}
+                className="text-muted hover:text-ink text-sm p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const geminiKey = (form.elements.namedItem('geminiKey') as HTMLInputElement).value;
+                const openrouterKey = (form.elements.namedItem('openrouterKey') as HTMLInputElement).value;
+                handleSaveSettings(geminiKey, openrouterKey);
+              }}
+              className="mt-4 flex flex-col gap-4 text-xs"
+            >
+              <div>
+                <label className="block font-medium text-ink mb-1">
+                  🌐 Proveedor Activo:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleProviderChange('gemini')}
+                    className={`rounded-lg border px-3 py-2 text-center font-medium transition ${
+                      provider === 'gemini'
+                        ? 'border-accent bg-accent/10 text-accent font-semibold'
+                        : 'border-line bg-bg text-muted hover:text-ink'
+                    }`}
+                  >
+                    Google Gemini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleProviderChange('openrouter')}
+                    className={`rounded-lg border px-3 py-2 text-center font-medium transition ${
+                      provider === 'openrouter'
+                        ? 'border-accent bg-accent/10 text-accent font-semibold'
+                        : 'border-line bg-bg text-muted hover:text-ink'
+                    }`}
+                  >
+                    OpenRouter (Router Multi-LLM)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-ink mb-1">
+                  OpenRouter API Key:
+                </label>
+                <input
+                  type="password"
+                  name="openrouterKey"
+                  defaultValue={settings.openrouterApiKey}
+                  placeholder="sk-or-v1-..."
+                  className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+                />
+                <span className="text-[11px] text-muted mt-1 block">
+                  Permite usar Llama 3, Claude 3.5, GPT-4o, DeepSeek R1, etc. desde OpenRouter.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-medium text-ink mb-1">
+                  Gemini API Key (Opcional):
+                </label>
+                <input
+                  type="password"
+                  name="geminiKey"
+                  defaultValue={settings.geminiApiKey}
+                  placeholder="Dejar vacío para usar la key del servidor"
+                  className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+                />
+                <span className="text-[11px] text-muted mt-1 block">
+                  Si la dejás vacía, usará la variable <code>GEMINI_API_KEY</code> del servidor VPS.
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-line mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsModal(false)}
+                  className="rounded-lg border border-line bg-bg px-3 py-1.5 text-muted hover:text-ink"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-accent px-4 py-1.5 font-semibold text-white hover:opacity-90"
+                >
+                  Guardar
+                </button>
+              </div>
+            </form>
           </div>
+        </div>
+      )}
+
+      {/* Header bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface/80 px-4 py-3 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🤖</span>
           <div>
-            <h1 className="text-sm font-semibold text-ink leading-tight">Agent Harness</h1>
+            <h1 className="text-sm font-bold text-ink">Agente de Desarrollo</h1>
+            <p className="text-[11px] text-muted">
+              {provider === 'openrouter' ? '🔌 OpenRouter API' : '⚡ Google Gemini'}: Acceso al VPS, Docker y GitHub
+            </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Saved Conversations Dropdown */}
-          {sessions.length > 0 && (
-            <div className="flex items-center gap-1">
-              <label htmlFor="agent-session-select" className="text-[11px] font-medium text-muted uppercase">
-                Chat:
-              </label>
-              <select
-                id="agent-session-select"
-                value={sessions.some((s) => s.id === sessionId) ? sessionId : ''}
-                onChange={(e) => {
-                  if (e.target.value) handleSelectSession(e.target.value);
-                }}
-                disabled={isRunning}
-                className="max-w-[200px] truncate rounded-lg border border-line bg-bg px-2 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
-              >
-                {!sessions.some((s) => s.id === sessionId) && <option value="">✨ Nueva conversación</option>}
-                {sessions.map((s) => (
+          {/* Chat Sessions Dropdown */}
+          <div className="flex items-center gap-1">
+            <label htmlFor="agent-session-select" className="text-[11px] font-medium text-muted uppercase">
+              Historial:
+            </label>
+            <select
+              id="agent-session-select"
+              value={sessionId}
+              onChange={(e) => handleSelectSession(e.target.value)}
+              className="max-w-[170px] truncate rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+            >
+              {sessions.length === 0 ? (
+                <option value={sessionId}>Chat actual</option>
+              ) : (
+                sessions.map((s) => (
                   <option key={s.id} value={s.id}>
-                    💬 {s.title}
+                    {s.title}
                   </option>
-                ))}
-              </select>
-            </div>
-          )}
+                ))
+              )}
+            </select>
+          </div>
 
-          {/* Context / Repository Dropdown */}
+          {/* Repo selector */}
           <div className="flex items-center gap-1">
             <label htmlFor="agent-repo-select" className="text-[11px] font-medium text-muted uppercase">
               Contexto:
@@ -437,10 +733,10 @@ export function AgentsPage() {
               value={repo}
               onChange={(e) => setRepo(e.target.value)}
               disabled={isRunning}
-              className="rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+              className="max-w-[180px] rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
             >
-              <option value={GENERAL_CONTEXT}>🌐 General / Todo el VPS (Sin repo)</option>
-              <optgroup label={`🖥️ En el VPS (${localRepos.length} locales)`}>
+              <option value={GENERAL_CONTEXT}>🌐 General (Todo el VPS / Docker / Disco)</option>
+              <optgroup label={`🖥️ En el VPS (${localRepos.length} repositorios)`}>
                 {localRepos.map((r) => (
                   <option key={r.name} value={r.name}>
                     🖥️ {r.name}
@@ -469,15 +765,28 @@ export function AgentsPage() {
               value={model}
               onChange={(e) => setModel(e.target.value)}
               disabled={isRunning}
-              className="rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
+              className="max-w-[190px] truncate rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink focus:border-accent focus:outline-none"
             >
-              {AVAILABLE_MODELS.map((m) => (
+              {currentModelList.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
                 </option>
               ))}
             </select>
           </div>
+
+          {/* Provider / API Key Settings button */}
+          <button
+            type="button"
+            onClick={() => setShowSettingsModal(true)}
+            title="Ajustes de API Key y Proveedor"
+            className="flex items-center gap-1.5 rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs font-medium text-ink hover:border-accent transition"
+          >
+            <span>⚙️</span>
+            <span className="hidden sm:inline">
+              {provider === 'openrouter' ? 'OpenRouter' : 'Gemini'}
+            </span>
+          </button>
 
           <button
             type="button"
@@ -510,8 +819,8 @@ export function AgentsPage() {
               </div>
               <h2 className="text-base font-semibold text-ink">¿En qué trabajamos hoy?</h2>
               <p className="mt-1 max-w-lg text-xs text-muted">
-                Tus conversaciones quedan guardadas automáticamente. Podés consultar el estado y espacio del VPS en
-                modo General, o elegir cualquier repositorio local o de GitHub.
+                Tus conversaciones quedan guardadas automáticamente. Podés escribir o grabar tu voz para consultar
+                el estado del VPS, espacio, Docker, o interactuar con cualquier repositorio.
               </p>
 
               <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -520,111 +829,113 @@ export function AgentsPage() {
                     key={q.label}
                     type="button"
                     onClick={() => void sendPrompt(q.prompt, q.repo)}
-                    className="rounded-xl border border-line bg-surface px-3.5 py-2 text-left text-xs text-ink hover:border-accent hover:bg-accent/5 transition shadow-2xs"
+                    className="rounded-xl border border-line bg-surface px-3 py-2 text-xs font-medium text-ink shadow-xs hover:border-accent hover:text-accent transition"
                   >
-                    <span className="font-medium">{q.label}</span>
+                    {q.label}
                   </button>
                 ))}
               </div>
             </div>
           ) : (
-            messages.map((msg) => {
-              if (msg.role === 'user') {
-                return (
-                  <div key={msg.id} className="flex justify-end">
-                    <div className="max-w-2xl rounded-2xl rounded-br-xs bg-accent px-4 py-3 text-sm text-white shadow-xs">
-                      <div className="mb-1 text-[10px] font-medium opacity-80">{msg.contextLabel}</div>
-                      <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
-                    </div>
-                  </div>
-                );
-              }
-
-              const thoughts = msg.events.filter((e) => e.type === 'thought');
-              const toolCalls = msg.events.filter((e) => e.type === 'tool_call');
-              const toolResults = msg.events.filter((e) => e.type === 'tool_result');
-              const errors = msg.events.filter((e) => e.type === 'error');
+            messages.map((m) => {
+              const toolCalls = m.events.filter((e) => e.type === 'tool_call');
+              const toolResults = m.events.filter((e) => e.type === 'tool_result');
+              const thoughts = m.events.filter((e) => e.type === 'thought');
 
               return (
-                <div key={msg.id} className="flex justify-start">
-                  <div className="w-full max-w-4xl rounded-2xl border border-line bg-surface p-4 shadow-xs">
-                    <div className="mb-2 flex items-center justify-between border-b border-line/60 pb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-ink">Agente</span>
-                        <span className="rounded-md bg-bg px-2 py-0.5 text-[10px] font-medium text-muted">
-                          {msg.contextLabel}
-                        </span>
-                      </div>
-                      {msg.status === 'streaming' && (
-                        <span className="flex items-center gap-1.5 text-[11px] font-medium text-accent animate-pulse">
-                          <span className="h-2 w-2 rounded-full bg-accent" />
-                          Ejecutando...
-                        </span>
+                <div
+                  key={m.id}
+                  className={`flex flex-col gap-2 ${
+                    m.role === 'user' ? 'items-end' : 'items-start'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted">
+                    <span className="font-semibold text-ink">
+                      {m.role === 'user' ? 'Vos' : 'Agente'}
+                    </span>
+                    <span>•</span>
+                    <span>{m.contextLabel}</span>
+                    {m.hasAudio && <span>• 🎙️ Audio</span>}
+                  </div>
+
+                  {m.role === 'user' ? (
+                    <div className="max-w-[85%] rounded-2xl bg-accent px-4 py-2.5 text-sm font-medium text-white shadow-xs">
+                      {m.text}
+                    </div>
+                  ) : (
+                    <div className="flex max-w-full flex-col gap-3 rounded-2xl border border-line bg-surface p-4 text-xs text-ink shadow-xs">
+                      {/* Thought process preview */}
+                      {thoughts.length > 0 && (
+                        <div className="flex flex-col gap-1 border-l-2 border-accent/40 pl-3 text-muted">
+                          {thoughts.map((t, idx) => (
+                            <div key={idx} className="italic whitespace-pre-wrap">
+                              {t.content}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Tool Call timeline */}
+                      {toolCalls.length > 0 && (
+                        <div className="flex flex-col gap-1.5">
+                          {toolCalls.map((tc, idx) => {
+                            const key = `${m.id}-tool-${idx}`;
+                            const isExpanded = !!expandedTools[key];
+                            const matchingResult = toolResults[idx];
+                            const argSummary =
+                              tc.toolName === 'run_command'
+                                ? String(tc.toolArgs?.command ?? '')
+                                : String(tc.toolArgs?.path ?? JSON.stringify(tc.toolArgs ?? {}));
+
+                            return (
+                              <div
+                                key={key}
+                                className="overflow-hidden rounded-xl border border-line bg-bg font-mono text-[11px]"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => toggleToolExpand(key)}
+                                  className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-white/5 transition"
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="text-amber-400 font-semibold">⚡ {tc.toolName}</span>
+                                    <span className="truncate text-gray-400">{argSummary}</span>
+                                  </div>
+                                  <span className="ml-2 shrink-0 text-[10px] text-gray-400">
+                                    {matchingResult ? (isExpanded ? '▼ Ocultar salida' : '▶ Ver salida') : '⏳...'}
+                                  </span>
+                                </button>
+
+                                {isExpanded && matchingResult && (
+                                  <pre className="max-h-60 overflow-x-auto border-t border-line bg-black/40 p-3 text-[10px] text-gray-300 whitespace-pre-wrap">
+                                    {matchingResult.toolOutput}
+                                  </pre>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Final response or error message */}
+                      {m.text && (
+                        <div
+                          className={`whitespace-pre-wrap text-sm leading-relaxed ${
+                            m.status === 'error' ? 'text-red-400 font-medium' : 'text-ink'
+                          }`}
+                        >
+                          {m.text}
+                        </div>
+                      )}
+
+                      {m.status === 'streaming' && (
+                        <div className="flex items-center gap-2 text-xs text-accent">
+                          <span className="inline-block h-2 w-2 animate-ping rounded-full bg-accent" />
+                          <span>El agente está trabajando...</span>
+                        </div>
                       )}
                     </div>
-
-                    {(toolCalls.length > 0 || thoughts.length > 0) && (
-                      <div className="mb-3 space-y-2">
-                        {thoughts.map((t, idx) => (
-                          <div key={`thought-${idx}`} className="text-xs text-muted italic whitespace-pre-wrap">
-                            💭 {t.content}
-                          </div>
-                        ))}
-
-                        {toolCalls.map((tc, idx) => {
-                          const key = `${msg.id}-tool-${idx}`;
-                          const isExpanded = !!expandedTools[key];
-                          const matchingResult = toolResults[idx];
-                          const argSummary =
-                            tc.toolName === 'run_command'
-                              ? String(tc.toolArgs?.command ?? '')
-                              : String(tc.toolArgs?.path ?? JSON.stringify(tc.toolArgs ?? {}));
-
-                          return (
-                            <div
-                              key={key}
-                              className="overflow-hidden rounded-lg border border-line bg-[#0d1117] text-gray-200 font-mono text-xs"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => toggleToolExpand(key)}
-                                className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-white/5 transition"
-                              >
-                                <div className="flex items-center gap-2 truncate">
-                                  <span className="text-amber-400 font-semibold">⚡ {tc.toolName}</span>
-                                  <span className="truncate text-gray-400">{argSummary}</span>
-                                </div>
-                                <span className="ml-2 shrink-0 text-[10px] text-gray-400">
-                                  {matchingResult ? (isExpanded ? '▼ Ocultar salida' : '▶ Ver salida') : '⏳...'}
-                                </span>
-                              </button>
-
-                              {isExpanded && matchingResult?.toolOutput && (
-                                <pre className="max-h-96 overflow-auto border-t border-gray-800 bg-black/50 p-3 text-[11px] text-emerald-300/90 whitespace-pre-wrap">
-                                  {matchingResult.toolOutput}
-                                </pre>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {msg.text && (
-                      <div className="prose prose-sm max-w-none text-sm text-ink whitespace-pre-wrap leading-relaxed">
-                        {msg.text}
-                      </div>
-                    )}
-
-                    {errors.map((err, idx) => (
-                      <div
-                        key={`err-${idx}`}
-                        className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400 whitespace-pre-wrap"
-                      >
-                        ✖ {err.content}
-                      </div>
-                    ))}
-                  </div>
+                  )}
                 </div>
               );
             })
@@ -633,52 +944,94 @@ export function AgentsPage() {
         </div>
       </div>
 
-      {/* Bottom Chat Composer Bar */}
-      <div className="border-t border-line bg-surface p-3">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void sendPrompt(input);
-          }}
-          className="mx-auto flex max-w-4xl items-end gap-2"
-        >
-          <textarea
-            rows={2}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                void sendPrompt(input);
-              }
-            }}
-            placeholder={
-              repo === GENERAL_CONTEXT
-                ? 'Escribí un mensaje para el VPS en general (Enter para enviar, Shift+Enter para salto de línea)...'
-                : `Escribí una tarea o consulta para ${repo} (Enter para enviar)...`
-            }
-            disabled={isRunning}
-            className="flex-1 resize-none rounded-xl border border-line bg-bg px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
-          />
+      {/* Input Form with Audio Microphone */}
+      <div className="border-t border-line bg-surface/80 p-4 backdrop-blur-sm">
+        {isRecording ? (
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              </span>
+              <span className="text-sm font-semibold text-red-400">
+                Grabando audio... ({recordingSeconds}s)
+              </span>
+            </div>
 
-          {isRunning ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={cancelRecording}
+                className="rounded-lg border border-line bg-bg px-3 py-1.5 text-xs text-muted hover:text-ink transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => stopRecording(true)}
+                className="rounded-lg bg-red-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-red-500 transition"
+              >
+                Enviar Audio 🎙️
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void sendPrompt(input);
+            }}
+            className="mx-auto flex max-w-4xl items-end gap-2"
+          >
+            <textarea
+              rows={2}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendPrompt(input);
+                }
+              }}
+              placeholder={
+                repo === GENERAL_CONTEXT
+                  ? 'Escribí un mensaje o grabá audio para el VPS en general (Enter para enviar)...'
+                  : `Escribí una tarea o consulta para ${repo} (Enter para enviar)...`
+              }
+              disabled={isRunning}
+              className="flex-1 resize-none rounded-xl border border-line bg-bg px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+            />
+
+            {/* Microphone Button */}
             <button
               type="button"
-              onClick={handleStop}
-              className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-500 transition shrink-0"
+              onClick={startRecording}
+              disabled={isRunning}
+              title="Grabar mensaje de voz / audio"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-bg text-base text-ink hover:border-accent hover:text-accent disabled:opacity-40 transition shrink-0"
             >
-              ⏹ Detener
+              🎙️
             </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={!input.trim()}
-              className="rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40 transition shrink-0"
-            >
-              Enviar ↵
-            </button>
-          )}
-        </form>
+
+            {isRunning ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="rounded-xl bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-500 transition shrink-0 h-10"
+              >
+                ⏹ Detener
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className="rounded-xl bg-accent px-5 py-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40 transition shrink-0 h-10"
+              >
+                Enviar ↵
+              </button>
+            )}
+          </form>
+        )}
       </div>
     </div>
   );

@@ -11,6 +11,7 @@ const Env = z.object({
   COOKIE_SECURE: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof Env>;

@@ -220,19 +220,33 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     const body = req.body as {
       repo?: string;
       instruction?: string;
+      audio?: { base64Data: string; mimeType: string };
+      apiKey?: string;
+      provider?: 'gemini' | 'openrouter';
       model?: string;
       history?: ChatTurnMessage[];
     };
     const repo = body.repo?.trim() || GENERAL_CONTEXT;
-    const instruction = body.instruction?.trim();
+    const instruction = body.instruction?.trim() || '';
+    const hasAudio = Boolean(body.audio?.base64Data);
 
-    if (!instruction) {
-      return reply.code(400).send({ error: 'Instruction is required' });
+    if (!instruction && !hasAudio) {
+      return reply.code(400).send({ error: 'Instruction or audio is required' });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const provider = body.provider || 'gemini';
+    const serverApiKey = provider === 'openrouter'
+      ? process.env.OPENROUTER_API_KEY
+      : process.env.GEMINI_API_KEY;
+
+    const apiKey = (body.apiKey && body.apiKey.trim().length > 0)
+      ? body.apiKey.trim()
+      : serverApiKey;
+
     if (!apiKey) {
-      return reply.code(500).send({ error: 'GEMINI_API_KEY is not configured on the server' });
+      return reply.code(400).send({
+        error: `No hay una API Key configurada para '${provider}'. Por favor ingresá tu API Key en los ajustes o definila en las variables de entorno.`,
+      });
     }
 
     // Inform Fastify that we take manual control of writing the raw response,
@@ -250,7 +264,15 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
     try {
       const history = Array.isArray(body.history) ? body.history : [];
-      for await (const event of runAgentLoop(repo, instruction, apiKey, body.model || 'auto', history)) {
+      for await (const event of runAgentLoop({
+        repo,
+        instruction,
+        audio: body.audio,
+        apiKey,
+        provider,
+        modelName: body.model || 'auto',
+        priorHistory: history,
+      })) {
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
       }
     } catch (err: unknown) {

@@ -14,12 +14,25 @@ export interface ChatTurnMessage {
   text: string;
 }
 
+export interface AudioInput {
+  base64Data: string;
+  mimeType: string;
+}
+
+export interface RunAgentOptions {
+  repo: string;
+  instruction?: string;
+  audio?: AudioInput;
+  apiKey?: string;
+  provider?: 'gemini' | 'openrouter';
+  modelName?: string;
+  priorHistory?: ChatTurnMessage[];
+}
+
 const FALLBACK_MODEL_POOL = [
-  'gemini-3.5-flash',
-  'gemini-3.6-flash',
-  'gemini-3.1-flash-lite',
-  'gemini-3.5-flash-lite',
-  'gemini-flash-lite-latest',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-1.5-flash',
 ];
 
 export const AGENT_TOOL_DECLARATIONS: FunctionDeclaration[] = [
@@ -82,30 +95,86 @@ export const AGENT_TOOL_DECLARATIONS: FunctionDeclaration[] = [
   },
 ];
 
+// OpenRouter JSON Schema formatted tools
+const OPENROUTER_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Read the text content of a file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative path to the file' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description: 'Create a new file or completely overwrite an existing file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative path to the file' },
+          content: { type: 'string', description: 'Content to write' },
+        },
+        required: ['path', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_file',
+      description: 'Replace an exact target snippet in a file with a replacement snippet.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative path to the file' },
+          target: { type: 'string', description: 'Exact string to be replaced' },
+          replacement: { type: 'string', description: 'Replacement string' },
+        },
+        required: ['path', 'target', 'replacement'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_files',
+      description: 'List files and directories in a path (use empty string for root).',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative path to directory (empty for root)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'run_command',
+      description: 'Run a shell command on the VPS (e.g. git status, free -h, df -h, uptime, ls, pnpm test).',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Shell command string to execute' },
+        },
+        required: ['command'],
+      },
+    },
+  },
+];
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function* runAgentLoop(
-  repo: string,
-  instruction: string,
-  apiKey: string,
-  modelName = 'auto',
-  priorHistory: ChatTurnMessage[] = []
-): AsyncGenerator<AgentStepEvent> {
-  const ai = new GoogleGenAI({ apiKey });
-  const isGeneral = !repo || repo === GENERAL_CONTEXT;
-
-  if (!isGeneral) {
-    const cloneStatus = await ensureRepoCloned(repo);
-    if (cloneStatus.error) {
-      yield { type: 'error', content: `Failed to clone ${repo} from GitHub: ${cloneStatus.error}` };
-      return;
-    }
-    if (cloneStatus.cloned) {
-      yield { type: 'thought', content: `☁️ Repositorio 'guzmannicolas/${repo}' clonado desde GitHub al VPS.` };
-    }
-  }
-
-  const systemInstruction = isGeneral
+function buildSystemInstruction(repo: string, isGeneral: boolean): string {
+  return isGeneral
     ? `You are an autonomous senior DevOps and full-stack developer agent running on Nicolas Guzman's Linux VPS (Contabo).
 Your working directory is '/home/adminnico', and all git repositories live in '/home/adminnico/repositories'.
 IMPORTANT CAPABILITIES IN THIS ENVIRONMENT:
@@ -117,9 +186,176 @@ Respond in the same language as the user (Spanish by default). Be concise, struc
     : `You are an autonomous senior developer agent operating inside the repository '${repo}' (/home/adminnico/repositories/${repo}) on Nicolas Guzman's Linux VPS.
 You have access to tools to read, edit, write files, inspect directories, and run shell commands (including git, docker, pnpm, etc.).
 Always inspect existing code before modifying it. Respond in the same language as the user (Spanish by default).`;
+}
 
-  // Build ordered model list with user's choice first, then fallback pool
-  const preferred = modelName === 'auto' || !modelName ? 'gemini-3.5-flash' : modelName;
+// OpenRouter Runner
+async function* runOpenRouterLoop(
+  repo: string,
+  instruction: string,
+  apiKey: string,
+  modelName: string,
+  priorHistory: ChatTurnMessage[],
+  systemInstruction: string,
+  audio?: AudioInput
+): AsyncGenerator<AgentStepEvent> {
+  const chosenModel = modelName && modelName !== 'auto' ? modelName : 'meta-llama/llama-3.3-70b-instruct';
+
+  interface OpenRouterMessage {
+    role: 'system' | 'user' | 'assistant' | 'tool';
+    content: string | null | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+    tool_calls?: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }>;
+    tool_call_id?: string;
+  }
+
+  const messages: OpenRouterMessage[] = [
+    { role: 'system', content: systemInstruction },
+  ];
+
+  for (const h of priorHistory.slice(-12)) {
+    if (h.text?.trim()) {
+      messages.push({
+        role: h.role === 'model' ? 'assistant' : 'user',
+        content: h.text,
+      });
+    }
+  }
+
+  // If audio is provided for OpenRouter, note that most text models accept audio via base64 data URLs if multimodal, or we instruct them
+  let userContent: OpenRouterMessage['content'] = instruction;
+  if (audio?.base64Data) {
+    userContent = [
+      ...(instruction ? [{ type: 'text', text: instruction }] : []),
+      {
+        type: 'image_url', // OpenRouter / OpenAI format accepts data URLs in multimodal endpoints
+        image_url: { url: `data:${audio.mimeType};base64,${audio.base64Data}` },
+      },
+    ];
+  }
+
+  messages.push({
+    role: 'user',
+    content: userContent,
+  });
+
+  let turns = 0;
+  const MAX_TURNS = 25;
+
+  while (turns < MAX_TURNS) {
+    turns++;
+    let responseData: any = null;
+
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://control.nicoguzmandev.com',
+          'X-Title': 'Control Center Agent',
+        },
+        body: JSON.stringify({
+          model: chosenModel,
+          messages,
+          tools: OPENROUTER_TOOLS,
+          temperature: 0.2,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        yield { type: 'error', content: `OpenRouter error (${res.status}): ${errorText}` };
+        return;
+      }
+
+      responseData = await res.json();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      yield { type: 'error', content: `OpenRouter network error: ${msg}` };
+      return;
+    }
+
+    const choice = responseData?.choices?.[0];
+    const assistantMsg = choice?.message;
+
+    if (!assistantMsg) {
+      yield { type: 'error', content: 'Respuesta vacía de OpenRouter' };
+      return;
+    }
+
+    messages.push(assistantMsg);
+
+    const textContent = assistantMsg.content;
+    const toolCalls = assistantMsg.tool_calls;
+
+    if (!toolCalls || toolCalls.length === 0) {
+      yield { type: 'final', content: typeof textContent === 'string' ? textContent : 'Tarea completada.' };
+      return;
+    }
+
+    if (textContent && typeof textContent === 'string') {
+      yield { type: 'thought', content: textContent };
+    }
+
+    for (const call of toolCalls) {
+      const callName = call.function.name;
+      let parsedArgs: Record<string, unknown> = {};
+      try {
+        parsedArgs = JSON.parse(call.function.arguments || '{}');
+      } catch {
+        parsedArgs = {};
+      }
+
+      const toolCall: AgentToolCall = {
+        id: call.id,
+        name: callName,
+        args: parsedArgs,
+      };
+
+      yield {
+        type: 'tool_call',
+        content: `Executing ${callName}`,
+        toolName: callName,
+        toolArgs: toolCall.args,
+      };
+
+      const result = await executeTool(repo, toolCall);
+
+      yield {
+        type: 'tool_result',
+        content: `Result of ${callName}`,
+        toolName: callName,
+        toolOutput: result.output,
+      };
+
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: result.output,
+      });
+    }
+  }
+
+  yield { type: 'error', content: 'El agente alcanzó el límite máximo de pasos por turno (25).' };
+}
+
+// Gemini Runner
+async function* runGeminiLoop(
+  repo: string,
+  instruction: string,
+  apiKey: string,
+  modelName: string,
+  priorHistory: ChatTurnMessage[],
+  systemInstruction: string,
+  audio?: AudioInput
+): AsyncGenerator<AgentStepEvent> {
+  const ai = new GoogleGenAI({ apiKey });
+
+  // Preferred model or fallback pool
+  const preferred = modelName === 'auto' || !modelName ? 'gemini-2.5-flash' : modelName;
   const modelPool = [preferred, ...FALLBACK_MODEL_POOL.filter((m) => m !== preferred)];
   let activeModelIdx = 0;
 
@@ -132,9 +368,26 @@ Always inspect existing code before modifying it. Respond in the same language a
       });
     }
   }
+
+  const userParts: any[] = [];
+  if (instruction) {
+    userParts.push({ text: instruction });
+  }
+  if (audio?.base64Data) {
+    userParts.push({
+      inlineData: {
+        data: audio.base64Data,
+        mimeType: audio.mimeType || 'audio/webm',
+      },
+    });
+  }
+  if (userParts.length === 0) {
+    userParts.push({ text: 'Por favor procesá esta solicitud.' });
+  }
+
   contents.push({
     role: 'user',
-    parts: [{ text: instruction }],
+    parts: userParts,
   });
 
   let turns = 0;
@@ -145,7 +398,6 @@ Always inspect existing code before modifying it. Respond in the same language a
     let response = null;
     let lastError = '';
 
-    // Try models in pool; if all hit 429, wait and retry once
     for (let attempt = 0; attempt < modelPool.length + 2; attempt++) {
       const currentModel = modelPool[activeModelIdx % modelPool.length]!;
       try {
@@ -172,17 +424,15 @@ Always inspect existing code before modifying it. Respond in the same language a
         if (isQuotaOrOverload) {
           activeModelIdx++;
           const nextModel = modelPool[activeModelIdx % modelPool.length]!;
-          // If we cycled through all models in the pool, pause before retrying
           if (attempt >= modelPool.length - 1) {
             yield {
               type: 'thought',
-              content: `⏳ Límite de solicitudes por minuto alcanzado en el tier gratuito; esperando 10s y rotando a ${nextModel}...`,
+              content: `⏳ Límite de solicitudes por minuto alcanzado; esperando 10s y rotando a ${nextModel}...`,
             };
             await sleep(10_000);
           }
           continue;
         }
-        // Non-retriable error
         yield { type: 'error', content: `Model error (${currentModel}): ${msg}` };
         return;
       }
@@ -210,7 +460,6 @@ Always inspect existing code before modifying it. Respond in the same language a
       yield { type: 'thought', content: text };
     }
 
-    // Process all function calls requested by the model in this turn
     const responseParts = [];
     for (const call of functionCalls) {
       const callName = call.name ?? 'unknown_tool';
@@ -251,4 +500,42 @@ Always inspect existing code before modifying it. Respond in the same language a
   }
 
   yield { type: 'error', content: 'El agente alcanzó el límite máximo de pasos por turno (25).' };
+}
+
+export async function* runAgentLoop(options: RunAgentOptions): AsyncGenerator<AgentStepEvent> {
+  const {
+    repo,
+    instruction = '',
+    audio,
+    apiKey,
+    provider = 'gemini',
+    modelName = 'auto',
+    priorHistory = [],
+  } = options;
+
+  const isGeneral = !repo || repo === GENERAL_CONTEXT;
+
+  if (!isGeneral) {
+    const cloneStatus = await ensureRepoCloned(repo);
+    if (cloneStatus.error) {
+      yield { type: 'error', content: `Failed to clone ${repo} from GitHub: ${cloneStatus.error}` };
+      return;
+    }
+    if (cloneStatus.cloned) {
+      yield { type: 'thought', content: `☁️ Repositorio 'guzmannicolas/${repo}' clonado desde GitHub al VPS.` };
+    }
+  }
+
+  const systemInstruction = buildSystemInstruction(repo, isGeneral);
+
+  if (!apiKey) {
+    yield { type: 'error', content: `Falta configurar la API Key para el proveedor '${provider}'.` };
+    return;
+  }
+
+  if (provider === 'openrouter') {
+    yield* runOpenRouterLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction, audio);
+  } else {
+    yield* runGeminiLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction, audio);
+  }
 }
