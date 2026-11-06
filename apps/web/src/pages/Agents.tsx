@@ -169,6 +169,7 @@ export function AgentsPage() {
  // Speech Recognition / Voice Dictation state
  const [isListening, setIsListening] = useState<boolean>(false);
  const recognitionRef = useRef<any>(null);
+ const baseInputBeforeListeningRef = useRef<string>('');
 
  const bottomRef = useRef<HTMLDivElement>(null);
  const abortControllerRef = useRef<AbortController | null>(null);
@@ -369,25 +370,31 @@ export function AgentsPage() {
  recognition.continuous = true;
  recognition.interimResults = true;
 
+ baseInputBeforeListeningRef.current = input;
+
  recognition.onstart = () => {
  setIsListening(true);
  };
 
  recognition.onresult = (event: any) => {
- let transcript = '';
- for (let i = event.resultIndex; i < event.results.length; i++) {
+ let finalTranscript = '';
+ let interimTranscript = '';
+
+ for (let i = 0; i < event.results.length; i++) {
  const res = event.results[i];
  if (res && res[0]) {
- transcript += res[0].transcript;
+ if (res.isFinal) {
+ finalTranscript += res[0].transcript;
+ } else {
+ interimTranscript += res[0].transcript;
+ }
  }
  }
 
- if (transcript) {
- setInput((prev) => {
- const separator = prev && !prev.endsWith(' ') ? ' ' : '';
- return `${prev}${separator}${transcript}`.trim();
- });
- }
+ const fullSpoken = (finalTranscript + ' ' + interimTranscript).trim();
+ const base = baseInputBeforeListeningRef.current.trim();
+ const separator = base.length > 0 && fullSpoken.length > 0 ? ' ' : '';
+ setInput(`${base}${separator}${fullSpoken}`);
  };
 
  recognition.onerror = (err: any) => {
