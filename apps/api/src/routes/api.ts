@@ -4,11 +4,25 @@ import {
   CHECK_STATUSES, DatabaseConfig, ImprovementInput, ImprovementPatch, ModuleId, PRIORITIES, statusRank, worstStatus,
   type ImprovementView, type LearningProgressView,
   type CheckSnapshot, type CheckStatus, type DatabaseView, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview,
-  type ResultPoint, type TargetView,
+  type ResultPoint, type TargetView, type CloudflareOverview, type CloudflareDnsItem,
 } from '@cc/shared';
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
 import { subdomainsOf } from '../subdomains.js';
-import { fetchCloudflareDnsRecords } from '../cloudflare.js';
+import {
+  fetchCloudflareDnsRecords,
+  getCloudflareZones,
+  getZoneDnsRecords,
+  createCloudflareDnsRecord,
+  deleteCloudflareDnsRecord,
+  purgeCloudflareCache,
+  getCloudflareSecurityLevel,
+  setCloudflareSecurityLevel,
+} from '../cloudflare.js';
+import {
+  getDeploymentOverview,
+  getDeploymentById,
+  runDeployment,
+} from '../deploy/engine.js';
 import { runAgentLoop, type ChatTurnMessage } from '../agent/engine.js';
 import {
   GENERAL_CONTEXT,
@@ -30,6 +44,9 @@ import {
   enrichLeadSocials,
   guessSuggestedDemo,
 } from '../leads/scraper.js';
+import { generatePersonalizedPitch } from '../leads/pitch.js';
+import { createOutreachQueue, type OutreachJobData } from '../leads/outreach-queue.js';
+import { createRedis } from '../infra.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -51,9 +68,12 @@ const improvementView = (i: ImprovementRow): ImprovementView => ({
 const IdParam = z.object({ id: z.uuid() });
 
 export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
+  const outreachRedis = createRedis(process.env.REDIS_URL || 'redis://redis:6379');
+  const outreachQueue = createOutreachQueue(outreachRedis);
   // Every route in this plugin requires a logged-in user, and knows who it is.
   app.decorateRequest('user', null);
   app.addHook('preHandler', async (req, reply) => {
+    if (req.url.startsWith('/api/webhooks/')) return;
     const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
     if (!user) return reply.code(401).send({ error: 'Not logged in' });
     req.user = user;
@@ -595,6 +615,270 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   app.delete('/leads/:id', async (req) => {
     const { id } = req.params as { id: string };
     await prisma.lead.delete({ where: { id } });
+    return { ok: true };
+  });
+
+  // --- Automated Outreach & AI Pitch Engine ---
+
+  app.post('/leads/:id/generate-pitch', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const lead = await prisma.lead.findUnique({ where: { id } });
+    if (!lead) return reply.code(404).send({ error: 'Lead not found' });
+
+    const body = (req.body ?? {}) as { isFollowUp?: boolean; apiKey?: string };
+    const result = await generatePersonalizedPitch(
+      {
+        name: lead.name,
+        category: lead.category,
+        city: lead.city,
+        rating: lead.rating,
+        reviewsCount: lead.reviewsCount,
+        suggestedDemo: lead.suggestedDemo,
+        address: lead.address,
+      },
+      Boolean(body.isFollowUp),
+      body.apiKey
+    );
+
+    return { ...result, leadId: lead.id };
+  });
+
+  app.get('/leads/outreach/status', async () => {
+    const [waiting, active, completed, failed, delayed, isPaused] = await Promise.all([
+      outreachQueue.getWaitingCount(),
+      outreachQueue.getActiveCount(),
+      outreachQueue.getCompletedCount(),
+      outreachQueue.getFailedCount(),
+      outreachQueue.getDelayedCount(),
+      outreachQueue.isPaused(),
+    ]);
+
+    return {
+      status: {
+        waiting,
+        active,
+        completed,
+        failed,
+        delayed,
+        isPaused,
+      },
+    };
+  });
+
+  const QueueOutreachInput = z.object({
+    leadIds: z.array(z.string()).min(1),
+    customPitch: z.string().optional(),
+    isFollowUp: z.boolean().optional(),
+  });
+
+  app.post('/leads/outreach/queue', async (req, reply) => {
+    const parsed = QueueOutreachInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid queue parameters' });
+
+    const { leadIds, customPitch, isFollowUp } = parsed.data;
+    const leads = await prisma.lead.findMany({
+      where: {
+        id: { in: leadIds },
+        phoneFormatted: { not: null },
+      },
+    });
+
+    if (leads.length === 0) {
+      return reply.code(400).send({ error: 'None of the selected leads have a valid phone number' });
+    }
+
+    const queuedJobs = [];
+    for (const l of leads) {
+      const jobData: OutreachJobData = {
+        leadId: l.id,
+        phone: l.phoneFormatted ?? l.phone ?? '',
+        name: l.name,
+        category: l.category,
+        city: l.city,
+        suggestedDemo: l.suggestedDemo,
+        customPitch,
+        isFollowUp,
+      };
+
+      const job = await outreachQueue.add(`outreach-${l.id}`, jobData);
+      queuedJobs.push({ jobId: job.id, leadId: l.id, name: l.name });
+    }
+
+    return { ok: true, queuedCount: queuedJobs.length, jobs: queuedJobs };
+  });
+
+  app.post('/leads/outreach/pause', async () => {
+    await outreachQueue.pause();
+    return { ok: true, isPaused: true };
+  });
+
+  app.post('/leads/outreach/resume', async () => {
+    await outreachQueue.resume();
+    return { ok: true, isPaused: false };
+  });
+
+  // --- Deployments & CI/CD Routes -----------------------------------------------------------------
+
+  app.post('/webhooks/deploy/:repo', async (req, reply) => {
+    const { repo } = req.params as { repo: string };
+    const secretParam = (req.query as Record<string, string>)?.secret || (req.headers['x-deploy-secret'] as string | undefined);
+    const expectedSecret = process.env.DEPLOY_SECRET;
+    if (expectedSecret && secretParam !== expectedSecret) {
+      return reply.code(401).send({ error: 'Invalid webhook secret' });
+    }
+
+    const body = (req.body ?? {}) as {
+      ref?: string;
+      head_commit?: { id?: string; message?: string; author?: { name?: string } };
+    };
+    const branch = body.ref ? body.ref.replace('refs/heads/', '') : 'main';
+    const commitHash = body.head_commit?.id ? body.head_commit.id.slice(0, 7) : null;
+    const commitMessage = body.head_commit?.message ?? null;
+    const author = body.head_commit?.author?.name ?? 'GitHub Webhook';
+
+    const deployment = await runDeployment({
+      repo,
+      branch,
+      trigger: 'webhook',
+      commitHash,
+      commitMessage,
+      author,
+    });
+
+    return { ok: true, deployment };
+  });
+
+  app.get('/deployments', async (req) => {
+    const host = req.headers.host || '127.0.0.1:4100';
+    const proto = (req.headers['x-forwarded-proto'] as string | undefined) || 'https';
+    const origin = `${proto}://${host}`;
+    return getDeploymentOverview(origin);
+  });
+
+  app.get('/deployments/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const deployment = getDeploymentById(id);
+    if (!deployment) return reply.code(404).send({ error: 'Deployment not found' });
+    return deployment;
+  });
+
+  app.post('/deployments/trigger', async (req, reply) => {
+    const TriggerInput = z.object({
+      repo: z.string().min(1),
+      branch: z.string().default('main'),
+    });
+    const parsed = TriggerInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid deployment input' });
+
+    const deployment = await runDeployment({
+      repo: parsed.data.repo,
+      branch: parsed.data.branch,
+      trigger: 'manual',
+      author: req.user?.email || 'Manual Dashboard Trigger',
+    });
+
+    return { ok: true, deployment };
+  });
+
+  // --- Cloudflare Operations Routes ---------------------------------------------------------------
+
+  app.get('/cloudflare/overview', async (req): Promise<CloudflareOverview> => {
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    if (!apiToken) {
+      return {
+        configured: false,
+        zones: [],
+        activeZoneId: null,
+        dnsRecords: [],
+        securityLevel: 'medium',
+      };
+    }
+
+    const zones = await getCloudflareZones(apiToken);
+    const query = req.query as { zoneId?: string };
+    const activeZone = zones.find((z) => z.id === query.zoneId) || zones[0];
+    const activeZoneId = activeZone ? activeZone.id : null;
+
+    let dnsRecords: CloudflareDnsItem[] = [];
+    let securityLevel = 'medium';
+
+    if (activeZoneId) {
+      [dnsRecords, securityLevel] = await Promise.all([
+        getZoneDnsRecords(apiToken, activeZoneId),
+        getCloudflareSecurityLevel(apiToken, activeZoneId),
+      ]);
+    }
+
+    return {
+      configured: true,
+      zones,
+      activeZoneId,
+      dnsRecords,
+      securityLevel,
+    };
+  });
+
+  app.post('/cloudflare/purge-cache', async (req, reply) => {
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const PurgeInput = z.object({
+      zoneId: z.string().min(1),
+      purgeEverything: z.boolean().default(true),
+      files: z.array(z.string()).optional(),
+    });
+    const parsed = PurgeInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid purge parameters' });
+
+    const res = await purgeCloudflareCache(
+      apiToken,
+      parsed.data.zoneId,
+      parsed.data.purgeEverything,
+      parsed.data.files
+    );
+    if (!res.success) return reply.code(500).send({ error: res.error });
+    return { ok: true };
+  });
+
+  app.post('/cloudflare/dns', async (req, reply) => {
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const DnsCreateInput = z.object({
+      zoneId: z.string().min(1),
+      type: z.enum(['A', 'AAAA', 'CNAME', 'TXT', 'MX']),
+      name: z.string().min(1),
+      content: z.string().min(1),
+      proxied: z.boolean().default(false),
+      ttl: z.number().default(1),
+      comment: z.string().optional(),
+    });
+    const parsed = DnsCreateInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid DNS record input' });
+
+    const res = await createCloudflareDnsRecord(apiToken, parsed.data.zoneId, parsed.data);
+    if (!res.success) return reply.code(500).send({ error: res.error });
+    return { ok: true, record: res.record };
+  });
+
+  app.delete('/cloudflare/dns/:recordId', async (req, reply) => {
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const { recordId } = req.params as { recordId: string };
+    const query = req.query as { zoneId?: string };
+    if (!query.zoneId) return reply.code(400).send({ error: 'zoneId query param required' });
+
+    const res = await deleteCloudflareDnsRecord(apiToken, query.zoneId, recordId);
+    if (!res.success) return reply.code(500).send({ error: res.error });
+    return { ok: true };
+  });
+
+  app.patch('/cloudflare/security-level', async (req, reply) => {
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    const SecInput = z.object({
+      zoneId: z.string().min(1),
+      level: z.enum(['off', 'essentially_off', 'low', 'medium', 'high', 'under_attack']),
+    });
+    const parsed = SecInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid security level input' });
+
+    const res = await setCloudflareSecurityLevel(apiToken, parsed.data.zoneId, parsed.data.level);
+    if (!res.success) return reply.code(500).send({ error: res.error });
     return { ok: true };
   });
 };

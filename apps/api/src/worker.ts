@@ -4,6 +4,7 @@ import { loadEnv } from './env.js';
 import { createPrisma, createRedis } from './infra.js';
 import { runMonitor } from './runner.js';
 import { QUEUE, syncSchedules, type RunMonitorJob } from './schedules.js';
+import { createOutreachWorker } from './leads/outreach-queue.js';
 
 const env = loadEnv();
 const log = pino({ level: env.LOG_LEVEL });
@@ -26,6 +27,10 @@ const worker = new Worker<RunMonitorJob>(
 );
 worker.on('failed', (job, err) => log.error({ jobId: job?.id, err }, 'job failed'));
 
+// Background sales outreach queue worker (spaced 60-120s per contact)
+const outreachRedis = createRedis(env.REDIS_URL);
+const outreachWorker = createOutreachWorker(outreachRedis, prisma, log);
+
 // New, changed or removed monitors are picked up within a minute, without restarting.
 async function sync() {
   try {
@@ -44,7 +49,9 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     log.info({ signal }, 'shutting down');
     clearInterval(timer);
     await worker.close(); // lets running checks finish
+    await outreachWorker.close();
     await queue.close();
+    await outreachRedis.quit();
     await prisma.$disconnect();
     process.exit(0);
   });

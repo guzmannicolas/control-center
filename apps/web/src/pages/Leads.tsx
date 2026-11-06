@@ -60,6 +60,10 @@ export function LeadsPage() {
   const [outreachIndex, setOutreachIndex] = useState(0);
   const [pitchTemplate, setPitchTemplate] = useState(DEFAULT_PITCH_TEMPLATE);
   const [showPitchEditor, setShowPitchEditor] = useState(false);
+  const [generatingPitchId, setGeneratingPitchId] = useState<string | null>(null);
+  const [aiPitchOverride, setAiPitchOverride] = useState<string | null>(null);
+  const [queueStatus, setQueueStatus] = useState<{ waiting: number; active: number; completed: number; isPaused: boolean } | null>(null);
+  const [queuingCampaign, setQueuingCampaign] = useState(false);
 
   // Form states with dropdowns
   const [category, setCategory] = useState(PRESET_NICHES[4]!.value);
@@ -291,6 +295,69 @@ export function LeadsPage() {
       .replace(/{demo}/g, lead.suggestedDemo ?? 'https://v0-e-commerce-storefront-design.vercel.app');
   };
 
+  const loadQueueStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/outreach/status`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setQueueStatus(data.status);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    void loadQueueStatus();
+    const interval = setInterval(loadQueueStatus, 10_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleGenerateAiPitch = async (lead: LeadView) => {
+    setGeneratingPitchId(lead.id);
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/${lead.id}/generate-pitch`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isFollowUp: lead.status === 'contacted' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.pitch) setAiPitchOverride(data.pitch);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGeneratingPitchId(null);
+    }
+  };
+
+  const handleQueueCampaign = async (leadIds: string[]) => {
+    if (queuingCampaign || leadIds.length === 0) return;
+    setQueuingCampaign(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/outreach/queue`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadIds }),
+      });
+      if (res.ok) {
+        await loadQueueStatus();
+        await loadLeads();
+        alert(`🚀 ¡Campaña iniciada! Se encolaron ${leadIds.length} mensajes con despacho espaciado en segundo plano.`);
+      } else {
+        const errJson = await res.json();
+        alert(`Error: ${errJson.error || 'No se pudo iniciar la campaña'}`);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setQueuingCampaign(false);
+    }
+  };
+
   const handleOpenWhatsAppAndAdvance = (lead: LeadView) => {
     const rawDigits = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : '';
     if (!rawDigits) return;
@@ -306,7 +373,7 @@ export function LeadsPage() {
 
     // Advance queue
     if (outreachIndex + 1 < outreachQueue.length) {
-      setOutreachIndex((i) => i + 1);
+      setOutreachIndex((i) => i + 1); setAiPitchOverride(null);
     }
   };
 
@@ -324,11 +391,51 @@ export function LeadsPage() {
         </div>
 
         {/* Global Action Tools */}
-        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {queueStatus && (queueStatus.waiting > 0 || queueStatus.active > 0) && (
+            <div style={{
+              background: '#0f172a',
+              border: '1px solid #0284c7',
+              color: '#38bdf8',
+              borderRadius: '8px',
+              padding: '0.45rem 0.8rem',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+            }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#38bdf8', animation: 'pulse 1.5s infinite' }} />
+              Campaña activa: {queueStatus.waiting} en cola ({queueStatus.active} enviando)
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void handleQueueCampaign(outreachQueue.map((l) => l.id))}
+            disabled={outreachQueue.length === 0 || queuingCampaign}
+            title="Despachar mensajes automáticamente en segundo plano con intervalos seguros de 60-120s"
+            style={{
+              background: '#4338ca',
+              border: '1px solid #6366f1',
+              color: '#ffffff',
+              borderRadius: '8px',
+              padding: '0.55rem 1rem',
+              fontSize: '0.84rem',
+              fontWeight: 700,
+              cursor: outreachQueue.length > 0 ? 'pointer' : 'not-allowed',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+            }}
+          >
+            {queuingCampaign ? '⏳ Encolando...' : `⚡ Auto-Despachar Cola (${outreachQueue.length})`}
+          </button>
+
           <button
             type="button"
             onClick={() => {
-              setOutreachIndex(0);
+              setOutreachIndex(0); setAiPitchOverride(null);
               setOutreachOpen(true);
             }}
             disabled={outreachQueue.length === 0}
@@ -1122,18 +1229,43 @@ export function LeadsPage() {
                   }}
                 />
               ) : (
-                <div
-                  style={{
-                    background: '#0b0f19',
-                    border: '1px solid #1e293b',
-                    borderRadius: '8px',
-                    padding: '0.75rem',
-                    color: '#e2e8f0',
-                    fontSize: '0.84rem',
-                    lineHeight: '1.4',
-                  }}
-                >
-                  {buildPitch(currentOutreachLead)}
+                <div>
+                  <div
+                    style={{
+                      background: '#0b0f19',
+                      border: '1px solid #1e293b',
+                      borderRadius: '8px',
+                      padding: '0.75rem',
+                      color: '#e2e8f0',
+                      fontSize: '0.84rem',
+                      lineHeight: '1.4',
+                    }}
+                  >
+                    {aiPitchOverride || buildPitch(currentOutreachLead)}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.4rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerateAiPitch(currentOutreachLead)}
+                      disabled={generatingPitchId === currentOutreachLead.id}
+                      style={{
+                        background: '#1e3a8a',
+                        border: '1px solid #2563eb',
+                        color: '#bfdbfe',
+                        borderRadius: '6px',
+                        padding: '0.3rem 0.7rem',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                      }}
+                    >
+                      {generatingPitchId === currentOutreachLead.id ? '⏳ Redactando...' : '✨ Regenerar Pitch con IA'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
