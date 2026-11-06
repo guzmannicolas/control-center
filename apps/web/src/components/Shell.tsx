@@ -18,18 +18,20 @@ export function Shell({ user }: { user: User }) {
   const queryClient = useQueryClient();
   const logout = useMutation({
     mutationFn: api.logout,
-    // Reset (not clear) "who am I": it refetches, gets 401 and shows the login screen. Then drop the private data.
     onSettled: async () => {
       await queryClient.resetQueries({ queryKey: ['me'] });
       queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' });
     },
   });
-  // A section also owns the paths below it (/learning/docker belongs to /learning).
+
   const current = SECTIONS.find((s) => s.path === path) ?? SECTIONS.find((s) => s.path !== '/' && path.startsWith(`${s.path}/`));
   const Page = current?.Page ?? NotFound;
 
+  const version = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
+  const buildTime = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
+
   return (
-    <div className="min-h-dvh md:flex">
+    <div className="min-h-dvh md:flex relative">
       <nav
         aria-label="Sections"
         className="sticky top-0 z-20 border-b border-line bg-page/95 backdrop-blur md:flex md:h-dvh md:w-56 md:shrink-0 md:flex-col md:border-r md:border-b-0"
@@ -64,11 +66,22 @@ export function Shell({ user }: { user: User }) {
         </div>
       </nav>
 
-      <main className="min-w-0 flex-1 px-4 pb-16 md:px-8">
+      <main className="min-w-0 flex-1 px-4 pb-20 md:px-8">
         <div className="mx-auto max-w-5xl">
           <Page />
         </div>
       </main>
+
+      {/* Mini sticky footer - bottom right version pill */}
+      <footer className="fixed bottom-2 right-3 z-30 pointer-events-none">
+        <div
+          title={buildTime ? `Deploy: ${buildTime}` : 'Version'}
+          className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line bg-surface/90 px-2.5 py-1 text-[10px] font-mono font-medium text-muted shadow-sm backdrop-blur hover:text-ink hover:border-accent transition"
+        >
+          <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>v.{version}</span>
+        </div>
+      </footer>
     </div>
   );
 }

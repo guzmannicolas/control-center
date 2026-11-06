@@ -344,77 +344,73 @@ export function AgentsPage() {
  setExpandedTools((prev) => ({ ...prev, [key]: !prev[key] }));
  }
 
- // --- Voice Dictation (Transcribes spoken words straight into the input textarea) ---
- function toggleListening() {
- if (isListening) {
- try {
- recognitionRef.current?.stop();
- } catch {
- // ignore
- }
- setIsListening(false);
- return;
- }
+ // --- Voice Dictation (Listens, then pastes final transcribed text on stop/finish) ---
+  function toggleListening() {
+    if (isListening) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // ignore
+      }
+      setIsListening(false);
+      return;
+    }
 
- const SpeechRecognition =
- (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
- if (!SpeechRecognition) {
- alert('Tu navegador no soporta reconocimiento de voz nativo (Web Speech API). Podés usar Google Chrome o Edge.');
- return;
- }
+    if (!SpeechRecognition) {
+      alert('Tu navegador no soporta reconocimiento de voz nativo (Web Speech API). Podés usar Google Chrome o Edge.');
+      return;
+    }
 
- try {
- const recognition = new SpeechRecognition();
- recognition.lang = 'es-ES';
- recognition.continuous = true;
- recognition.interimResults = true;
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'es-ES';
+      recognition.continuous = false;
+      recognition.interimResults = false;
 
- baseInputBeforeListeningRef.current = input;
+      baseInputBeforeListeningRef.current = input;
 
- recognition.onstart = () => {
- setIsListening(true);
- };
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
 
- recognition.onresult = (event: any) => {
- let finalTranscript = '';
- let interimTranscript = '';
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const res = event.results[i];
+          if (res && res[0] && res[0].transcript) {
+            transcript += res[0].transcript;
+          }
+        }
 
- for (let i = 0; i < event.results.length; i++) {
- const res = event.results[i];
- if (res && res[0]) {
- if (res.isFinal) {
- finalTranscript += res[0].transcript;
- } else {
- interimTranscript += res[0].transcript;
- }
- }
- }
+        const spoken = transcript.trim();
+        if (spoken) {
+          const base = baseInputBeforeListeningRef.current.trim();
+          const separator = base.length > 0 ? ' ' : '';
+          setInput(`${base}${separator}${spoken}`);
+        }
+      };
 
- const fullSpoken = (finalTranscript + ' ' + interimTranscript).trim();
- const base = baseInputBeforeListeningRef.current.trim();
- const separator = base.length > 0 && fullSpoken.length > 0 ? ' ' : '';
- setInput(`${base}${separator}${fullSpoken}`);
- };
+      recognition.onerror = (err: any) => {
+        console.error('Speech recognition error:', err);
+        setIsListening(false);
+      };
 
- recognition.onerror = (err: any) => {
- console.error('Speech recognition error:', err);
- setIsListening(false);
- };
+      recognition.onend = () => {
+        setIsListening(false);
+      };
 
- recognition.onend = () => {
- setIsListening(false);
- };
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error('Failed to start speech recognition:', err);
+      setIsListening(false);
+    }
+  }
 
- recognitionRef.current = recognition;
- recognition.start();
- } catch (err) {
- console.error('Failed to start speech recognition:', err);
- setIsListening(false);
- }
- }
-
- async function sendPrompt(promptText: string, overrideRepo?: string) {
+  async function sendPrompt(promptText: string, overrideRepo?: string) {
  const trimmed = promptText.trim();
  if (!trimmed || isRunning) return;
 
