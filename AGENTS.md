@@ -1,44 +1,44 @@
 # AGENTS.md — Control Center
 
-Guía de contexto para asistentes de IA y agentes de desarrollo sobre el repositorio \control-center\.
+Context specification guide for AI assistants and development agents working on the `control-center` repository.
 
-## 1. Visión General del Proyecto
-Centro de control y monitoreo auto-hospedado para la infraestructura personal de Nicolás Guzmán: sitios web, dominios, deployments de Vercel, bases de datos y servidores VPS. Realiza chequeos periódicos, abre incidentes ante fallas y provee un dashboard interactivo unificado.
+## 1. Project Overview
+Self-hosted monitoring and control hub for Nicolás Guzmán's online infrastructure: domains, websites, Vercel deployments, databases, and VPS servers. Performs scheduled background checks, logs incidents when failures occur, and provides a unified dashboard.
 
-- **Producción:** API interna en \127.0.0.1:4100\ (\docker-compose.vps.yml\), pública vía Cloudflare en \https://control-api.nicoguzmandev.com\.
-- **Dashboard:** React app servida con cookies de sesión seguras (\credentials: include\).
+- **Production:** Internal API listening on `127.0.0.1:4100` (`docker-compose.vps.yml`), published via Cloudflare Tunnel at `https://control-api.nicoguzmandev.com`.
+- **Dashboard:** Single-user React app served with secure session cookies (`credentials: include`).
 
 ---
 
-## 2. Arquitectura del Monorepo (pnpm workspace)
+## 2. Monorepo Architecture (pnpm workspace)
 
-\\\
+```
 control-center/
 ├── apps/
-│   ├── api/          # Fastify API + checkers + scheduler (BullMQ + Redis)
+│   ├── api/          # Fastify API + health checkers + scheduler (BullMQ + Redis)
 │   └── web/          # React 19 + Vite 8 + TanStack Query + Tailwind CSS 4 Dashboard
 ├── packages/
-│   └── shared/       # Esquemas de validación Zod y tipos compartidos
-├── docker/           # Dockerfiles de producción (app.Dockerfile)
-├── docker-compose.yml     # Definición base (Postgres, Redis, tools)
-└── docker-compose.vps.yml # Override de producción en VPS (red cms, mounts)
-\\\
+│   └── shared/       # Shared Zod validation schemas and TypeScript types
+├── docker/           # Production container definitions (app.Dockerfile)
+├── docker-compose.yml     # Base definition (Postgres, Redis, tools)
+└── docker-compose.vps.yml # Production override on VPS (cms network, log mounts)
+```
 
 ---
 
-## 3. Tech Stack y Herramientas
-- **Lenguaje:** TypeScript 6.
+## 3. Tech Stack & Tools
+- **Language:** TypeScript 6.
 - **Backend:** Node.js, Fastify 5, Prisma 7 (@prisma/adapter-pg), BullMQ 6, Redis 7 (ioredis), PostgreSQL 16 (pg).
 - **Dashboard:** React 19, Vite 8, TanStack React Query 5, Tailwind CSS 4.
-- **Checkers disponibles:** \http-uptime\, \ssl-expiry\, \domain-expiry\ (RDAP), \postgres-health\, \edis-health\, \ackup-age\.
-- **Seguridad:** Passwords hasheadas con \scrypt\ en tiempo constante. Sesiones en cookies \HttpOnly\, \Secure\, \SameSite=Lax\. Rate limit en Redis.
+- **Available Checkers:** `http-uptime`, `ssl-expiry`, `domain-expiry` (RDAP), `postgres-health`, `redis-health`, `backup-age`.
+- **Security:** Constant-time salted scrypt password hashing. `HttpOnly`, `Secure`, `SameSite=Lax` session cookies. Redis-based brute force protection.
 
 ---
 
-## 4. Comandos Clave (usando contenedor tools de Docker)
+## 4. Key Commands (via Docker tools container)
 
-\\\ash
-# Entorno con Docker (Recomendado)
+```bash
+# Docker Development Environment
 docker compose up -d postgres redis
 docker compose run --rm tools pnpm install
 docker compose run --rm tools pnpm typecheck
@@ -48,17 +48,17 @@ docker compose run --rm tools pnpm --filter @cc/api db:seed
 docker compose run --rm --service-ports tools pnpm dev:api
 docker compose run --rm tools pnpm dev:worker
 
-# En el VPS (Despliegue de Producción)
+# Production VPS Deployment
 docker compose up -d --build
 docker compose ps
 docker compose logs -f worker
 docker compose logs -f api
-\\\
+```
 
 ---
 
-## 5. Gotchas y Decisiones Arquitectónicas
-1. **Aislamiento de Monitoreo:** Control Center tiene su propia base de datos Postgres y Redis, aisladas de los servicios que audita.
-2. **Rol de Base de Datos para Monitoreo:** Las bases auditadas usan un usuario \cc_monitor\ limitado al rol de sistema \pg_monitor\; nunca tiene permisos de lectura de datos de usuarios.
-3. **Checkers a Prueba de Fallos:** Un checker que falle, crashee o cuelgue reporta estado \error\ en lugar de tumbar el proceso del worker.
-4. **Git:** Rama \main\ en \https://github.com/guzmannicolas/control-center.git\.
+## 5. Architectural Gotchas & Decisions
+1. **Isolated Storage:** Control Center operates its own independent Postgres and Redis instances, isolated from the systems it observes.
+2. **Database Health Checker Role:** Monitored databases configure a read-only `cc_monitor` user assigned to system role `pg_monitor`; it cannot read user tables.
+3. **Resilient Checkers:** Checker crashes or timeouts result in an `error` status rather than bringing down the worker service.
+4. **Git:** Remote repository at `https://github.com/guzmannicolas/control-center.git`, branch `main`.
