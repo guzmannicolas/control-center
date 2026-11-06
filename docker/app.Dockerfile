@@ -23,6 +23,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
       \( -name '*.mysql.*' -o -name '*.sqlite.*' -o -name '*.sqlserver.*' -o -name '*.cockroachdb.*' \) -delete
 
 FROM node:22-alpine AS runtime
+RUN apk add --no-cache git bash curl openssh-client
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /prod/api/package.json ./
