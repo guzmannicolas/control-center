@@ -64,6 +64,14 @@ export function LeadsPage() {
   const [aiPitchOverride, setAiPitchOverride] = useState<string | null>(null);
   const [queueStatus, setQueueStatus] = useState<{ waiting: number; active: number; completed: number; isPaused: boolean } | null>(null);
   const [queuingCampaign, setQueuingCampaign] = useState(false);
+  const [waModalOpen, setWaModalOpen] = useState(false);
+  const [waStatus, setWaStatus] = useState<{ state: string; qrDataUrl: string | null; phoneNumber: string | null; userName: string | null; error?: string | null }>({
+    state: 'disconnected',
+    qrDataUrl: null,
+    phoneNumber: null,
+    userName: null,
+  });
+  const [waLoading, setWaLoading] = useState(false);
 
   // Form states with dropdowns
   const [category, setCategory] = useState(PRESET_NICHES[4]!.value);
@@ -295,6 +303,62 @@ export function LeadsPage() {
       .replace(/{demo}/g, lead.suggestedDemo ?? 'https://v0-e-commerce-storefront-design.vercel.app');
   };
 
+  const loadWhatsAppStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/whatsapp/status`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setWaStatus(data.status);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleConnectWhatsApp = async () => {
+    setWaLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/whatsapp/connect`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWaStatus(data.status);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setWaLoading(false);
+    }
+  };
+
+  const handleDisconnectWhatsApp = async () => {
+    setWaLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/whatsapp/disconnect`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWaStatus(data.status);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setWaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadWhatsAppStatus();
+    const interval = setInterval(() => {
+      void loadWhatsAppStatus();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const loadQueueStatus = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/leads/outreach/status`, { credentials: 'include' });
@@ -409,6 +473,42 @@ export function LeadsPage() {
               Campaña activa: {queueStatus.waiting} en cola ({queueStatus.active} enviando)
             </div>
           )}
+
+          {/* WhatsApp Connection Button */}
+          <button
+            type="button"
+            onClick={() => {
+              void loadWhatsAppStatus();
+              setWaModalOpen(true);
+            }}
+            style={{
+              background: waStatus.state === 'connected' ? '#064e3b' : '#1e293b',
+              border: `1px solid ${waStatus.state === 'connected' ? '#059669' : '#334155'}`,
+              color: waStatus.state === 'connected' ? '#34d399' : '#94a3b8',
+              borderRadius: '8px',
+              padding: '0.55rem 0.9rem',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+            }}
+          >
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: waStatus.state === 'connected' ? '#34d399' : waStatus.state === 'waiting_qr' ? '#facc15' : '#ef4444',
+            }} />
+            <span>
+              {waStatus.state === 'connected'
+                ? `WhatsApp (${waStatus.phoneNumber ?? 'Activo'})`
+                : waStatus.state === 'waiting_qr'
+                ? 'Escanear QR de WhatsApp'
+                : 'Conectar WhatsApp'}
+            </span>
+          </button>
 
           <button
             type="button"
@@ -1086,6 +1186,176 @@ export function LeadsPage() {
           </table>
         </div>
       </div>
+
+      {/* WhatsApp Gateway Connection Modal */}
+      {waModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              background: '#0f172a',
+              border: '1px solid #1e293b',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '440px',
+              padding: '1.5rem',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.25rem',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span style={{ fontSize: '1.4rem' }}>📱</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc', fontWeight: 700 }}>
+                    Conectar WhatsApp
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8' }}>
+                    Vinculá tu línea secundaria de WhatsApp Business
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWaModalOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                  padding: '0.2rem',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {waStatus.state === 'connected' ? (
+              <div style={{
+                background: '#064e3b20',
+                border: '1px solid #059669',
+                borderRadius: '12px',
+                padding: '1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.75rem',
+                textAlign: 'center',
+              }}>
+                <span style={{ fontSize: '2rem' }}>✅</span>
+                <div>
+                  <div style={{ color: '#34d399', fontWeight: 700, fontSize: '1rem' }}>
+                    ¡WhatsApp Conectado y Listo!
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                    Línea vinculada: <strong>{waStatus.phoneNumber}</strong> {waStatus.userName ? `(${waStatus.userName})` : ''}
+                  </div>
+                  <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '0.5rem 0 0' }}>
+                    Las campañas se despacharán automáticamente desde este número. Las respuestas te llegarán directamente a tu WhatsApp Business en el celular.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleDisconnectWhatsApp()}
+                  disabled={waLoading}
+                  style={{
+                    marginTop: '0.5rem',
+                    background: '#450a0a',
+                    border: '1px solid #991b1b',
+                    color: '#f87171',
+                    borderRadius: '8px',
+                    padding: '0.45rem 1rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {waLoading ? 'Desconectando...' : 'Desconectar esta línea'}
+                </button>
+              </div>
+            ) : waStatus.state === 'waiting_qr' && waStatus.qrDataUrl ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '1rem',
+                textAlign: 'center',
+              }}>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#cbd5e1' }}>
+                  Abrí WhatsApp Business en tu celular &rarr; <strong>Dispositivos vinculados</strong> &rarr; <strong>Vincular dispositivo</strong> y escaneá este código:
+                </p>
+
+                <div style={{
+                  background: '#ffffff',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  display: 'inline-block',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                }}>
+                  <img
+                    src={waStatus.qrDataUrl}
+                    alt="WhatsApp QR Code"
+                    style={{ width: '220px', height: '220px', display: 'block' }}
+                  />
+                </div>
+
+                <div style={{ fontSize: '0.75rem', color: '#facc15' }}>
+                  ⏳ Esperando escaneo... (el código se actualiza automáticamente)
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '1rem',
+                textAlign: 'center',
+                padding: '1rem 0',
+              }}>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1' }}>
+                  Para enviar mensajes de forma 100% automática, vinculá la sesión escaneando un código QR con tu WhatsApp Business.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => void handleConnectWhatsApp()}
+                  disabled={waLoading}
+                  style={{
+                    background: '#059669',
+                    border: 'none',
+                    color: '#ffffff',
+                    borderRadius: '8px',
+                    padding: '0.6rem 1.25rem',
+                    fontSize: '0.88rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                  }}
+                >
+                  {waLoading ? 'Iniciando sesión...' : '📲 Generar Código QR de Conexión'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Automated Outreach Assistant Modal */}
       {outreachOpen && currentOutreachLead && (

@@ -3,6 +3,7 @@ import { pino } from 'pino';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { Redis } from 'ioredis';
 import { generatePersonalizedPitch } from './pitch.js';
+import { sendWhatsAppMessage, getWhatsAppStatus } from './whatsapp.js';
 
 export const OUTREACH_QUEUE_NAME = 'leads-outreach';
 
@@ -61,37 +62,28 @@ export function createOutreachWorker(
       }
 
       // 2. Dispatch mechanism:
-      // When a headless WhatsApp gateway (like Evolution API or Baileys) is configured via env, send via HTTP.
-      // Otherwise, record the pitch and status as 'contacted' with dispatched metadata.
-      const whatsappGatewayUrl = process.env.WHATSAPP_GATEWAY_URL;
-      const gatewayApiKey = process.env.WHATSAPP_GATEWAY_API_KEY;
+      // A) Direct native WhatsApp connection via Baileys socket if connected
+      // B) Or external gateway URL if configured
+      let dispatchSuccess = false;
+      let dispatchLog = 'Encolado';
 
-      let dispatchSuccess = true;
-      let dispatchLog = 'Prepared and queued in outreach pipeline';
-
-      if (whatsappGatewayUrl) {
-        try {
-          const res = await fetch(`${whatsappGatewayUrl}/message/sendText`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(gatewayApiKey ? { apikey: gatewayApiKey } : {}),
-            },
-            body: JSON.stringify({
-              number: ctx.phone.replace(/\D/g, ''),
-              text: pitchText,
-            }),
-          });
-          if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Gateway returned HTTP ${res.status}: ${errText}`);
-          }
-          dispatchLog = 'Sent automatically via WhatsApp Gateway';
-        } catch (err) {
+      const waStatus = getWhatsAppStatus();
+      if (waStatus.state === 'connected') {
+        const sendResult = await sendWhatsAppMessage(ctx.phone, pitchText);
+        if (sendResult.success) {
+          dispatchSuccess = true;
+          dispatchLog = 'Enviado automáticamente por WhatsApp';
+          log.info({ leadId, phone: ctx.phone }, 'WhatsApp message delivered successfully');
+        } else {
           dispatchSuccess = false;
-          dispatchLog = `Gateway send failed: ${err instanceof Error ? err.message : String(err)}`;
-          log.error({ leadId, err }, dispatchLog);
+          dispatchLog = `Error al enviar WhatsApp: ${sendResult.error}`;
+          log.error({ leadId, err: sendResult.error }, dispatchLog);
         }
+      } else {
+        // WhatsApp not connected on server
+        dispatchSuccess = false;
+        dispatchLog = 'WhatsApp desconectado en el servidor (requiere vincular QR)';
+        log.warn({ leadId }, dispatchLog);
       }
 
       // 3. Update lead in database
@@ -99,14 +91,13 @@ export function createOutreachWorker(
       await prisma.lead.update({
         where: { id: leadId },
         data: {
-          status: isFollowUp ? 'contacted' : 'contacted',
-          contactedAt: now,
+          status: dispatchSuccess ? 'contacted' : undefined,
+          contactedAt: dispatchSuccess ? now : undefined,
           notes: `${dispatchLog} (${now.toLocaleDateString('es-AR')})`,
           metadata: {
             lastPitchSent: pitchText,
             dispatchedAt: now.toISOString(),
             channel: 'whatsapp',
-            gatewayUsed: Boolean(whatsappGatewayUrl),
             success: dispatchSuccess,
           },
         },

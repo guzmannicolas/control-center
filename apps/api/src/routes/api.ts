@@ -46,6 +46,13 @@ import {
 } from '../leads/scraper.js';
 import { generatePersonalizedPitch } from '../leads/pitch.js';
 import { createOutreachQueue, type OutreachJobData } from '../leads/outreach-queue.js';
+import {
+  initWhatsAppClient,
+  getWhatsAppStatus,
+  disconnectWhatsApp,
+  sendWhatsAppMessage,
+  setPrismaForWhatsApp,
+} from '../leads/whatsapp.js';
 import { createRedis } from '../infra.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
@@ -70,6 +77,8 @@ const IdParam = z.object({ id: z.uuid() });
 export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
   const outreachRedis = createRedis(process.env.REDIS_URL || 'redis://redis:6379');
   const outreachQueue = createOutreachQueue(outreachRedis);
+  setPrismaForWhatsApp(prisma);
+  void initWhatsAppClient();
   // Every route in this plugin requires a logged-in user, and knows who it is.
   app.decorateRequest('user', null);
   app.addHook('preHandler', async (req, reply) => {
@@ -715,6 +724,34 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   app.post('/leads/outreach/resume', async () => {
     await outreachQueue.resume();
     return { ok: true, isPaused: false };
+  });
+
+  // --- WhatsApp Headless Gateway Routes ---
+
+  app.get('/whatsapp/status', async () => {
+    return { status: getWhatsAppStatus() };
+  });
+
+  app.post('/whatsapp/connect', async () => {
+    const status = await initWhatsAppClient();
+    return { status };
+  });
+
+  app.post('/whatsapp/disconnect', async () => {
+    await disconnectWhatsApp();
+    return { status: getWhatsAppStatus() };
+  });
+
+  app.post('/whatsapp/send-test', async (req, reply) => {
+    const body = (req.body ?? {}) as { phone: string; message: string };
+    if (!body.phone || !body.message) {
+      return reply.code(400).send({ error: 'phone and message are required' });
+    }
+    const result = await sendWhatsAppMessage(body.phone, body.message);
+    if (!result.success) {
+      return reply.code(500).send({ error: result.error });
+    }
+    return { ok: true };
   });
 
   // --- Deployments & CI/CD Routes -----------------------------------------------------------------
