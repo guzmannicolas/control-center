@@ -621,7 +621,7 @@ export function LeadsPage() {
       </div>
 
       {/* Metrics Bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
         <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
           <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Total Leads</div>
           <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>{leads.length}</div>
@@ -943,9 +943,10 @@ export function LeadsPage() {
         </div>
       )}
 
-      {/* Leads Table */}
+      {/* Leads Table Container */}
       <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
+        {/* Desktop Table View */}
+        <div className="hidden md:block" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
             <thead>
               <tr style={{ background: '#0f172a', color: '#94a3b8', textAlign: 'left' }}>
@@ -1252,7 +1253,199 @@ export function LeadsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Cards View (< md) */}
+        <div className="block md:hidden divide-y divide-line/60">
+          {filtered.length === 0 && !loading ? (
+            <div className="p-8 text-center text-muted text-sm">
+              No prospects found. Launch a new Google Maps scraping scan above to populate real leads!
+            </div>
+          ) : (
+            filtered.map((lead) => {
+              const badge = STATUS_BADGES[lead.status] ?? STATUS_BADGES.discovered;
+              const waNumber = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : null;
+              const metaSource = (lead.metadata as { sourceUrl?: string })?.sourceUrl;
+              const mapsSearchUrl = metaSource || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address}`)}`;
+              const pitchText = buildPitch(lead);
+              const isSelected = selectedIds.has(lead.id);
+
+              return (
+                <div
+                  key={lead.id}
+                  className={`p-4 transition ${isSelected ? 'bg-series/5' : 'bg-transparent'}`}
+                >
+                  {/* Top: Checkbox, Name, Category, Rating */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectRow(lead.id)}
+                        className="mt-1 size-4 rounded cursor-pointer"
+                      />
+                      <div>
+                        <div className="font-bold text-ink text-base leading-snug">{lead.name}</div>
+                        <div className="text-xs text-muted mt-0.5">{lead.category}</div>
+                        {lead.rating && (
+                          <div className="text-xs text-amber-400 font-semibold mt-0.5">
+                            ★ {lead.rating} <span className="text-muted font-normal">({lead.reviewsCount} reviews)</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status badge / selector */}
+                    <select
+                      value={lead.status}
+                      onChange={(e) => void updateStatus(lead.id, e.target.value as LeadStatus)}
+                      style={{
+                        background: badge.bg,
+                        color: badge.color,
+                        border: `1px solid ${badge.border}`,
+                      }}
+                      className="rounded-lg px-2 py-1 text-xs font-bold cursor-pointer shrink-0"
+                    >
+                      {Object.entries(STATUS_BADGES).map(([key, item]) => (
+                        <option key={key} value={key} style={{ background: '#0f172a', color: '#f8fafc' }}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Website & Address row */}
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-2.5 text-xs">
+                    <div>
+                      {lead.hasWebsite && lead.website ? (
+                        <a
+                          href={lead.website}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-series hover:underline font-medium inline-flex items-center gap-1"
+                        >
+                          <span>🌐</span> {lead.website.replace(/^https?:\/\/(www\.)?/, '')}
+                        </a>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 font-bold text-red-400 bg-red-950/40 border border-red-900/60 rounded px-1.5 py-0.5 text-[11px]">
+                          NO WEBSITE TARGET 🎯
+                        </span>
+                      )}
+                    </div>
+
+                    <a
+                      href={mapsSearchUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sky-400 hover:underline inline-flex items-center gap-1 text-[11px]"
+                    >
+                      Maps ↗
+                    </a>
+                  </div>
+
+                  {/* Contact info row */}
+                  <div className="mt-2 text-xs text-ink-2 space-y-0.5">
+                    {lead.phone && (
+                      <div className="font-mono text-ink text-xs flex items-center gap-1.5">
+                        <span className="emoji-bw">📞</span> {lead.phone}
+                      </div>
+                    )}
+                    {lead.email && (
+                      <div className="text-emerald-400 text-xs truncate">
+                        <span className="emoji-bw">✉️</span> {lead.email}
+                      </div>
+                    )}
+                    {lead.address && (
+                      <div className="text-muted text-[11px] truncate">
+                        📍 {lead.address}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Primary Action Buttons Bar (WhatsApp, Instagram, Find Socials) */}
+                  <div className="mt-3.5 grid grid-cols-2 gap-2 border-t border-line/60 pt-3">
+                    {waNumber ? (
+                      <a
+                        href={`https://wa.me/${waNumber}?text=${encodeURIComponent(pitchText)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => void updateStatus(lead.id, 'contacted')}
+                        className="flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 px-3 py-2 text-xs font-bold text-emerald-300 active:scale-95 transition"
+                      >
+                        <span>💬</span> WhatsApp
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="flex items-center justify-center gap-1 rounded-lg bg-bg border border-line px-3 py-2 text-xs text-muted opacity-50"
+                      >
+                        No phone
+                      </button>
+                    )}
+
+                    {lead.instagram ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenInstagramDM(lead)}
+                        className="flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 px-3 py-2 text-xs font-bold text-white shadow active:scale-95 transition"
+                      >
+                        <span>📸</span> Instagram DM
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleEnrich(lead.id)}
+                        disabled={enrichingId === lead.id}
+                        className="flex items-center justify-center gap-1 rounded-lg bg-surface border border-line px-3 py-2 text-xs font-semibold text-ink hover:border-accent active:scale-95 transition"
+                      >
+                        {enrichingId === lead.id ? 'Searching...' : '🔍 Find Socials'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Secondary options row: Demo link, Find Socials (if IG exists), Delete */}
+                  <div className="mt-2.5 flex items-center justify-between text-xs pt-1">
+                    {lead.suggestedDemo ? (
+                      <a
+                        href={lead.suggestedDemo}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-purple-400 hover:underline font-semibold inline-flex items-center gap-1 text-[11px]"
+                      >
+                        <span>🌐</span> Pitch Demo ↗
+                      </a>
+                    ) : (
+                      <span />
+                    )}
+
+                    <div className="flex items-center gap-3">
+                      {lead.instagram && (
+                        <button
+                          type="button"
+                          onClick={() => void handleEnrich(lead.id)}
+                          disabled={enrichingId === lead.id}
+                          className="text-[11px] text-muted hover:text-ink underline"
+                        >
+                          {enrichingId === lead.id ? 'Searching...' : 'Re-scan socials'}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => void deleteLead(lead.id)}
+                        className="text-red-400 hover:text-red-300 text-[11px] font-semibold px-1 py-0.5"
+                      >
+                        Delete ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
+
 
       {/* WhatsApp Gateway Connection Modal */}
       {waModalOpen && (
@@ -1276,7 +1469,9 @@ export function LeadsPage() {
               borderRadius: '16px',
               width: '100%',
               maxWidth: '440px',
-              padding: '1.5rem',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '1.25rem',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
               display: 'flex',
               flexDirection: 'column',
@@ -1446,7 +1641,9 @@ export function LeadsPage() {
               borderRadius: '14px',
               maxWidth: '650px',
               width: '100%',
-              padding: '1.5rem',
+              maxHeight: '92vh',
+              overflowY: 'auto',
+              padding: '1.25rem',
               display: 'flex',
               flexDirection: 'column',
               gap: '1.2rem',
