@@ -1179,6 +1179,30 @@ export function LeadsPage() {
                           </a>
                         )}
 
+                        {lead.instagram && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenInstagramDM(lead)}
+                            title="Abrir Instagram DM y copiar mensaje personalizado"
+                            style={{
+                              background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                              border: 'none',
+                              color: '#ffffff',
+                              padding: '0.25rem 0.55rem',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              boxShadow: '0 2px 4px rgba(219, 39, 119, 0.25)',
+                            }}
+                          >
+                            <span>📸</span> DM
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => void handleEnrich(lead.id)}
