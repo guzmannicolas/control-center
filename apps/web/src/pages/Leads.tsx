@@ -443,13 +443,14 @@ export function LeadsPage() {
 
     // Copy personalized pitch to clipboard
     navigator.clipboard.writeText(pitch).then(() => {
-      setCopiedToast(`📋 ¡Mensaje copiado al portapapeles para ${lead.name}!`);
-      setTimeout(() => setCopiedToast(null), 3500);
+      setCopiedToast(`📋 ¡Mensaje copiado! Pegalo en el chat de ${lead.name}`);
+      setTimeout(() => setCopiedToast(null), 4000);
     }).catch(() => {});
 
-    // Target direct message URL if username parsed, otherwise profile
+    // Target profile URL (desktop-friendly: opens profile where you can click 'Enviar mensaje')
+    // If opened on mobile, Instagram app opens directly.
     const targetUrl = username
-      ? `https://www.instagram.com/direct/t/${username}/`
+      ? `https://www.instagram.com/${username}/`
       : (lead.instagram || 'https://www.instagram.com/');
 
     window.open(targetUrl, '_blank');
