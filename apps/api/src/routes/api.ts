@@ -36,6 +36,7 @@ import {
   fetchVercelProjects,
   getBackupsOverview,
   runManualBackup,
+  deleteBackupFiles,
   getVpsStatus,
   runVpsCleanup,
 } from '../ops.js';
@@ -440,6 +441,16 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
   app.post('/backups/run', async () => {
     return runManualBackup();
+  });
+
+  const DeleteBackupsBody = z.object({
+    names: z.array(z.string().trim().min(1)).min(1),
+  });
+
+  app.post('/backups/delete', async (req, reply) => {
+    const parsed = DeleteBackupsBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Valid file names array required' });
+    return deleteBackupFiles(parsed.data.names);
   });
 
   // --- VPS Health & Cleanup ------------------------------------------------------------------------

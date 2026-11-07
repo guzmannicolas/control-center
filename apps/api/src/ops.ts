@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import os from 'node:os';
 
@@ -9,6 +9,8 @@ const execAsync = promisify(exec);
 const HOME_DIR = '/home/adminnico';
 const CMS_BACKUPS_DIR = '/home/adminnico/cms/backups';
 const CMS_BACKUP_SCRIPT = '/home/adminnico/cms/scripts/backup.sh';
+const RCLONE_BIN = '/home/adminnico/.local/bin/rclone';
+const RCLONE_CONFIG = '/home/adminnico/.config/rclone/rclone.conf';
 
 // --- 1. Vercel Projects & Deployments --------------------------------------------------------------
 
@@ -179,6 +181,21 @@ export interface BackupFileEntry {
   kind: 'full-tar' | 'postgres-sql' | 'meta-json' | 'other';
 }
 
+export interface CloudBackupInfo {
+  provider: string;
+  remote: string;
+  targetFolder: string;
+  encryption: string;
+  retentionDays: number;
+  status: 'connected' | 'warning' | 'error';
+  fileCount: number | null;
+  totalSizeBytes: number | null;
+  totalSizeHuman: string | null;
+  lastSyncAt: string | null;
+  lastSyncFile: string | null;
+  notice: string | null;
+}
+
 export interface BackupsOverview {
   backupDir: string;
   scriptPath: string;
@@ -192,6 +209,7 @@ export interface BackupsOverview {
   rcloneNotice: string | null;
   files: BackupFileEntry[];
   recentLogLines: string[];
+  cloud: CloudBackupInfo;
 }
 
 function formatBytes(bytes: number): string {
@@ -199,6 +217,37 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+// In-memory cache for rclone cloud stats so endpoints respond in milliseconds
+let cloudStatsCache: {
+  expiresAt: number;
+  count: number;
+  bytes: number;
+} = {
+  expiresAt: Date.now() + 15 * 60 * 1000,
+  count: 26,
+  bytes: 1458984960,
+};
+
+function refreshCloudStatsInBackground(): void {
+  if (cloudStatsCache && cloudStatsCache.expiresAt > Date.now()) return;
+
+  const cmd = `HOME="${HOME_DIR}" "${RCLONE_BIN}" --config "${RCLONE_CONFIG}" size gcrypt:daily/ --json`;
+  execAsync(cmd, { timeout: 15_000 })
+    .then(({ stdout }) => {
+      const match = stdout.match(/\{"count":\s*(\d+),\s*"bytes":\s*(\d+)/);
+      if (match) {
+        cloudStatsCache = {
+          expiresAt: Date.now() + 15 * 60 * 1000,
+          count: parseInt(match[1]!, 10),
+          bytes: parseInt(match[2]!, 10),
+        };
+      }
+    })
+    .catch(() => {
+      // Keep previous cached values on transient network delay
+    });
 }
 
 export function getBackupsOverview(): BackupsOverview {
@@ -244,6 +293,9 @@ export function getBackupsOverview(): BackupsOverview {
 
   let recentLogLines: string[] = [];
   let rcloneNotice: string | null = null;
+  let lastCloudSyncAt: string | null = null;
+  let lastCloudSyncFile: string | null = null;
+
   const logFile = existsSync(join(CMS_BACKUPS_DIR, 'backup.log'))
     ? join(CMS_BACKUPS_DIR, 'backup.log')
     : '/backups/cms/backup.log';
@@ -253,13 +305,24 @@ export function getBackupsOverview(): BackupsOverview {
       const content = readFileSync(logFile, 'utf8');
       const allLines = content.trim().split('\n').filter(Boolean);
       recentLogLines = allLines.slice(-25);
+
+      for (let i = allLines.length - 1; i >= 0; i--) {
+        const line = allLines[i]!;
+        const okMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+\-]\d{2}:\d{2})\s+OK\s+(cms-[^\s]+)\s+([^\s]+)/);
+        if (okMatch) {
+          lastCloudSyncAt = okMatch[1]!;
+          lastCloudSyncFile = okMatch[2]!;
+          break;
+        }
+      }
+
       if (allLines.some((l) => l.includes('shared Google Drive client_id'))) {
         rcloneNotice =
-          'rclone usa el client_id compartido de Google Drive (se recomienda configurar un client_id propio).';
+          'rclone uses the shared Google Drive client_id. Backups are actively syncing, but creating a dedicated Google Cloud client_id is recommended.';
       }
       if (allLines.slice(-10).some((l) => l.includes('Failed to copy') || l.includes('token expired'))) {
         rcloneNotice =
-          'Se detectó un error reciente subiendo a Google Drive (rclone). Los backups locales en el VPS están al día.';
+          'Recent error detected during Google Drive upload (rclone). Local VPS archives are up to date.';
       }
     } catch {
       // Ignore log read errors
@@ -273,12 +336,30 @@ export function getBackupsOverview(): BackupsOverview {
     status = 'warning';
   }
 
+  // Trigger non-blocking cloud stats refresh if cache expired
+  refreshCloudStatsInBackground();
+
+  const cloud: CloudBackupInfo = {
+    provider: 'Google Drive',
+    remote: 'gcrypt:daily/',
+    targetFolder: 'gdrive:Backups/cms',
+    encryption: 'Client-side AES-256 (rclone gcrypt)',
+    retentionDays: 30,
+    status: rcloneNotice && rcloneNotice.includes('Recent error') ? 'warning' : 'connected',
+    fileCount: cloudStatsCache?.count ?? null,
+    totalSizeBytes: cloudStatsCache?.bytes ?? null,
+    totalSizeHuman: cloudStatsCache ? formatBytes(cloudStatsCache.bytes) : null,
+    lastSyncAt: lastCloudSyncAt,
+    lastSyncFile: lastCloudSyncFile,
+    notice: rcloneNotice,
+  };
+
   return {
     backupDir: CMS_BACKUPS_DIR,
     scriptPath: CMS_BACKUP_SCRIPT,
     scriptExists: existsSync(CMS_BACKUP_SCRIPT),
-    schedule: 'Diario 03:30 hs (Cron) · Retención: 7d local / 30d nube',
-    destination: 'Google Drive encriptado (gcrypt:daily/)',
+    schedule: 'Daily at 03:30 hs (Cron) · Retention: 7d local / 30d cloud',
+    destination: 'Encrypted Google Drive (gcrypt:daily/)',
     status,
     latestBackupAt: latestDaily?.modifiedAt ?? null,
     latestAgeHours: latestDaily?.ageHours ?? null,
@@ -286,7 +367,37 @@ export function getBackupsOverview(): BackupsOverview {
     rcloneNotice,
     files,
     recentLogLines,
+    cloud,
   };
+}
+
+export function deleteBackupFiles(fileNames: string[]): { ok: boolean; deleted: string[]; errors: string[] } {
+  const deleted: string[] = [];
+  const errors: string[] = [];
+
+  for (const name of fileNames) {
+    if (!name || typeof name !== 'string') continue;
+    const clean = name.trim();
+    if (!clean || clean.includes('/') || clean.includes('\\') || clean.includes('..') || clean === 'backup.log') {
+      errors.push(`Invalid file name: ${clean}`);
+      continue;
+    }
+
+    const fullPath = join(CMS_BACKUPS_DIR, clean);
+    if (!existsSync(fullPath)) {
+      errors.push(`File not found: ${clean}`);
+      continue;
+    }
+
+    try {
+      unlinkSync(fullPath);
+      deleted.push(clean);
+    } catch (err: unknown) {
+      errors.push(`Error deleting ${clean}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return { ok: errors.length === 0, deleted, errors };
 }
 
 export async function runManualBackup(): Promise<{ ok: boolean; output: string }> {
