@@ -61,6 +61,7 @@ export function LeadsPage() {
   const [pitchTemplate, setPitchTemplate] = useState(DEFAULT_PITCH_TEMPLATE);
   const [showPitchEditor, setShowPitchEditor] = useState(false);
   const [generatingPitchId, setGeneratingPitchId] = useState<string | null>(null);
+  const [copiedToast, setCopiedToast] = useState<string | null>(null);
   const [aiPitchOverride, setAiPitchOverride] = useState<string | null>(null);
   const [queueStatus, setQueueStatus] = useState<{ waiting: number; active: number; completed: number; isPaused: boolean } | null>(null);
   const [queuingCampaign, setQueuingCampaign] = useState(false);
@@ -419,6 +420,47 @@ export function LeadsPage() {
       console.error(err);
     } finally {
       setQueuingCampaign(false);
+    }
+  };
+
+  const getInstagramUsername = (igUrl: string | null | undefined): string | null => {
+    if (!igUrl) return null;
+    try {
+      const clean = igUrl.trim().replace(/\/+$/, '');
+      const parts = clean.split('/');
+      const last = parts[parts.length - 1];
+      if (last && !last.includes('?') && last !== 'instagram.com') return last;
+      if (last && last.includes('?')) return last.split('?')[0] ?? null;
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleOpenInstagramDM = (lead: LeadView, customPitchText?: string) => {
+    const pitch = customPitchText || aiPitchOverride || buildPitch(lead);
+    const username = getInstagramUsername(lead.instagram);
+
+    // Copy personalized pitch to clipboard
+    navigator.clipboard.writeText(pitch).then(() => {
+      setCopiedToast(`📋 ¡Mensaje copiado al portapapeles para ${lead.name}!`);
+      setTimeout(() => setCopiedToast(null), 3500);
+    }).catch(() => {});
+
+    // Target direct message URL if username parsed, otherwise profile
+    const targetUrl = username
+      ? `https://www.instagram.com/direct/t/${username}/`
+      : (lead.instagram || 'https://www.instagram.com/');
+
+    window.open(targetUrl, '_blank');
+
+    // Auto mark as contacted
+    void updateStatus(lead.id, 'contacted');
+
+    // Advance assistant queue if open
+    if (outreachOpen && outreachIndex + 1 < outreachQueue.length) {
+      setOutreachIndex((i) => i + 1);
+      setAiPitchOverride(null);
     }
   };
 
@@ -1617,11 +1659,60 @@ export function LeadsPage() {
                     gap: '0.4rem',
                   }}
                 >
-                  Open WhatsApp & Next Target &rarr;
+                  WhatsApp & Next &rarr;
                 </button>
+
+                {currentOutreachLead.instagram && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenInstagramDM(currentOutreachLead)}
+                    title="Abre el chat de Instagram del negocio y copia el pitch listo para pegar"
+                    style={{
+                      background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                      border: 'none',
+                      color: '#ffffff',
+                      borderRadius: '8px',
+                      padding: '0.5rem 1rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      boxShadow: '0 4px 6px -1px rgba(219, 39, 119, 0.2)',
+                    }}
+                  >
+                    <span>📸</span> Abrir Instagram DM &rarr;
+                  </button>
+                )}
               </div>
             </div>
           </div>
+        </div>
+      )}
+      {/* Copied to clipboard toast */}
+      {copiedToast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 9999,
+            background: '#0f172a',
+            border: '1px solid #db2777',
+            color: '#f472b6',
+            borderRadius: '10px',
+            padding: '0.75rem 1.25rem',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            animation: 'fadeIn 0.2s ease-in',
+          }}
+        >
+          {copiedToast}
         </div>
       )}
     </div>
