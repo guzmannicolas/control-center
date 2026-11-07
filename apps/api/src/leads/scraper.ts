@@ -31,28 +31,34 @@ export function formatArgentinePhone(phoneRaw: string | null | undefined): strin
 
 export function guessSuggestedDemo(category: string, query: string): string {
   const text = `${category} ${query}`.toLowerCase();
-  if (text.includes('odont') || text.includes('dental') || text.includes('diente')) {
-    return 'https://odontologia-ten.vercel.app';
-  }
   if (text.includes('barber') || text.includes('peluquer') || text.includes('pelo')) {
-    return 'https://barberia-demo.vercel.app';
+    return 'https://templates.nicoguzmandev.com/demos/barbershop/';
   }
-  if (text.includes('pizz') || text.includes('restauran') || text.includes('comida') || text.includes('bar')) {
-    return 'https://pizzeria-demo.vercel.app';
+  if (text.includes('mecanic') || text.includes('taller') || text.includes('auto') || text.includes('gomer') || text.includes('lubricentro')) {
+    return 'https://templates.nicoguzmandev.com/demos/auto-repair/';
   }
-  if (text.includes('estet') || text.includes('spa') || text.includes('belleza') || text.includes('unas')) {
-    return 'https://estetica-demo.vercel.app';
+  if (text.includes('cafe') || text.includes('cafeter') || text.includes('panader') || text.includes('pasteler')) {
+    return 'https://templates.nicoguzmandev.com/demos/coffee-shop/';
   }
-  if (text.includes('gym') || text.includes('gimnas') || text.includes('fitness') || text.includes('crossfit')) {
-    return 'https://gym-web-demo.vercel.app';
+  if (text.includes('ferreter') || text.includes('corralon') || text.includes('herramient') || text.includes('repuest')) {
+    return 'https://templates.nicoguzmandev.com/demos/hardware-store/';
   }
-  if (text.includes('inmobil') || text.includes('propiedad')) {
-    return 'https://inmobiliaria-demo.vercel.app';
+  if (text.includes('foto') || text.includes('fotograf') || text.includes('video') || text.includes('audiovis')) {
+    return 'https://templates.nicoguzmandev.com/demos/photography/';
   }
-  if (text.includes('ropa') || text.includes('indumentar') || text.includes('tienda') || text.includes('moda')) {
-    return 'https://indumentaria-demo.vercel.app';
+  if (text.includes('inmobil') || text.includes('propiedad') || text.includes('alquiler') || text.includes('real estate')) {
+    return 'https://templates.nicoguzmandev.com/demos/real-estate/';
   }
-  return 'https://v0-e-commerce-storefront-design.vercel.app';
+  if (text.includes('pizz') || text.includes('restauran') || text.includes('comida') || text.includes('bar') || text.includes('bistro') || text.includes('hamburgue') || text.includes('sushi')) {
+    return 'https://templates.nicoguzmandev.com/demos/restaurant/';
+  }
+  if (text.includes('tattoo') || text.includes('tatuaj') || text.includes('piercing')) {
+    return 'https://templates.nicoguzmandev.com/demos/tattoo/';
+  }
+  if (text.includes('odont') || text.includes('dental') || text.includes('diente')) {
+    return 'https://templates.nicoguzmandev.com/demos/barbershop/'; // Fallback template for health/appointment
+  }
+  return 'https://templates.nicoguzmandev.com/';
 }
 
 const BROWSER_HEADERS = {

@@ -13,16 +13,20 @@ const STATUS_BADGES: Record<LeadStatus, { label: string; bg: string; color: stri
 };
 
 export const PRESET_NICHES = [
-  { value: 'Odontology / Dental Clinics', label: 'Odontology / Dental Clinics', demo: 'https://odontologia-ten.vercel.app' },
-  { value: 'Barber Shops / Hair Salons', label: 'Barber Shops / Hair Salons', demo: 'https://barberia-demo.vercel.app' },
-  { value: 'Pizzerias & Restaurants', label: 'Pizzerias & Restaurants', demo: 'https://pizzeria-demo.vercel.app' },
-  { value: 'Aesthetics & Spa / Nail Salons', label: 'Aesthetics & Spa / Nail Salons', demo: 'https://estetica-demo.vercel.app' },
-  { value: 'Gyms & Crossfit Centers', label: 'Gyms & Crossfit Centers', demo: 'https://gym-web-demo.vercel.app' },
-  { value: 'Real Estate / Properties', label: 'Real Estate / Properties', demo: 'https://inmobiliaria-demo.vercel.app' },
-  { value: 'Clothing & Boutiques', label: 'Clothing & Boutiques', demo: 'https://indumentaria-demo.vercel.app' },
-  { value: 'Veterinary / Pet Shops', label: 'Veterinary / Pet Shops', demo: 'https://v0-e-commerce-storefront-design.vercel.app' },
-  { value: 'Lawyers & Legal Studies', label: 'Lawyers & Legal Studies', demo: 'https://v0-e-commerce-storefront-design.vercel.app' },
-  { value: 'Automotive Mechanics / Workshops', label: 'Automotive Mechanics / Workshops', demo: 'https://v0-e-commerce-storefront-design.vercel.app' },
+  { value: 'Barber Shops / Hair Salons', label: 'Barber Shops / Hair Salons', demo: 'https://templates.nicoguzmandev.com/demos/barbershop/' },
+  { value: 'Automotive Mechanics / Workshops', label: 'Automotive Mechanics / Workshops', demo: 'https://templates.nicoguzmandev.com/demos/auto-repair/' },
+  { value: 'Cafes & Bakeries', label: 'Cafes & Bakeries', demo: 'https://templates.nicoguzmandev.com/demos/coffee-shop/' },
+  { value: 'Hardware Stores / Corralón', label: 'Hardware Stores / Corralón', demo: 'https://templates.nicoguzmandev.com/demos/hardware-store/' },
+  { value: 'Photography & Visual Studios', label: 'Photography & Visual Studios', demo: 'https://templates.nicoguzmandev.com/demos/photography/' },
+  { value: 'Real Estate / Properties', label: 'Real Estate / Properties', demo: 'https://templates.nicoguzmandev.com/demos/real-estate/' },
+  { value: 'Pizzerias & Restaurants', label: 'Pizzerias & Restaurants', demo: 'https://templates.nicoguzmandev.com/demos/restaurant/' },
+  { value: 'Tattoo & Piercing Studios', label: 'Tattoo & Piercing Studios', demo: 'https://templates.nicoguzmandev.com/demos/tattoo/' },
+  { value: 'Odontology / Dental Clinics', label: 'Odontology / Dental Clinics', demo: 'https://templates.nicoguzmandev.com/demos/barbershop/' },
+  { value: 'Aesthetics & Spa / Nail Salons', label: 'Aesthetics & Spa / Nail Salons', demo: 'https://templates.nicoguzmandev.com/demos/tattoo/' },
+  { value: 'Gyms & Crossfit Centers', label: 'Gyms & Crossfit Centers', demo: 'https://templates.nicoguzmandev.com/' },
+  { value: 'Clothing & Boutiques', label: 'Clothing & Boutiques', demo: 'https://templates.nicoguzmandev.com/' },
+  { value: 'Veterinary / Pet Shops', label: 'Veterinary / Pet Shops', demo: 'https://templates.nicoguzmandev.com/' },
+  { value: 'Lawyers & Legal Studies', label: 'Lawyers & Legal Studies', demo: 'https://templates.nicoguzmandev.com/' },
 ];
 
 export const PRESET_AREAS = [
@@ -301,7 +305,7 @@ export function LeadsPage() {
       .replace(/{rating}/g, lead.rating ? String(lead.rating) : '5.0')
       .replace(/{reviews}/g, String(lead.reviewsCount || 'varias'))
       .replace(/{category}/g, lead.category)
-      .replace(/{demo}/g, lead.suggestedDemo ?? 'https://v0-e-commerce-storefront-design.vercel.app');
+      .replace(/{demo}/g, lead.suggestedDemo ?? 'https://templates.nicoguzmandev.com/');
   };
 
   const loadWhatsAppStatus = async () => {

@@ -21,26 +21,26 @@ export const COLD_PITCH_VARIANTS = [
   (ctx: PitchVariableContext) =>
     `Hola ${ctx.name}! 👋 Vi las excelentes opiniones que tienen en Google (${ctx.rating ? `${ctx.rating}★` : 'muy recomendados'}) en ${ctx.city}. ` +
     `Estuve viendo que no tienen sitio web oficial cargado y les armamos una propuesta interactiva de cómo quedaría su web para ${ctx.category}: ` +
-    `${ctx.suggestedDemo ?? 'https://v0-e-commerce-storefront-design.vercel.app'} ` +
+    `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
     `¿Les gustaría que les muestre cómo adaptarla con sus fotos y servicios? ¡Saludos!`,
 
   (ctx: PitchVariableContext) =>
     `Buenas ${ctx.name}! Estaba buscando referentes de ${ctx.category} en ${ctx.city} y me llamó la atención su reputación. ` +
     `Noté que todavía no tienen una página web moderna propia, así que les diseñé una maqueta de ejemplo en vivo para su rubro: ` +
-    `${ctx.suggestedDemo ?? 'https://v0-e-commerce-storefront-design.vercel.app'} ` +
+    `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
     `Si les interesa sumar reservas o consultas directas avísenme y lo charlamos sin compromiso.`,
 
   (ctx: PitchVariableContext) =>
     `Hola gente de ${ctx.name}, ¿cómo están? Les escribo porque vi sus calificaciones en ${ctx.city} y destacan un montón. ` +
     `Les preparé una demo web rápida para mostrarles cómo podrían profesionalizar su presencia digital y recibir más clientes: ` +
-    `${ctx.suggestedDemo ?? 'https://v0-e-commerce-storefront-design.vercel.app'} ` +
+    `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
     `¿Tienen unos minutos esta semana para que se las muestre?`,
 
   (ctx: PitchVariableContext) =>
     `Hola! Qué tal el equipo de ${ctx.name}? Les escribo desde Córdoba/Arg. ` +
     `Viendo su negocio en Google Maps noté que no cuentan con web oficial, lo cual hoy en día les quita consultas frente a la competencia en ${ctx.city}. ` +
     `Miren esta propuesta interactiva armada para ${ctx.category}: ` +
-    `${ctx.suggestedDemo ?? 'https://v0-e-commerce-storefront-design.vercel.app'} ` +
+    `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
     `¿Les gustaría que conversemos para implementarla?`,
 ];
 
@@ -76,7 +76,7 @@ Datos del negocio:
 - Nombre: ${ctx.name}
 - Rubro: ${ctx.category}
 - Ciudad: ${ctx.city}
-- Demo compartida: ${ctx.suggestedDemo ?? 'https://odontologia-ten.vercel.app'}
+- Demo compartida: ${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'}
 
 Objetivo: Preguntar cordialmente si pudieron ver la propuesta anterior sin presionar. Soná como un profesional independiente de Argentina (usá voseo natural: vos, pudiste, avisame). NO uses emojis excesivos ni suenes a bot o spam.`
         : `Redactá un mensaje de prospección en frío personalizado y amigable para WhatsApp (máximo 60 palabras).
@@ -85,7 +85,7 @@ Datos del negocio:
 - Rubro: ${ctx.category}
 - Ciudad: ${ctx.city}
 - Calificación Google: ${ctx.rating ? `${ctx.rating} estrellas` : 'excelente'}
-- Demo en vivo preparada: ${ctx.suggestedDemo ?? 'https://odontologia-ten.vercel.app'}
+- Demo en vivo preparada: ${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'}
 
 Estructura:
 1. Saludo personalizado con el nombre del negocio.
