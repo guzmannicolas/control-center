@@ -177,7 +177,7 @@ export function CloudflarePage() {
 
       {/* Quick Action Operations Strip */}
       {data?.configured && activeZone && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
           {/* Zone & Cache Card */}
           <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '0.75rem' }}>
             <div>
@@ -323,7 +323,7 @@ export function CloudflarePage() {
                 placeholder="Search record name or target..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                style={{ background: '#0f172a', border: '1px solid #334155', color: '#f8fafc', borderRadius: '7px', padding: '0.35rem 0.65rem', fontSize: '0.8rem', minWidth: '200px' }}
+                style={{ background: '#0f172a', border: '1px solid #334155', color: '#f8fafc', borderRadius: '7px', padding: '0.35rem 0.65rem', fontSize: '0.8rem', minWidth: '130px', flex: '1 1 auto' }}
               />
 
               <button

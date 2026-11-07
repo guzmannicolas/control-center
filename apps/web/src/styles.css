@@ -72,3 +72,15 @@ body {
   display: inline-block;
   opacity: 0.9;
 }
+
+/* Mobile touch & scrolling optimizations */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  /* Prevent horizontal unwanted window scroll */
+  body {
+    overflow-x: hidden;
+  }
+}
