@@ -12,7 +12,7 @@ import {
   type BrandView,
 } from '@cc/shared';
 import { generateSocialCreative, auditAdCampaigns } from './agent.js';
-import { dispatchDraftApproval } from './dispatch.ts';
+import { dispatchDraftApproval } from './dispatch.js';
 import { ensureMarketingSeed } from './seed-helper.js';
 
 export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
