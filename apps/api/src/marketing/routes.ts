@@ -11,15 +11,20 @@ import {
   UpdateBrandPlatformsInput,
   SyncInstagramInput,
   AddInstagramPostInput,
+  UpdateBrandIntegrationsInput,
+  TestChatMessageInput,
   type MarketingOverview,
   type SocialDraftView,
   type AdCampaignView,
   type BrandView,
+  type BrandConversationView,
 } from '@cc/shared';
 import { generateSocialCreative, auditAdCampaigns, synthesizeSocialStylePlaybook } from './agent.js';
 import { dispatchDraftApproval } from './dispatch.js';
 import { ensureMarketingSeed } from './seed-helper.js';
 import { scrapeInstagramProfile, extractInstagramPostFromEmbed } from './instagram-scraper.js';
+import { publishDraftToSocialPlatforms, checkAndPublishScheduledDrafts } from './publisher.js';
+import { generateBrandChatReply } from './chat-agent.js';
 
 export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
   // Helper to serialize Prisma Brand to BrandView
@@ -38,6 +43,9 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     instagramHandle: b.instagramHandle ?? null,
     activePlatforms: (b.activePlatforms ?? ['INSTAGRAM', 'FACEBOOK']) as any,
     scrapedPosts: (b.scrapedPosts ?? []) as any,
+    integrations: (b.integrations ?? {}) as any,
+    autoPublish: Boolean(b.autoPublish),
+    autoReplyChat: Boolean(b.autoReplyChat),
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
   });
@@ -83,6 +91,52 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
   });
+
+  const toConversationView = (c: any): BrandConversationView => ({
+    id: c.id,
+    brandId: c.brandId,
+    platform: c.platform,
+    customerHandle: c.customerHandle,
+    customerName: c.customerName,
+    status: c.status,
+    lastMessageAt: c.lastMessageAt ? c.lastMessageAt.toISOString() : c.createdAt.toISOString(),
+    messages: (c.messages ?? []) as any,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+  });
+
+  const attemptAutoPublish = async (draftId: string) => {
+    try {
+      const draft = await prisma.socialDraft.findUnique({
+        where: { id: draftId },
+        include: { brand: true },
+      });
+      if (!draft || draft.status !== 'APPROVED' || !draft.brand?.autoPublish) {
+        return;
+      }
+      if (draft.scheduledFor && new Date(draft.scheduledFor) > new Date()) {
+        return;
+      }
+      const pubResult = await publishDraftToSocialPlatforms(draft, draft.brand);
+      await prisma.socialDraft.update({
+        where: { id: draft.id },
+        data: {
+          status: 'PUBLISHED',
+          publishedAt: new Date(),
+          metrics: {
+            ...((draft.metrics as Record<string, unknown>) ?? {}),
+            platformPostId: pubResult.platformPostId,
+            live: pubResult.live,
+            simulated: pubResult.simulated,
+            permalink: pubResult.permalink,
+            publishedAt: new Date().toISOString(),
+          },
+        },
+      });
+    } catch (err: any) {
+      console.error('Auto-publish failed:', err?.message || err);
+    }
+  };
 
   // 1. GET /api/marketing/overview
   app.get('/overview', async (req): Promise<MarketingOverview> => {
@@ -324,7 +378,16 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
       include: { brand: { select: { name: true, slug: true } } },
     });
 
-    return { draft: toDraftView(updated) };
+    if (status === 'APPROVED') {
+      await attemptAutoPublish(updated.id);
+    }
+
+    const refreshed = await prisma.socialDraft.findUnique({
+      where: { id },
+      include: { brand: { select: { name: true, slug: true } } },
+    });
+
+    return { draft: toDraftView(refreshed ?? updated) };
   });
 
   // 4b. PATCH /api/marketing/drafts/:id (General draft updates: caption, media, scheduled date)
@@ -848,6 +911,10 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
       include: { brand: true },
     });
 
+    if (newStatus === 'APPROVED') {
+      await attemptAutoPublish(updated.id);
+    }
+
     return reply.type('text/html').send(`
       <!DOCTYPE html>
       <html>
@@ -875,5 +942,290 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         </body>
       </html>
     `);
+  });
+
+  // 17. POST /api/marketing/drafts/:id/publish (Direct publish draft to live platforms or sandbox)
+  app.post('/drafts/:id/publish', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const draft = await prisma.socialDraft.findUnique({
+      where: { id },
+      include: { brand: true },
+    });
+    if (!draft) return reply.code(404).send({ error: 'Draft not found' });
+
+    const pubResult = await publishDraftToSocialPlatforms(draft, draft.brand);
+    const updated = await prisma.socialDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: 'PUBLISHED',
+        publishedAt: new Date(),
+        metrics: {
+          ...((draft.metrics as Record<string, unknown>) ?? {}),
+          platformPostId: pubResult.platformPostId,
+          live: pubResult.live,
+          simulated: pubResult.simulated,
+          permalink: pubResult.permalink,
+          publishedAt: new Date().toISOString(),
+        },
+      },
+      include: { brand: { select: { name: true, slug: true } } },
+    });
+
+    return {
+      draft: toDraftView(updated),
+      publishResult: pubResult,
+    };
+  });
+
+  // 18. POST /api/marketing/drafts/publish-pending (Batch publisher for scheduled posts)
+  app.post('/drafts/publish-pending', async () => {
+    const result = await checkAndPublishScheduledDrafts(prisma);
+    return result;
+  });
+
+  // 19. PUT /api/marketing/brands/:slug/integrations (Configure API keys and autonomy toggles)
+  app.put('/brands/:slug/integrations', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const parsed = UpdateBrandIntegrationsInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid integrations payload' });
+    }
+
+    const brand = await prisma.brand.findUnique({ where: { slug } });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    const existingIntegrations = (brand.integrations ?? {}) as Record<string, unknown>;
+    const mergedIntegrations = parsed.data.integrations !== undefined
+      ? { ...existingIntegrations, ...parsed.data.integrations }
+      : existingIntegrations;
+
+    const updated = await prisma.brand.update({
+      where: { slug },
+      data: {
+        integrations: mergedIntegrations as any,
+        ...(parsed.data.autoPublish !== undefined ? { autoPublish: parsed.data.autoPublish } : {}),
+        ...(parsed.data.autoReplyChat !== undefined ? { autoReplyChat: parsed.data.autoReplyChat } : {}),
+      },
+    });
+
+    return { brand: toBrandView(updated) };
+  });
+
+  // 20. POST /api/marketing/brands/:slug/test-integration (Test channels: Telegram, WhatsApp, Meta)
+  app.post('/brands/:slug/test-integration', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const body = (req.body ?? {}) as { channel: 'TELEGRAM' | 'WHATSAPP' | 'INSTAGRAM' | 'META_ADS' };
+    const brand = await prisma.brand.findUnique({ where: { slug } });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    const integrations = (brand.integrations ?? {}) as Record<string, string | undefined>;
+
+    if (body.channel === 'TELEGRAM') {
+      const tgToken = integrations.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN;
+      const tgChatId = brand.telegramChatId || integrations.telegramOwnerChatId;
+      if (!tgToken || !tgChatId) {
+        return {
+          ok: false,
+          channel: 'TELEGRAM',
+          message: 'Telegram Bot Token and Owner Chat ID must be configured in Integrations tab.',
+        };
+      }
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: tgChatId,
+            text: `[Control Center] Test notification for ${brand.name}. Integrations connection is verified and active.`,
+          }),
+        });
+        const data = (await res.json()) as { ok: boolean; description?: string };
+        return {
+          ok: data.ok,
+          channel: 'TELEGRAM',
+          message: data.ok ? 'Telegram ping delivered successfully to owner.' : (data.description || 'Telegram API returned error.'),
+        };
+      } catch (err: any) {
+        return { ok: false, channel: 'TELEGRAM', message: err?.message || 'Failed to reach Telegram API.' };
+      }
+    }
+
+    if (body.channel === 'WHATSAPP') {
+      const phone = brand.whatsappNumber || integrations.whatsappOwnerNumber;
+      return {
+        ok: true,
+        channel: 'WHATSAPP',
+        message: `WhatsApp dispatcher ready for target ${phone || 'configured phone'}.`,
+      };
+    }
+
+    if (body.channel === 'INSTAGRAM' || body.channel === 'META_ADS') {
+      const token = integrations.metaAccessToken || integrations.metaPageAccessToken;
+      const igId = integrations.instagramAccountId || integrations.metaInstagramAccountId;
+      return {
+        ok: Boolean(token),
+        channel: body.channel,
+        message: token
+          ? `Meta credentials found for Instagram Account ${igId || 'connected'}. Ready for live posting.`
+          : 'Meta Access Token missing in Integrations tab. System is operating in Sandbox mode.',
+      };
+    }
+
+    return { ok: true, channel: body.channel, message: 'Channel configured.' };
+  });
+
+  // 21. GET /api/marketing/brands/:slug/conversations (List recent client DM threads)
+  app.get('/brands/:slug/conversations', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const brand = await prisma.brand.findUnique({ where: { slug } });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    const conversations = await prisma.brandConversation.findMany({
+      where: { brandId: brand.id },
+      orderBy: { lastMessageAt: 'desc' },
+      take: 20,
+    });
+
+    return {
+      conversations: conversations.map(toConversationView),
+    };
+  });
+
+  // 22. POST /api/marketing/brands/:slug/conversations/chat (Interactive DM Simulator & AI Responder)
+  app.post('/brands/:slug/conversations/chat', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const parsed = TestChatMessageInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid message payload' });
+    }
+
+    const brand = await prisma.brand.findUnique({ where: { slug } });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    let conversation = null;
+    if (parsed.data.conversationId) {
+      conversation = await prisma.brandConversation.findUnique({
+        where: { id: parsed.data.conversationId },
+      });
+    }
+
+    if (!conversation) {
+      conversation = await prisma.brandConversation.create({
+        data: {
+          brandId: brand.id,
+          platform: 'INSTAGRAM_DM',
+          customerHandle: parsed.data.customerName ? `@${parsed.data.customerName.toLowerCase().replace(/\s+/g, '')}` : '@guest_client',
+          customerName: parsed.data.customerName || 'Potential Client',
+          status: 'ACTIVE',
+          messages: [],
+        },
+      });
+    }
+
+    const currentMessages = (conversation.messages ?? []) as any[];
+    const nowIso = new Date().toISOString();
+
+    const clientMsg = {
+      role: 'customer' as const,
+      content: parsed.data.message,
+      timestamp: nowIso,
+      source: 'web' as const,
+    };
+
+    const history = currentMessages.map((m: any) => ({
+      sender: m.role === 'customer' ? ('customer' as const) : ('assistant' as const),
+      text: m.content,
+    }));
+
+    const replyResult = await generateBrandChatReply({
+      brand: {
+        name: brand.name,
+        website: brand.website,
+        toneOfVoice: brand.toneOfVoice,
+        styleDirectives: (brand.styleDirectives ?? {}) as Record<string, unknown>,
+        targetAudience: brand.targetAudience,
+        dossierMd: brand.dossierMd ?? undefined,
+        socialStyleMd: brand.socialStyleMd ?? undefined,
+        instagramHandle: brand.instagramHandle ?? undefined,
+      },
+      incomingMessage: parsed.data.message,
+      customerName: conversation.customerName,
+      customerHandle: conversation.customerHandle,
+      history,
+    });
+
+    const assistantMsg = {
+      role: 'assistant' as const,
+      content: replyResult.replyText,
+      timestamp: new Date().toISOString(),
+      source: 'web' as const,
+    };
+
+    const updatedMessages = [...currentMessages, clientMsg, assistantMsg];
+
+    const updatedConversation = await prisma.brandConversation.update({
+      where: { id: conversation.id },
+      data: {
+        messages: updatedMessages as any,
+        lastMessageAt: new Date(),
+      },
+    });
+
+    return {
+      conversation: toConversationView(updatedConversation),
+      reply: replyResult,
+    };
+  });
+
+  // 23. GET /api/marketing/webhooks/whatsapp (Meta Webhook verification)
+  app.get('/webhooks/whatsapp', async (req, reply) => {
+    const query = req.query as {
+      'hub.mode'?: string;
+      'hub.verify_token'?: string;
+      'hub.challenge'?: string;
+    };
+    const mode = query['hub.mode'];
+    const token = query['hub.verify_token'];
+    const challenge = query['hub.challenge'];
+
+    const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN || 'control_center_marketing_token';
+    if (mode === 'subscribe' && token === expectedToken) {
+      return reply.code(200).send(challenge);
+    }
+    return reply.code(403).send('Forbidden verification token');
+  });
+
+  // 24. POST /api/marketing/webhooks/whatsapp (Incoming WhatsApp message events)
+  app.post('/webhooks/whatsapp', async (req, reply) => {
+    return reply.code(200).send({ status: 'EVENT_RECEIVED' });
+  });
+
+  // 25. POST /api/marketing/webhooks/telegram (Incoming Telegram Bot Webhook)
+  app.post('/webhooks/telegram', async (req, reply) => {
+    const body = (req.body ?? {}) as any;
+    if (body.callback_query?.data) {
+      const data = String(body.callback_query.data);
+      const [action, token] = data.split(':');
+      if (token && (action === 'approve' || action === 'reject')) {
+        const draft = await prisma.socialDraft.findUnique({
+          where: { approvalToken: token },
+          include: { brand: true },
+        });
+        if (draft) {
+          const newStatus = action === 'approve' ? 'APPROVED' : 'REJECTED';
+          await prisma.socialDraft.update({
+            where: { id: draft.id },
+            data: {
+              status: newStatus,
+              feedback: `Decided via Telegram inline keyboard (${action})`,
+            },
+          });
+          if (newStatus === 'APPROVED') {
+            await attemptAutoPublish(draft.id);
+          }
+        }
+      }
+    }
+    return reply.code(200).send({ ok: true });
   });
 };

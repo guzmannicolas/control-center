@@ -254,13 +254,33 @@ model Brand {
   socialStyleMd   String?       @db.Text @map("social_style_md")
   instagramHandle String?       @map("instagram_handle")
   activePlatforms String[]      @default(["INSTAGRAM", "FACEBOOK"]) @map("active_platforms")
-  scrapedPosts    Json          @default("[]") @map("scraped_posts")
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  scrapedPosts    Json                @default("[]") @map("scraped_posts")
+  integrations    Json                @default("{}") @map("integrations")
+  autoPublish     Boolean             @default(false) @map("auto_publish")
+  autoReplyChat   Boolean             @default(false) @map("auto_reply_chat")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
   drafts          SocialDraft[]
   campaigns       AdCampaign[]
+  conversations   BrandConversation[]
 
   @@map("brands")
+}
+
+model BrandConversation {
+  id             String   @id @default(uuid()) @db.Uuid
+  brandId        String   @map("brand_id") @db.Uuid
+  brand          Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  platform       String
+  customerHandle String   @map("customer_handle")
+  customerName   String?  @map("customer_name")
+  status         String   @default("ACTIVE")
+  lastMessageAt  DateTime @default(now()) @map("last_message_at") @db.Timestamptz(3)
+  messages       Json     @default("[]") @map("messages")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("brand_conversations")
 }
 
 model SocialDraft {

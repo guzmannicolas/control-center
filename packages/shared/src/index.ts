@@ -429,6 +429,41 @@ export interface InstagramPostReference {
   publishedAt?: string;
 }
 
+export interface BrandIntegrations {
+  metaPageAccessToken?: string;
+  metaPageId?: string;
+  metaInstagramAccountId?: string;
+  metaAdsAccountId?: string;
+  googleAdsCustomerId?: string;
+  whatsappPhoneNumberId?: string;
+  whatsappAccessToken?: string;
+  whatsappOwnerNumber?: string;
+  telegramBotToken?: string;
+  telegramOwnerChatId?: string;
+  webhookVerifyToken?: string;
+  [key: string]: unknown;
+}
+
+export interface BrandChatMessage {
+  role: 'customer' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  source?: 'instagram' | 'whatsapp' | 'telegram' | 'web';
+}
+
+export interface BrandConversationView {
+  id: string;
+  brandId: string;
+  platform: string;
+  customerHandle: string;
+  customerName: string;
+  status: string;
+  lastMessageAt: string;
+  messages: BrandChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BrandView {
   id: string;
   slug: string;
@@ -444,6 +479,9 @@ export interface BrandView {
   instagramHandle: string | null;
   activePlatforms: SocialPlatform[];
   scrapedPosts: InstagramPostReference[];
+  integrations?: BrandIntegrations;
+  autoPublish?: boolean;
+  autoReplyChat?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -600,6 +638,20 @@ export const UpdateBrandPlatformsInput = z.object({
   activePlatforms: z.array(z.enum(SOCIAL_PLATFORMS)).min(1, 'At least one social platform must remain active'),
 });
 export type UpdateBrandPlatformsInput = z.infer<typeof UpdateBrandPlatformsInput>;
+
+export const UpdateBrandIntegrationsInput = z.object({
+  integrations: z.record(z.string(), z.unknown()).optional(),
+  autoPublish: z.boolean().optional(),
+  autoReplyChat: z.boolean().optional(),
+});
+export type UpdateBrandIntegrationsInput = z.infer<typeof UpdateBrandIntegrationsInput>;
+
+export const TestChatMessageInput = z.object({
+  message: z.string().min(1, 'Message is required'),
+  customerName: z.string().optional(),
+  conversationId: z.string().optional(),
+});
+export type TestChatMessageInput = z.infer<typeof TestChatMessageInput>;
 
 // --- Argentine Promotions Engine -------------------------------------------------------------------
 

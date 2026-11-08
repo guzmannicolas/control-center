@@ -12,6 +12,8 @@ import type {
   SocialPostType,
   AdCampaignView,
   BrandView,
+  BrandIntegrations,
+  BrandConversationView,
 } from '@cc/shared';
 
 export function MarketingPage() {
@@ -25,7 +27,24 @@ export function MarketingPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'creative' | 'ads' | 'client_portal' | 'brand'>('creative');
+  const [activeTab, setActiveTab] = useState<'creative' | 'ads' | 'chat' | 'integrations' | 'client_portal' | 'brand'>('creative');
+
+  // Integrations state
+  const [integrationsForm, setIntegrationsForm] = useState<BrandIntegrations>({});
+  const [autoPublishActive, setAutoPublishActive] = useState(false);
+  const [autoReplyChatActive, setAutoReplyChatActive] = useState(false);
+  const [savingIntegrations, setSavingIntegrations] = useState(false);
+  const [testingChannel, setTestingChannel] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ channel: string; ok: boolean; message: string } | null>(null);
+
+  // Community Manager & Chat Assistant state
+  const [conversations, setConversations] = useState<BrandConversationView[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [chatInputMessage, setChatInputMessage] = useState('');
+  const [simulatedCustomerName, setSimulatedCustomerName] = useState('Lucia Martinez');
+  const [sendingChatMessage, setSendingChatMessage] = useState(false);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [publishingDraftId, setPublishingDraftId] = useState<string | null>(null);
 
   // Creative Studio State
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -106,6 +125,127 @@ export function MarketingPage() {
     setTimeout(() => setToastMessage(null), 5000);
   };
 
+  const loadConversations = async (slug = selectedBrandSlug) => {
+    setLoadingConversations(true);
+    try {
+      const res = await api.marketingConversations(slug);
+      setConversations(res.conversations);
+      if (res.conversations.length > 0 && !selectedConversationId) {
+        setSelectedConversationId(res.conversations[0]?.id ?? null);
+      }
+    } catch (err: any) {
+      console.error('Failed to load conversations:', err);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  const handleSaveIntegrations = async () => {
+    setSavingIntegrations(true);
+    try {
+      const res = await api.marketingUpdateBrandIntegrations(selectedBrandSlug, {
+        integrations: integrationsForm,
+        autoPublish: autoPublishActive,
+        autoReplyChat: autoReplyChatActive,
+      });
+      setOverview((prev) => (prev ? { ...prev, brand: res.brand } : prev));
+      showToast('Integrations and autonomy parameters updated successfully');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save integrations');
+    } finally {
+      setSavingIntegrations(false);
+    }
+  };
+
+  const handleToggleAutoPublish = async () => {
+    const nextVal = !autoPublishActive;
+    setAutoPublishActive(nextVal);
+    try {
+      await api.marketingUpdateBrandIntegrations(selectedBrandSlug, {
+        autoPublish: nextVal,
+      });
+      showToast(`Autonomous Auto-Publish on Approval ${nextVal ? 'ENABLED' : 'DISABLED'}`);
+    } catch (err: any) {
+      setAutoPublishActive(!nextVal);
+      showToast('Failed to toggle auto-publish');
+    }
+  };
+
+  const handleToggleAutoReplyChat = async () => {
+    const nextVal = !autoReplyChatActive;
+    setAutoReplyChatActive(nextVal);
+    try {
+      await api.marketingUpdateBrandIntegrations(selectedBrandSlug, {
+        autoReplyChat: nextVal,
+      });
+      showToast(`Autonomous Chat & DM Auto-Reply ${nextVal ? 'ENABLED' : 'DISABLED'}`);
+    } catch (err: any) {
+      setAutoReplyChatActive(!nextVal);
+      showToast('Failed to toggle chat auto-reply');
+    }
+  };
+
+  const handleTestIntegration = async (channel: 'TELEGRAM' | 'WHATSAPP' | 'INSTAGRAM' | 'META_ADS') => {
+    setTestingChannel(channel);
+    setTestResult(null);
+    try {
+      const res = await api.marketingTestIntegration(selectedBrandSlug, channel);
+      setTestResult(res);
+      showToast(res.message);
+    } catch (err: any) {
+      setTestResult({ channel, ok: false, message: err?.message || 'Connection test failed' });
+    } finally {
+      setTestingChannel(null);
+    }
+  };
+
+  const handleDirectPublish = async (draftId: string) => {
+    setPublishingDraftId(draftId);
+    try {
+      const res = await api.marketingPublishDraft(draftId);
+      setDrafts((prev) => prev.map((d) => (d.id === draftId ? res.draft : d)));
+      showToast(res.publishResult?.message || 'Post published successfully');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to publish post');
+    } finally {
+      setPublishingDraftId(null);
+    }
+  };
+
+  const handleSendChatMessage = async () => {
+    if (!chatInputMessage.trim()) return;
+    setSendingChatMessage(true);
+    try {
+      const res = await api.marketingSendChatMessage(selectedBrandSlug, {
+        message: chatInputMessage.trim(),
+        customerName: simulatedCustomerName.trim() || 'Potential Client',
+        conversationId: selectedConversationId || undefined,
+      });
+      setChatInputMessage('');
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.id === res.conversation.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = res.conversation;
+          return updated;
+        }
+        return [res.conversation, ...prev];
+      });
+      setSelectedConversationId(res.conversation.id);
+      showToast(`Assistant replied [Intent: ${res.reply.intent}]`);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to generate assistant response');
+    } finally {
+      setSendingChatMessage(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      void loadConversations(selectedBrandSlug);
+    }
+  }, [activeTab, selectedBrandSlug]);
+
   const loadData = async (slug = selectedBrandSlug) => {
     setLoading(true);
     setError(null);
@@ -130,6 +270,9 @@ export function MarketingPage() {
         if (ovData.brand.instagramHandle) {
           setInstagramHandleInput(ovData.brand.instagramHandle);
         }
+        setIntegrationsForm(ovData.brand.integrations || {});
+        setAutoPublishActive(Boolean(ovData.brand.autoPublish));
+        setAutoReplyChatActive(Boolean(ovData.brand.autoReplyChat));
       }
 
       if (draftsData.drafts.length > 0 && draftsData.drafts[0]) {
@@ -903,6 +1046,72 @@ export function MarketingPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab('chat')}
+          style={{
+            padding: '10px 18px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'chat' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'chat' ? 'var(--ink)' : 'var(--muted)',
+            fontWeight: activeTab === 'chat' ? 700 : 500,
+            fontSize: '14px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span>Inbox & Chat Assistant</span>
+          <span
+            style={{
+              fontSize: '10px',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              background: autoReplyChatActive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+              color: autoReplyChatActive ? '#22c55e' : 'var(--muted)',
+              border: autoReplyChatActive ? '1px solid rgba(34, 197, 94, 0.4)' : '1px solid var(--border)',
+              fontWeight: 700,
+            }}
+          >
+            {autoReplyChatActive ? 'AUTO-REPLY: ON' : 'MANUAL'}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('integrations')}
+          style={{
+            padding: '10px 18px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'integrations' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'integrations' ? 'var(--ink)' : 'var(--muted)',
+            fontWeight: activeTab === 'integrations' ? 700 : 500,
+            fontSize: '14px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span>Integrations & API Keys</span>
+          {autoPublishActive && (
+            <span
+              style={{
+                fontSize: '10px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                background: 'rgba(59, 130, 246, 0.15)',
+                color: '#3b82f6',
+                border: '1px solid rgba(59, 130, 246, 0.4)',
+                fontWeight: 700,
+              }}
+            >
+              AUTO-PUBLISH
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={() => setActiveTab('client_portal')}
           style={{
             padding: '10px 18px',
@@ -1295,23 +1504,72 @@ export function MarketingPage() {
                     )}
 
                     {isApproved && (
-                      <button
-                        disabled={statusUpdatingId === draft.id}
-                        onClick={() => handleUpdateStatus(draft.id, 'PUBLISHED')}
-                        style={{
-                          flex: 1,
-                          padding: '8px 12px',
-                          borderRadius: '4px',
-                          background: '#2563eb',
-                          color: '#ffffff',
-                          border: 'none',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Mark as Published
-                      </button>
+                      <>
+                        <button
+                          disabled={publishingDraftId === draft.id || statusUpdatingId === draft.id}
+                          onClick={() => handleDirectPublish(draft.id)}
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            borderRadius: '4px',
+                            background: '#2563eb',
+                            color: '#ffffff',
+                            border: 'none',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {publishingDraftId === draft.id ? 'Publishing...' : 'Publish to Social Media'}
+                        </button>
+                        <button
+                          disabled={statusUpdatingId === draft.id}
+                          onClick={() => handleUpdateStatus(draft.id, 'PUBLISHED')}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '4px',
+                            background: 'transparent',
+                            color: 'var(--muted)',
+                            border: '1px solid var(--border)',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Mark as Published
+                        </button>
+                      </>
+                    )}
+                    {draft.status === 'PUBLISHED' && (
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            background: draft.metrics?.live ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                            color: draft.metrics?.live ? '#22c55e' : '#3b82f6',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {draft.metrics?.live ? 'PUBLISHED LIVE' : 'PUBLISHED (SANDBOX SIMULATED)'}
+                        </span>
+                        {Boolean(draft.metrics?.permalink) && (
+                          <a
+                            href={String(draft.metrics.permalink)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              marginLeft: 'auto',
+                              fontSize: '12px',
+                              color: '#3b82f6',
+                              textDecoration: 'none',
+                              fontWeight: 600,
+                            }}
+                          >
+                            Open Publication ↗
+                          </a>
+                        )}
+                      </div>
                     )}
 
                     <button

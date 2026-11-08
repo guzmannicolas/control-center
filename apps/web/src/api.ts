@@ -33,6 +33,9 @@ import type {
   UpdateAdCampaignInput,
   CreateAdCampaignInput,
   UpdateDraftInput,
+  UpdateBrandIntegrationsInput,
+  TestChatMessageInput,
+  BrandConversationView,
   PromotionsOverview,
 } from '@cc/shared';
 
@@ -316,6 +319,40 @@ export const api = {
   ) =>
     request<{ brand: BrandView; socialStyleMd: string; message: string }>(
       `/api/marketing/brands/${encodeURIComponent(slug)}/analyze-style`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    ),
+
+  marketingPublishDraft: (id: string) =>
+    request<{ draft: SocialDraftView; publishResult: any }>(`/api/marketing/drafts/${id}/publish`, {
+      method: 'POST',
+    }),
+  marketingPublishPendingDrafts: () =>
+    request<{ publishedCount: number; results: any[] }>('/api/marketing/drafts/publish-pending', {
+      method: 'POST',
+    }),
+  marketingUpdateBrandIntegrations: (slug: string, payload: UpdateBrandIntegrationsInput) =>
+    request<{ brand: BrandView }>(`/api/marketing/brands/${encodeURIComponent(slug)}/integrations`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  marketingTestIntegration: (slug: string, channel: 'TELEGRAM' | 'WHATSAPP' | 'INSTAGRAM' | 'META_ADS') =>
+    request<{ ok: boolean; channel: string; message: string }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/test-integration`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ channel }),
+      }
+    ),
+  marketingConversations: (slug: string) =>
+    request<{ conversations: BrandConversationView[] }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/conversations`
+    ),
+  marketingSendChatMessage: (slug: string, payload: TestChatMessageInput) =>
+    request<{ conversation: BrandConversationView; reply: any }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/conversations/chat`,
       {
         method: 'POST',
         body: JSON.stringify(payload),
