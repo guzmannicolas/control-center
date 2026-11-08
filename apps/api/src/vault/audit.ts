@@ -12,7 +12,7 @@ import type {
   VaultProjectConfig,
   VaultSyncStatus,
 } from '@cc/shared';
-import { exportEnvText, getVaultOverview, updateProjectLastSynced } from './vault.js';
+import { exportEnvText, getVaultOverview, updateProjectLastSynced, importEnvText } from './vault.js';
 
 const execAsync = promisify(exec);
 
@@ -368,7 +368,24 @@ export async function deployVaultToDisk(projectName: string): Promise<{
   };
 }
 
-export function discoverVpsEnvFiles(): DiscoveredEnvFile[] {
+export function importEnvFromDiskFile(
+  filePath: string,
+  targetProject?: string,
+): { importedCount: number; project: string } {
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`);
+  }
+  const raw = readFileSync(filePath, 'utf-8');
+  let project = targetProject?.trim();
+  if (!project) {
+    const parent = basename(dirname(filePath));
+    project = parent === 'repositories' || !parent ? 'global' : parent;
+  }
+  const res = importEnvText(project, raw);
+  return { importedCount: res.importedCount, project };
+}
+
+export function discoverVpsEnvFiles(customPath?: string): DiscoveredEnvFile[] {
   const overview = getVaultOverview();
   const configuredPaths = new Set(
     Object.values(overview.projectConfigs).map((c) => resolve(c.filePath).toLowerCase()),
@@ -377,43 +394,73 @@ export function discoverVpsEnvFiles(): DiscoveredEnvFile[] {
   const results: DiscoveredEnvFile[] = [];
   const rootsToScan: string[] = [];
 
-  if (existsSync('/home/adminnico')) {
-    rootsToScan.push('/home/adminnico');
+  if (customPath && existsSync(customPath)) {
+    rootsToScan.push(resolve(customPath));
   } else {
+    // Primary VPS locations
+    if (existsSync('/home/adminnico/repositories')) {
+      rootsToScan.push('/home/adminnico/repositories');
+    }
+    if (existsSync('/home/adminnico')) {
+      rootsToScan.push('/home/adminnico');
+    }
+    if (existsSync('/host/home/adminnico')) {
+      rootsToScan.push('/host/home/adminnico');
+    }
+    // Local / Container workdir fallbacks
     rootsToScan.push(process.cwd());
+    const parentDir = resolve(process.cwd(), '..');
+    if (existsSync(parentDir) && !rootsToScan.includes(parentDir)) {
+      rootsToScan.push(parentDir);
+    }
   }
 
-  const IGNORED_DIRS = new Set(['node_modules', '.git', '.cache', 'dist', 'build', '.pnpm', 'tmp']);
+  const seenPaths = new Set<string>();
+  const IGNORED_DIRS = new Set([
+    'node_modules', '.git', '.cache', 'dist', 'build', '.pnpm', 'tmp', '.next', '.nuxt',
+  ]);
 
   function scanDir(dir: string, depth = 0) {
-    if (depth > 3) return;
+    if (depth > 5) return;
     try {
       const entries = readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isDirectory()) {
-          if (!IGNORED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+          // Allow exploring repositories and normal directories, ignore build/git/node_modules
+          if (!IGNORED_DIRS.has(entry.name) && (!entry.name.startsWith('.') || entry.name === '.env')) {
             scanDir(join(dir, entry.name), depth + 1);
           }
-        } else if (entry.isFile() && entry.name.startsWith('.env')) {
-          const fullPath = join(dir, entry.name);
-          const normalized = resolve(fullPath).toLowerCase();
-          const already = configuredPaths.has(normalized);
+        } else if (entry.isFile()) {
+          const lowerName = entry.name.toLowerCase();
+          const isEnvMatch =
+            lowerName === '.env' ||
+            lowerName.startsWith('.env.') ||
+            lowerName.endsWith('.env');
 
-          let varCount = 0;
-          try {
-            const raw = readFileSync(fullPath, 'utf-8');
-            varCount = parseEnvContent(raw).size;
-          } catch {
-            varCount = 0;
+          if (isEnvMatch) {
+            const fullPath = join(dir, entry.name);
+            const normalized = resolve(fullPath).toLowerCase();
+            if (seenPaths.has(normalized)) continue;
+            seenPaths.add(normalized);
+
+            const already = configuredPaths.has(normalized);
+
+            let varCount = 0;
+            try {
+              const raw = readFileSync(fullPath, 'utf-8');
+              varCount = parseEnvContent(raw).size;
+            } catch {
+              varCount = 0;
+            }
+
+            const folderName = basename(dir);
+            results.push({
+              path: fullPath,
+              projectName: folderName === 'repositories' ? 'root' : folderName,
+              variableCount: varCount,
+              alreadyConfigured: already,
+            });
           }
-
-          const folderName = basename(dir);
-          results.push({
-            path: fullPath,
-            projectName: folderName === 'repositories' ? 'root' : folderName,
-            variableCount: varCount,
-            alreadyConfigured: already,
-          });
         }
       }
     } catch {

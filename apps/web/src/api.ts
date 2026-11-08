@@ -20,6 +20,8 @@ import type {
   VaultAuditSummary,
   VaultDiffResult,
   DiscoveredEnvFile,
+  KnowledgeDocMeta,
+  KnowledgeDocDetail,
 } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
@@ -161,5 +163,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ project }),
     }),
-  vaultDiscover: () => request<DiscoveredEnvFile[]>('/api/vault/discover'),
+  vaultDiscover: (path?: string) =>
+    request<DiscoveredEnvFile[]>(`/api/vault/discover${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  vaultImportFile: (filePath: string, project?: string) =>
+    request<{ importedCount: number; project: string }>('/api/vault/import-file', {
+      method: 'POST',
+      body: JSON.stringify({ filePath, project }),
+    }),
+
+  // Knowledge Base & Agent Context
+  knowledgeList: () => request<KnowledgeDocMeta[]>('/api/knowledge'),
+  knowledgeGet: (slug: string) => request<KnowledgeDocDetail>(`/api/knowledge/${slug}`),
+  knowledgeSave: (slug: string, content: string) =>
+    request<{ ok: boolean; meta: KnowledgeDocMeta }>(`/api/knowledge/${slug}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
+  agentContext: (topics?: string) =>
+    request<{ topic: string; context: string }>(topics ? `/api/agent/context?topic=${encodeURIComponent(topics)}&format=json` : '/api/agent/context?format=json'),
 };

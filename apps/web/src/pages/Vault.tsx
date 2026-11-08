@@ -57,8 +57,8 @@ export function VaultPage() {
 
   // Discover Modal
   const [isDiscoverModalOpen, setIsDiscoverModalOpen] = useState(false);
-
-  // Delete Modal
+  const [customScanPath, setCustomScanPath] = useState('');
+  const [importedFileSuccess, setImportedFileSuccess] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<VaultItem | null>(null);
 
   // Main Query
@@ -76,9 +76,21 @@ export function VaultPage() {
 
   // Discover Query
   const discoverQuery = useQuery<DiscoveredEnvFile[]>({
-    queryKey: ['vaultDiscover'],
-    queryFn: api.vaultDiscover,
+    queryKey: ['vaultDiscover', customScanPath],
+    queryFn: () => api.vaultDiscover(customScanPath || undefined),
     enabled: isDiscoverModalOpen,
+  });
+
+  // Import File Mutation
+  const importFileMutation = useMutation({
+    mutationFn: ({ filePath, project }: { filePath: string; project?: string }) =>
+      api.vaultImportFile(filePath, project),
+    onSuccess: (_, vars) => {
+      setImportedFileSuccess(vars.filePath);
+      setTimeout(() => setImportedFileSuccess(null), 3000);
+      void queryClient.invalidateQueries({ queryKey: ['vault'] });
+      void queryClient.invalidateQueries({ queryKey: ['vaultDiscover'] });
+    },
   });
 
   // Audit Mutation
@@ -912,9 +924,14 @@ export function VaultPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-card border border-line rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-line flex items-center justify-between bg-subtle/30 flex-shrink-0">
-              <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-                <span className="emoji-bw">🔍</span> Discovered .env Files on VPS
-              </h3>
+              <div>
+                <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
+                  <span className="emoji-bw">🔍</span> Discovered .env Files on VPS
+                </h3>
+                <p className="text-[11px] text-muted">
+                  Auto-detect environment configs across repositories and import them into the Vault in 1 click
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsDiscoverModalOpen(false)}
@@ -924,51 +941,106 @@ export function VaultPage() {
               </button>
             </div>
 
+            {/* Custom Scan Path Input */}
+            <div className="p-3 bg-subtle/20 border-b border-line flex items-center gap-2">
+              <input
+                type="text"
+                value={customScanPath}
+                onChange={(e) => setCustomScanPath(e.target.value)}
+                placeholder="Scan custom path (e.g. /home/adminnico/repositories or ~)"
+                className="input flex-1 text-xs font-mono py-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void discoverQuery.refetch();
+                }}
+              />
+              <button
+                type="button"
+                disabled={discoverQuery.isFetching}
+                onClick={() => void discoverQuery.refetch()}
+                className="btn btn-secondary text-xs px-3 py-1 flex items-center gap-1.5"
+              >
+                <span className="emoji-bw">🔄</span>
+                {discoverQuery.isFetching ? 'Scanning...' : 'Scan Path'}
+              </button>
+            </div>
+
             <div className="p-4 overflow-y-auto flex-1 space-y-2">
               {discoverQuery.isLoading ? (
                 <div className="p-8 text-center text-xs text-ink-2">Scanning VPS filesystem...</div>
               ) : discoverQuery.data?.length === 0 ? (
-                <div className="p-8 text-center text-xs text-ink-2">No unmanaged .env files found.</div>
+                <div className="p-6 text-center space-y-2 border border-line/60 rounded-lg bg-page/50">
+                  <span className="emoji-bw text-xl block">📂</span>
+                  <p className="text-xs font-medium text-ink">No .env files found in current scan path</p>
+                  <p className="text-[11px] text-muted max-w-md mx-auto leading-relaxed">
+                    This is completely normal if repositories keep their <code>.env</code> files gitignored or if files are in a different directory. You can specify a custom VPS path above (e.g. <code>/home/adminnico/repositories</code>) or manually paste your variables using <strong>Import .env</strong>.
+                  </p>
+                </div>
               ) : (
-                discoverQuery.data?.map((file) => (
-                  <div
-                    key={file.path}
-                    className="p-3 bg-page border border-line rounded-lg flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <strong className="text-ink font-semibold">{file.projectName}</strong>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-subtle text-muted font-mono">
-                          {file.variableCount} variables
-                        </span>
-                        {file.alreadyConfigured && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">
-                            Configured
+                discoverQuery.data?.map((file) => {
+                  const wasImported = importedFileSuccess === file.path;
+
+                  return (
+                    <div
+                      key={file.path}
+                      className="p-3 bg-page border border-line rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0 space-y-0.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <strong className="text-ink font-semibold">{file.projectName}</strong>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-subtle text-muted font-mono">
+                            {file.variableCount} variables
                           </span>
+                          {file.alreadyConfigured && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">
+                              Configured
+                            </span>
+                          )}
+                          {wasImported && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
+                              ✓ Imported into Vault
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted font-mono truncate">{file.path}</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          type="button"
+                          disabled={importFileMutation.isPending}
+                          onClick={() => {
+                            importFileMutation.mutate({
+                              filePath: file.path,
+                              project: file.projectName,
+                            });
+                          }}
+                          className="btn btn-primary text-xs px-2.5 py-1.5 flex items-center gap-1"
+                          title="Read this file and encrypt all its variables into the Vault"
+                        >
+                          <span className="emoji-bw">📥</span> Import into Vault
+                        </button>
+
+                        {!file.alreadyConfigured && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              configMutation.mutate({
+                                projectName: file.projectName,
+                                filePath: file.path,
+                                environment: 'production',
+                                criticality: 'MEDIUM',
+                                lastSyncedAt: null,
+                              });
+                            }}
+                            className="btn btn-secondary text-xs px-2.5 py-1.5"
+                          >
+                            Add to Inventory
+                          </button>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted font-mono truncate">{file.path}</p>
                     </div>
-
-                    {!file.alreadyConfigured && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          configMutation.mutate({
-                            projectName: file.projectName,
-                            filePath: file.path,
-                            environment: 'production',
-                            criticality: 'MEDIUM',
-                            lastSyncedAt: null,
-                          });
-                        }}
-                        className="btn btn-secondary text-xs px-2.5 py-1.5 flex-shrink-0"
-                      >
-                        Add to Inventory
-                      </button>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

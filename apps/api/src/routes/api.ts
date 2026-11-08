@@ -1,3 +1,10 @@
+import {
+  listKnowledgeDocs,
+  readKnowledgeDoc,
+  writeKnowledgeDoc,
+  getSystemContext,
+} from '../knowledge/manager.js';
+import { handleMcpRequest, type McpJsonRpcRequest } from '../knowledge/mcp.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
@@ -28,6 +35,7 @@ import {
   computeVaultDiff,
   deployVaultToDisk,
   discoverVpsEnvFiles,
+  importEnvFromDiskFile,
 } from '../vault/audit.js';
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
 import { subdomainsOf } from '../subdomains.js';
@@ -106,7 +114,7 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   // Every route in this plugin requires a logged-in user, and knows who it is.
   app.decorateRequest('user', null);
   app.addHook('preHandler', async (req, reply) => {
-    if (req.url.startsWith('/api/webhooks/')) return;
+    if (req.url.startsWith('/api/webhooks/') || req.url.startsWith('/api/agent/context') || req.url.startsWith('/api/mcp')) return;
     const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
     if (!user) return reply.code(401).send({ error: 'Not logged in' });
     req.user = user;
@@ -1081,8 +1089,25 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     }
   });
 
-  app.get('/vault/discover', async (): Promise<DiscoveredEnvFile[]> => {
-    return discoverVpsEnvFiles();
+  app.get('/vault/discover', async (req): Promise<DiscoveredEnvFile[]> => {
+    const query = req.query as { path?: string };
+    return discoverVpsEnvFiles(query.path);
+  });
+
+  app.post('/vault/import-file', async (req, reply) => {
+    const ImportFileInput = z.object({
+      filePath: z.string().min(1),
+      project: z.string().optional(),
+    });
+    const parsed = ImportFileInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid payload' });
+
+    try {
+      const res = importEnvFromDiskFile(parsed.data.filePath, parsed.data.project);
+      return res;
+    } catch (err: any) {
+      return reply.code(400).send({ error: err.message || 'Failed to import file' });
+    }
   });
 
   app.post('/vault', async (req, reply): Promise<VaultItem | void> => {

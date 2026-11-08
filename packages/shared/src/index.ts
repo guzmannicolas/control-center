@@ -387,4 +387,20 @@ export interface VaultOverview {
   auditSummary: VaultAuditSummary;
 }
 
+export interface KnowledgeDocMeta {
+  slug: string;
+  category: string;
+  title: string;
+  relativePath: string;
+  sizeBytes: number;
+  lastModified: string;
+}
+
+export interface KnowledgeDocDetail {
+  slug: string;
+  content: string;
+  meta: KnowledgeDocMeta;
+}
+
+
 
