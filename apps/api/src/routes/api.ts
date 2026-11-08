@@ -86,6 +86,7 @@ import {
   setPrismaForWhatsApp,
 } from '../leads/whatsapp.js';
 import { createRedis } from '../infra.js';
+import { marketingRoutes } from '../marketing/routes.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 const asMetrics = (value: unknown) => (value ?? {}) as Record<string, number>;
@@ -114,11 +115,19 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   // Every route in this plugin requires a logged-in user, and knows who it is.
   app.decorateRequest('user', null);
   app.addHook('preHandler', async (req, reply) => {
-    if (req.url.startsWith('/api/webhooks/') || req.url.startsWith('/api/agent/context') || req.url.startsWith('/api/mcp')) return;
+    if (
+      req.url.startsWith('/api/webhooks/') ||
+      req.url.startsWith('/api/agent/context') ||
+      req.url.startsWith('/api/mcp') ||
+      req.url.startsWith('/api/marketing/drafts/public/')
+    )
+      return;
     const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
     if (!user) return reply.code(401).send({ error: 'Not logged in' });
     req.user = user;
   });
+
+  app.register(marketingRoutes, { prefix: '/marketing', prisma });
 
   app.get('/overview', async (): Promise<Overview> => {
     const targets = await prisma.target.findMany({

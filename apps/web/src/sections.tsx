@@ -16,6 +16,7 @@ import {
   VercelIcon,
   VpsIcon,
   FilesIcon,
+  MarketingIcon,
 } from './components/Icons.tsx';
 import { DatabasesPage } from './pages/Databases.tsx';
 import { DomainsPage } from './pages/Domains.tsx';
@@ -33,6 +34,7 @@ import { CloudflarePage } from './pages/Cloudflare.tsx';
 import { KnowledgePage } from './pages/Knowledge.tsx';
 import { FilesPage } from './pages/Files.tsx';
 import { VaultPage } from './pages/Vault.tsx';
+import { MarketingPage } from './pages/Marketing.tsx';
 
 export interface Section {
   path: string;
@@ -45,6 +47,7 @@ export interface Section {
 export const SECTIONS: Section[] = [
   { path: '/', label: 'Overview', Icon: OverviewIcon, Page: OverviewPage },
   { path: '/leads', label: 'Sales', Icon: LeadsIcon, Page: LeadsPage },
+  { path: '/marketing', label: 'Marketing', Icon: MarketingIcon, Page: MarketingPage },
   { path: '/vps', label: 'VPS', Icon: VpsIcon, Page: VpsPage },
   { path: '/files', label: 'Files', Icon: FilesIcon, Page: FilesPage },
   { path: '/vault', label: 'Vault', Icon: VaultIcon, Page: VaultPage },

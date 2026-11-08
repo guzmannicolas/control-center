@@ -22,6 +22,14 @@ import type {
   DiscoveredEnvFile,
   KnowledgeDocMeta,
   KnowledgeDocDetail,
+  MarketingOverview,
+  SocialDraftView,
+  SocialDraftStatus,
+  AdCampaignView,
+  BrandView,
+  GenerateDraftInput,
+  DispatchApprovalInput,
+  UpdateAdCampaignInput,
 } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
@@ -181,4 +189,61 @@ export const api = {
     }),
   agentContext: (topics?: string) =>
     request<{ topic: string; context: string }>(topics ? `/api/agent/context?topic=${encodeURIComponent(topics)}&format=json` : '/api/agent/context?format=json'),
+
+  // Growth & Marketing Engine
+  marketingOverview: (brandSlug?: string) =>
+    request<MarketingOverview>(`/api/marketing/overview${brandSlug ? `?brandSlug=${encodeURIComponent(brandSlug)}` : ''}`),
+  marketingDrafts: (params?: { brandSlug?: string; status?: string; platform?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.brandSlug) q.set('brandSlug', params.brandSlug);
+    if (params?.status) q.set('status', params.status);
+    if (params?.platform) q.set('platform', params.platform);
+    const qs = q.toString();
+    return request<{ drafts: SocialDraftView[] }>(`/api/marketing/drafts${qs ? `?${qs}` : ''}`);
+  },
+  marketingGenerateDraft: (payload: GenerateDraftInput) =>
+    request<{ draft: SocialDraftView; creativeInfo?: any }>('/api/marketing/drafts/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  marketingUpdateDraftStatus: (id: string, status: SocialDraftStatus, feedback?: string) =>
+    request<{ draft: SocialDraftView }>(`/api/marketing/drafts/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, feedback }),
+    }),
+  marketingDispatchApproval: (id: string, payload?: DispatchApprovalInput) =>
+    request<{ ok: boolean; channel: string; recipient: string; approvalUrl: string; messagePreview: string; error?: string }>(
+      `/api/marketing/drafts/${id}/dispatch-approval`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload ?? {}),
+      }
+    ),
+  marketingAds: (params?: { brandSlug?: string; platform?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.brandSlug) q.set('brandSlug', params.brandSlug);
+    if (params?.platform) q.set('platform', params.platform);
+    const qs = q.toString();
+    return request<{ campaigns: AdCampaignView[]; audit: any }>(`/api/marketing/ads${qs ? `?${qs}` : ''}`);
+  },
+  marketingUpdateAdCampaign: (id: string, payload: UpdateAdCampaignInput) =>
+    request<{ campaign: AdCampaignView }>(`/api/marketing/ads/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  marketingAuditAds: () =>
+    request<{ audit: any; timestamp: string }>('/api/marketing/ads/audit', { method: 'POST' }),
+  marketingBrands: () => request<{ brands: BrandView[] }>('/api/marketing/brands'),
+  marketingUpsertBrand: (brand: Partial<BrandView>) =>
+    request<{ brand: BrandView }>('/api/marketing/brands', {
+      method: 'POST',
+      body: JSON.stringify(brand),
+    }),
+  marketingPublicDraft: (token: string) =>
+    request<{ draft: SocialDraftView; brand: BrandView }>(`/api/marketing/drafts/public/${token}`),
+  marketingPublicAction: (token: string, decision: 'APPROVED' | 'REJECTED', feedback?: string) =>
+    request<any>(`/api/marketing/drafts/public/${token}/action`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, feedback }),
+    }),
 };

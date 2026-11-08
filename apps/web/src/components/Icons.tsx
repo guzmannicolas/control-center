@@ -126,3 +126,10 @@ export const VaultIcon = () => (
     <circle cx="12" cy="16" r="1" />
   </Icon>
 );
+
+export const MarketingIcon = () => (
+  <Icon>
+    <path d="M3 11l19-9l-9 19l-2-8l-8-2z" />
+    <path d="M12 12l4-4" />
+  </Icon>
+);
