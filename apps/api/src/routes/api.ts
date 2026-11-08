@@ -132,7 +132,8 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
       req.url.startsWith('/api/webhooks/') ||
       req.url.startsWith('/api/agent/context') ||
       req.url.startsWith('/api/mcp') ||
-      req.url.startsWith('/api/marketing/drafts/public/')
+      req.url.startsWith('/api/marketing/drafts/public/') ||
+      req.url.startsWith('/api/marketing/webhooks/')
     )
       return;
     const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
