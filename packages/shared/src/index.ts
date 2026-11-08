@@ -573,6 +573,12 @@ export const SyncInstagramInput = z.object({
 });
 export type SyncInstagramInput = z.infer<typeof SyncInstagramInput>;
 
+export const AddInstagramPostInput = z.object({
+  url: z.string().min(3, 'URL or shortcode is required'),
+  caption: z.string().optional(),
+});
+export type AddInstagramPostInput = z.infer<typeof AddInstagramPostInput>;
+
 export const UpdateDraftInput = z.object({
   caption: z.string().optional(),
   scheduledFor: z.string().nullable().optional(),

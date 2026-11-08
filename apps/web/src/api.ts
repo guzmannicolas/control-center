@@ -282,10 +282,22 @@ export const api = {
       body: JSON.stringify({ activePlatforms }),
     }),
   marketingSyncInstagram: (slug: string, handle?: string) =>
-    request<{ brand: BrandView; scraped: any }>(`/api/marketing/brands/${encodeURIComponent(slug)}/sync-instagram`, {
+    request<{ brand: BrandView; scraped: any; statusMessage?: string }>(`/api/marketing/brands/${encodeURIComponent(slug)}/sync-instagram`, {
       method: 'POST',
       body: JSON.stringify({ handle }),
     }),
+  marketingAddInstagramPost: (slug: string, url: string, caption?: string) =>
+    request<{ brand: BrandView; post: any }>(`/api/marketing/brands/${encodeURIComponent(slug)}/instagram-posts`, {
+      method: 'POST',
+      body: JSON.stringify({ url, caption }),
+    }),
+  marketingDeleteInstagramPost: (slug: string, postId: string) =>
+    request<{ brand: BrandView; deletedPostId: string }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/instagram-posts/${encodeURIComponent(postId)}`,
+      {
+        method: 'DELETE',
+      }
+    ),
 
   // Promociones de Argentina
   promotions: (refresh?: boolean) =>

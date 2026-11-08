@@ -10,6 +10,7 @@ import {
   UpdateDraftInput,
   UpdateBrandPlatformsInput,
   SyncInstagramInput,
+  AddInstagramPostInput,
   type MarketingOverview,
   type SocialDraftView,
   type AdCampaignView,
@@ -18,7 +19,7 @@ import {
 import { generateSocialCreative, auditAdCampaigns } from './agent.js';
 import { dispatchDraftApproval } from './dispatch.js';
 import { ensureMarketingSeed } from './seed-helper.js';
-import { scrapeInstagramProfile } from './instagram-scraper.js';
+import { scrapeInstagramProfile, extractInstagramPostFromEmbed } from './instagram-scraper.js';
 
 export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
   // Helper to serialize Prisma Brand to BrandView
@@ -630,20 +631,83 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     const brand = await prisma.brand.findUnique({ where: { slug } });
     if (!brand) return reply.code(404).send({ error: 'Brand not found' });
 
-    const handleToUse = body.handle || (brand as any).instagramHandle || 'nikipepperstattoo';
+    const handleToUse = body.handle ? body.handle.replace(/^@/, '').trim() : ((brand as any).instagramHandle || 'nikipepperstattoo');
     const scraped = await scrapeInstagramProfile(handleToUse, slug);
+
+    const handleChanged = body.handle && body.handle.replace(/^@/, '').trim() !== (brand as any).instagramHandle;
+    const newPosts = scraped.posts.length > 0 ? scraped.posts : (handleChanged ? [] : ((brand as any).scrapedPosts ?? []));
 
     const updated = await prisma.brand.update({
       where: { slug },
       data: {
         instagramHandle: scraped.handle,
-        scrapedPosts: scraped.posts as any,
+        scrapedPosts: newPosts as any,
       },
     });
 
     return {
       brand: toBrandView(updated),
       scraped,
+      statusMessage: scraped.statusMessage,
+    };
+  });
+
+  // 15. POST /api/marketing/brands/:slug/instagram-posts (Add post by URL/link or shortcode)
+  app.post('/brands/:slug/instagram-posts', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const parsed = AddInstagramPostInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid URL or shortcode' });
+    }
+    const brand = await prisma.brand.findUnique({ where: { slug } });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    const post = await extractInstagramPostFromEmbed(parsed.data.url, parsed.data.caption);
+    if (!post) {
+      return reply.code(400).send({ error: 'Could not extract post from provided Instagram URL or shortcode' });
+    }
+
+    const currentPosts = ((brand as any).scrapedPosts ?? []) as any[];
+    const existingIdx = currentPosts.findIndex((p: any) => p.id === post.id || p.permalink === post.permalink);
+    let updatedPosts = [...currentPosts];
+    if (existingIdx !== -1) {
+      updatedPosts[existingIdx] = post;
+    } else {
+      updatedPosts = [post, ...currentPosts];
+    }
+
+    const updated = await prisma.brand.update({
+      where: { slug },
+      data: {
+        scrapedPosts: updatedPosts as any,
+      },
+    });
+
+    return {
+      brand: toBrandView(updated),
+      post,
+    };
+  });
+
+  // 16. DELETE /api/marketing/brands/:slug/instagram-posts/:postId
+  app.delete('/brands/:slug/instagram-posts/:postId', async (req, reply) => {
+    const { slug, postId } = req.params as { slug: string; postId: string };
+    const brand = await prisma.brand.findUnique({ where: { slug } });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    const currentPosts = ((brand as any).scrapedPosts ?? []) as any[];
+    const filtered = currentPosts.filter((p: any) => p.id !== postId);
+
+    const updated = await prisma.brand.update({
+      where: { slug },
+      data: {
+        scrapedPosts: filtered as any,
+      },
+    });
+
+    return {
+      brand: toBrandView(updated),
+      deletedPostId: postId,
     };
   });
 

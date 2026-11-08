@@ -85,6 +85,10 @@ export function MarketingPage() {
   const [showInstagramModal, setShowInstagramModal] = useState(false);
   const [instagramHandleInput, setInstagramHandleInput] = useState('nikipepperstattoo');
   const [isSyncingInstagram, setIsSyncingInstagram] = useState(false);
+  const [postUrlInput, setPostUrlInput] = useState('');
+  const [postCaptionInput, setPostCaptionInput] = useState('');
+  const [isAddingPost, setIsAddingPost] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -413,12 +417,48 @@ export function MarketingPage() {
     setIsSyncingInstagram(true);
     try {
       const res = await api.marketingSyncInstagram(selectedBrandSlug, instagramHandleInput.trim());
-      showToast(`Synced ${res.scraped.posts.length} live publications from @${res.scraped.handle}. Creative Agent now mirrors this exact style.`);
+      if (res.statusMessage) {
+        showToast(res.statusMessage);
+      } else {
+        const count = res.scraped?.posts?.length ?? 0;
+        showToast(`Synced ${count} publications for @${res.scraped?.handle || instagramHandleInput}. Creative Agent now mirrors this style.`);
+      }
       void loadData(selectedBrandSlug);
     } catch (err: any) {
       alert(err instanceof Error ? err.message : 'Failed to sync Instagram profile');
     } finally {
       setIsSyncingInstagram(false);
+    }
+  };
+
+  const handleAddPostByUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!postUrlInput.trim()) return;
+    setIsAddingPost(true);
+    try {
+      const res = await api.marketingAddInstagramPost(selectedBrandSlug, postUrlInput.trim(), postCaptionInput.trim() || undefined);
+      showToast(`Imported post: ${res.post.permalink || res.post.id}`);
+      setPostUrlInput('');
+      setPostCaptionInput('');
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to import post from Instagram link');
+    } finally {
+      setIsAddingPost(false);
+    }
+  };
+
+  const handleDeleteInstagramPost = async (postId: string) => {
+    if (!confirm('Are you sure you want to remove this publication reference?')) return;
+    setDeletingPostId(postId);
+    try {
+      await api.marketingDeleteInstagramPost(selectedBrandSlug, postId);
+      showToast('Instagram publication reference removed');
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to delete publication reference');
+    } finally {
+      setDeletingPostId(null);
     }
   };
 
@@ -2573,7 +2613,7 @@ export function MarketingPage() {
               border: '1px solid var(--border)',
               borderRadius: '12px',
               padding: '24px',
-              maxWidth: '880px',
+              maxWidth: '920px',
               width: '100%',
               maxHeight: '90vh',
               display: 'flex',
@@ -2587,7 +2627,7 @@ export function MarketingPage() {
                   Instagram Style Intelligence
                 </h3>
                 <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
-                  Scrapes and indexes live publications from the brand's public profile so the AI agent understands her real style, pacing, and hashtags.
+                  Indexes authentic Instagram publications with real links, copy, and media so the AI agent precisely mirrors the brand's voice and aesthetic.
                 </p>
               </div>
               <button
@@ -2599,53 +2639,109 @@ export function MarketingPage() {
               </button>
             </div>
 
-            {/* Sync Bar */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '12px 16px',
-                background: 'var(--page)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                marginBottom: '16px',
-              }}
-            >
-              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)' }}>@</span>
-              <input
-                type="text"
-                value={instagramHandleInput}
-                onChange={(e) => setInstagramHandleInput(e.target.value)}
-                placeholder="nikipepperstattoo"
+            {/* Actions Bar: Add Post by Link & Profile Sync */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+              {/* Form 1: Add Post by Link */}
+              <form
+                onSubmit={handleAddPostByUrl}
                 style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  background: 'var(--surface)',
+                  display: 'flex',
+                  gap: '8px',
+                  padding: '12px 14px',
+                  background: 'var(--page)',
                   border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  color: 'var(--ink)',
-                  fontSize: '13px',
-                }}
-              />
-              <button
-                type="button"
-                disabled={isSyncingInstagram}
-                onClick={() => void handleSyncInstagram()}
-                style={{
-                  background: '#2563eb',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 18px',
-                  borderRadius: '4px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
+                  borderRadius: '8px',
+                  alignItems: 'center',
                 }}
               >
-                {isSyncingInstagram ? 'Syncing Profile...' : 'Scrape & Learn Style'}
-              </button>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={postUrlInput}
+                      onChange={(e) => setPostUrlInput(e.target.value)}
+                      placeholder="Paste post link (e.g. https://www.instagram.com/p/DQGti8QEhOB/ or /reel/...)"
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        color: 'var(--ink)',
+                        fontSize: '13px',
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isAddingPost || !postUrlInput.trim()}
+                      style={{
+                        background: '#059669',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: '4px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: isAddingPost || !postUrlInput.trim() ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {isAddingPost ? 'Importing...' : 'Add Post by Link'}
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    Paste any Instagram post URL. Antigravity extracts the genuine caption, real CDN media, and permalink via Instagram embed.
+                  </span>
+                </div>
+              </form>
+
+              {/* Form 2: Handle Sync */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '10px 14px',
+                  background: 'var(--page)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                }}
+              >
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted)' }}>Profile Handle: @</span>
+                <input
+                  type="text"
+                  value={instagramHandleInput}
+                  onChange={(e) => setInstagramHandleInput(e.target.value)}
+                  placeholder="nikipepperstattoo"
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={isSyncingInstagram}
+                  onClick={() => void handleSyncInstagram()}
+                  style={{
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '6px 14px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: isSyncingInstagram ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isSyncingInstagram ? 'Syncing...' : 'Scrape Profile'}
+                </button>
+              </div>
             </div>
 
             {/* Synced Posts List */}
@@ -2660,26 +2756,66 @@ export function MarketingPage() {
                       background: 'var(--page)',
                       border: '1px solid var(--border)',
                       borderRadius: '8px',
-                      padding: '12px',
+                      padding: '14px',
                     }}
                   >
                     {post.mediaUrl && (
-                      <div style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', background: '#111', flexShrink: 0 }}>
+                      <div style={{ width: '90px', height: '90px', borderRadius: '6px', overflow: 'hidden', background: '#111', flexShrink: 0 }}>
                         <img src={post.mediaUrl} alt="Post asset" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       </div>
                     )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                          {post.postType || 'POST'}
-                        </span>
-                        {post.publishedAt && (
-                          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                            {new Date(post.publishedAt).toLocaleDateString()}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                            {post.postType || 'POST'}
                           </span>
-                        )}
+                          {post.publishedAt && (
+                            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                              {new Date(post.publishedAt).toLocaleDateString()}
+                            </span>
+                          )}
+                          {post.permalink && (
+                            <a
+                              href={post.permalink}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                color: '#2563eb',
+                                textDecoration: 'none',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: 'rgba(37,99,235,0.08)',
+                              }}
+                            >
+                              Open on Instagram ↗
+                            </a>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={deletingPostId === post.id}
+                          onClick={() => void handleDeleteInstagramPost(post.id)}
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            color: '#ef4444',
+                            borderRadius: '4px',
+                            padding: '3px 8px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            cursor: deletingPostId === post.id ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {deletingPostId === post.id ? 'Removing...' : 'Delete'}
+                        </button>
                       </div>
-                      <p style={{ margin: '0 0 8px', fontSize: '13px', lineHeight: '1.45', whiteSpace: 'pre-wrap' }}>
+                      <p style={{ margin: '0 0 8px', fontSize: '13px', lineHeight: '1.45', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {post.caption}
                       </p>
                       {post.hashtags && post.hashtags.length > 0 && (
@@ -2695,8 +2831,11 @@ export function MarketingPage() {
                   </div>
                 ))
               ) : (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
-                  No Instagram publications synced yet. Click <strong>Scrape & Learn Style</strong> to pull real post copy into the AI engine.
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)', background: 'var(--page)', borderRadius: '8px' }}>
+                  <p style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600 }}>No Instagram publications saved yet.</p>
+                  <p style={{ margin: 0, fontSize: '13px' }}>
+                    Paste any Instagram post URL above (e.g. <code>https://www.instagram.com/p/DQGti8QEhOB/</code>) to import authentic posts, or click <strong>Scrape Profile</strong>.
+                  </p>
                 </div>
               )}
             </div>
