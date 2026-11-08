@@ -140,3 +140,5 @@ export const PromoIcon = () => (
     <circle cx="7" cy="7" r="1.5" />
   </Icon>
 );
+
+export const DealsIcon = PromoIcon;

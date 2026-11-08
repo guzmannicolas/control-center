@@ -298,10 +298,38 @@ export const api = {
         method: 'DELETE',
       }
     ),
+  marketingBrandSocialStyle: (slug: string) =>
+    request<{ brand: BrandView; socialStyleMd: string | null }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/social-style`
+    ),
+  marketingSaveBrandSocialStyle: (slug: string, socialStyleMd: string) =>
+    request<{ brand: BrandView; socialStyleMd: string }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/social-style`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ socialStyleMd }),
+      }
+    ),
+  marketingAnalyzeSocialStyle: (
+    slug: string,
+    payload: { handle?: string; postUrls?: string[]; sampleCaptions?: string }
+  ) =>
+    request<{ brand: BrandView; socialStyleMd: string; message: string }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/analyze-style`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    ),
 
   // Promociones de Argentina
   promotions: (refresh?: boolean) =>
     request<PromotionsOverview>(`/api/promociones${refresh ? '?refresh=true' : ''}`),
   scrapePromotions: () =>
     request<PromotionsOverview>('/api/promociones/scrape', { method: 'POST' }),
+  calculateSavings: (payload: { amount: number; category?: any; dayIndex?: number }) =>
+    request<{ results: any[] }>('/api/promociones/calculate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };

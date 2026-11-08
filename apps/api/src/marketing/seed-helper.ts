@@ -32,17 +32,75 @@ export const NIKI_PEPPERS_DEFAULT_DOSSIER = `# Niki Peppers — Brand Identity, 
 - **Official Hashtags:** #NikiPeppers #BotanicalTattoo #FineLineTattoo #TatuajesBotanicos #ContemporaryTattoo #TattooArtistArgentina #ArteBotanico
 `;
 
+export const NIKI_PEPPERS_DEFAULT_SOCIAL_STYLE_MD = `# Niki Peppers (@nikipepperstattoo) — Social Media Style & Copywriting Playbook
+
+## 1. Tone of Voice & Artistic Persona
+- **Tone:** Thoughtful, intimate, poetic, sensitive, grounded, authentic.
+- **Perspective:** First-person singular ("I", "my work", "creating pieces") or collaborative ("let us build", "bringing your idea to life").
+- **Core Ethos:** Tattoos as symbolic rituals of personal transformation, healing, and re-connection with nature and instinctive intuition.
+- **Strictly Prohibited:** Never use aggressive sales copy ("BUY NOW", "LIMITED SLOTS DON'T MISS OUT!"). Keep invitations warm, organic, and gentle. Zero emojis.
+
+## 2. Caption Architecture & Hook Formulas
+- **Opening Hook:** Direct sensory or philosophical observation about the tattoo piece or the connection to nature (under 12 words).
+  - *Formula 1 (Direct sensory):* "Every detail matters, every shadow tells a story."
+  - *Formula 2 (Anatomical flow):* "Delicate botanical fern following the arm curvature."
+  - *Formula 3 (Ritual transformation):* "From preliminary sketch to final needlework on skin."
+- **Body Section:** 2-3 short, breathable paragraphs explaining the intentionality:
+  - Dialogue with body anatomy and movement.
+  - Connection to wild native flora or symbolic animal figures.
+  - Collaborative consultation process (freehand sketch or custom dialogue).
+- **Closing Call to Action (CTA):** Gentle invitation to book a consultation or send a project idea.
+  - *Preferred copy:* "Appointments open for next month. Book your consultation at nikipeppers.com."
+
+## 3. Formatting, Spacing & Emoji Directives
+- **Paragraph Spacing:** Double line breaks between short narrative thoughts. No dense walls of text.
+- **Emoji Directives:** Zero emojis across all generated copy. Emphasize literary clarity and typographic sophistication over decorative symbols.
+- **Language:** English for international guest spots / Melbourne; Spanish for Argentina. Adaptable based on target campaign.
+
+## 4. Strategic Hashtag Clusters
+- **Signature Brand Tag:** #NikiPeppers
+- **Niche Aesthetic Tags:** #BotanicalTattoo #FineLineTattoo #TatuajesBotanicos #ContemporaryTattoo #MicroRealism
+- **Community & Location Tags:** #MelbourneTattoo #BuenosAiresTattoo #ArteBotanico #CustomTattoo
+
+## 5. Few-Shot Golden Reference Captions
+### Reference 1 (Real Instagram Post DQGti8QEhOB):
+> "Every detail matters, every shadow tells a story. I’m tattooing in Melbourne, creating unique pieces focused on realism and color. I’d love to find people who also love nature and animals as me. If you want to turn your idea into art on skin, send me a message with your idea!"
+
+### Reference 2 (Botanical Placement Narrative):
+> "Delicate botanical fern following the arm curvature.
+>
+> Every piece is hand-drawn directly onto the skin during consultation to ensure the stems and leaves honor your body motion. Inspired by Argentine native flora.
+>
+> Appointments open for next month. Book your consultation at nikipeppers.com.
+>
+> #NikiPeppers #BotanicalTattoo #FineLineTattoo #TatuajesBotanicos #CustomTattoo"
+
+## 6. Directives for Autonomous Post Generation
+1. Ground the copy directly in the botanical, ceramic, and ritual transformation statement.
+2. Open with a compelling sensory hook before detailing the design narrative.
+3. Keep sentence pacing breathable with double line breaks.
+4. Always position nikipeppers.com as the natural space to explore projects and book consultations.
+5. Strictly enforce zero emojis in all output.
+`;
+
 /**
  * Ensures the initial pilot brand (Niki Peppers) exists.
  * Does NOT recreate deleted drafts or campaigns if brand already exists.
  */
 export async function ensureMarketingSeed(prisma: PrismaClient) {
-  const existingNiki = await prisma.brand.findUnique({
+  let existingNiki = await prisma.brand.findUnique({
     where: { slug: 'nikipeppers' },
   });
 
   if (existingNiki) {
-    // Brand already exists. Never resurrect deleted drafts or campaigns!
+    // If brand already exists, make sure socialStyleMd is populated if missing
+    if (!existingNiki.socialStyleMd) {
+      existingNiki = await prisma.brand.update({
+        where: { id: existingNiki.id },
+        data: { socialStyleMd: NIKI_PEPPERS_DEFAULT_SOCIAL_STYLE_MD },
+      });
+    }
+    // Never resurrect deleted drafts or campaigns!
     return existingNiki;
   }
 
@@ -76,6 +134,7 @@ export async function ensureMarketingSeed(prisma: PrismaClient) {
       whatsappNumber: '+5493512345678',
       telegramChatId: '@nikipeppers_bot',
       dossierMd: NIKI_PEPPERS_DEFAULT_DOSSIER,
+      socialStyleMd: NIKI_PEPPERS_DEFAULT_SOCIAL_STYLE_MD,
       instagramHandle: 'nikipepperstattoo',
       activePlatforms: ['INSTAGRAM', 'FACEBOOK'],
     },

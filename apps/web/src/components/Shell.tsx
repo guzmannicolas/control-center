@@ -27,7 +27,7 @@ function NotFound() {
 const SECTION_GROUPS: { title: string; paths: string[] }[] = [
   {
     title: 'Core & Sales',
-    paths: ['/', '/promociones', '/leads', '/marketing'],
+    paths: ['/', '/deals', '/leads', '/marketing'],
   },
   {
     title: 'Infrastructure & Cloud',

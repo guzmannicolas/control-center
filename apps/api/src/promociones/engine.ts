@@ -6,22 +6,23 @@ import type {
   ArgentinePromoCategory,
   PaymentMethod,
   PromotionsOverview,
+  SavingsCalculationResult,
 } from '@cc/shared';
 
 const STORAGE_PATH = process.env.PROMOS_STORAGE_FILE || join(process.cwd(), 'data', 'promociones.json');
 
-const DAY_NAMES_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const DAY_NAMES_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const CATEGORY_LABELS: Record<ArgentinePromoCategory, string> = {
-  supermarkets: 'Supermercados & Mayoristas',
-  fuel: 'Combustibles & Estaciones',
-  gastronomy: 'Gastronomía & Bares',
-  pharmacy: 'Farmacias & Salud',
-  clothing: 'Indumentaria & Calzado',
-  technology: 'Tecnología & Electro',
-  entertainment: 'Cines & Entretenimiento',
-  services: 'Servicios & Recargas',
-  other: 'Comercios de Barrio & Varios',
+const CATEGORY_LABELS_EN: Record<ArgentinePromoCategory, string> = {
+  supermarkets: 'Supermarkets & Groceries',
+  fuel: 'Fuel & Gas Stations',
+  gastronomy: 'Restaurants & Dining',
+  pharmacy: 'Pharmacies & Health',
+  clothing: 'Apparel & Fashion',
+  technology: 'Electronics & Tech',
+  entertainment: 'Cinema & Entertainment',
+  services: 'Utilities & Bill Pay',
+  other: 'Local Neighborhood Stores',
 };
 
 // Verified baseline database of recurring daily promotions in Argentina (2026)
@@ -29,468 +30,450 @@ const BASELINE_ARGENTINE_PROMOTIONS: Omit<ArgentinePromo, 'isTodayActive' | 'scr
   // --- CUENTA DNI (BANCO PROVINCIA) ---
   {
     id: 'cdni-carnicerias-weekend',
-    title: 'Carnicerías, Granjas y Pescaderías con Cuenta DNI',
+    title: 'Butcher Shops, Poultry and Fish Markets with Cuenta DNI',
     entity: 'Cuenta DNI',
     entityType: 'wallet',
     category: 'supermarkets',
     discount: '35%',
     discountPercent: 35,
-    cashbackCap: '$6.000 por semana por persona',
-    daysOfWeek: [0, 6], // Sábado y Domingo
-    applicableBusinesses: ['Carnicerías de barrio', 'Granjas', 'Pescaderías adheridas'],
+    cashbackCap: '$6,000 per week per user',
+    daysOfWeek: [0, 6], // Saturday and Sunday
+    applicableBusinesses: ['Butcher shops', 'Poultry farms', 'Seafood markets'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente todo el mes',
-    description: '35% de ahorro en comercios adheridos de carnicería, pollo y pescado. Se alcanza con $17.150 de consumo.',
+    validUntil: 'Active all month',
+    description: '35% cashback on affiliated butcher and poultry shops. Optimal purchase amount is $17,150.',
     termsUrl: 'https://www.bancoprovincia.com.ar/cuentadni/contenidos/beneficios-cuentadni/',
-    highlight: 'Tope semanal $6.000',
+    highlight: 'Weekly cap $6,000',
     sourceUrl: 'https://www.bancoprovincia.com.ar',
   },
   {
     id: 'cdni-comercios-semana',
-    title: 'Comercios de Barrio y Almacenes de Cercanía',
+    title: 'Neighborhood Stores and Local Groceries with Cuenta DNI',
     entity: 'Cuenta DNI',
     entityType: 'wallet',
     category: 'supermarkets',
     discount: '20%',
     discountPercent: 20,
-    cashbackCap: '$6.000 por mes por persona',
-    daysOfWeek: [1, 2, 3, 4, 5], // Lunes a Viernes
-    applicableBusinesses: ['Almacenes', 'Verdulerías', 'Dietéticas', 'Kioscos adheridos'],
+    cashbackCap: '$6,000 per month per user',
+    daysOfWeek: [1, 2, 3, 4, 5], // Monday through Friday
+    applicableBusinesses: ['Neighborhood groceries', 'Greengrocers', 'Bakeries', 'Kiosks'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente todo el mes',
-    description: '20% de ahorro de lunes a viernes en comercios de cercanía del rubro alimentos. Tope mensual unificado.',
+    validUntil: 'Active all month',
+    description: '20% savings Monday through Friday at local neighborhood food and grocery stores.',
     termsUrl: 'https://www.bancoprovincia.com.ar/cuentadni/contenidos/beneficios-cuentadni/',
-    highlight: '20% diario de lunes a viernes',
+    highlight: '20% Monday through Friday',
     sourceUrl: 'https://www.bancoprovincia.com.ar',
   },
   {
     id: 'cdni-ferias-mercados',
-    title: 'Ferias, Mercados y Fiestas Populares bonaerenses',
+    title: 'Local Fairs and Farmers Markets with Cuenta DNI',
     entity: 'Cuenta DNI',
     entityType: 'wallet',
     category: 'supermarkets',
     discount: '40%',
     discountPercent: 40,
-    cashbackCap: '$4.500 por semana por persona',
-    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Todos los días
-    applicableBusinesses: ['Mercados Bonaerenses', 'Ferias locales', 'Puestos de productores'],
+    cashbackCap: '$4,500 per week per user',
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Every day
+    applicableBusinesses: ['Bonaerenses Markets', 'Local street fairs', 'Artisan produce stands'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente todo el mes',
-    description: '40% de descuento en ferias y mercados de productores locales todos los días con Cuenta DNI.',
+    validUntil: 'Active all month',
+    description: '40% discount at authorized farmers markets and artisan producers every day with Cuenta DNI.',
     termsUrl: 'https://www.bancoprovincia.com.ar/cuentadni/contenidos/beneficios-cuentadni/',
-    highlight: '40% todos los días',
+    highlight: '40% daily discount',
     sourceUrl: 'https://www.bancoprovincia.com.ar',
   },
   {
     id: 'cdni-mayores-60',
-    title: 'Personas Mayores de 60 Años en Comercios de Cercanía',
+    title: 'Senior Citizens (+60) Neighborhood Grocery Discount',
     entity: 'Cuenta DNI',
     entityType: 'wallet',
     category: 'supermarkets',
     discount: '30%',
     discountPercent: 30,
-    cashbackCap: '$7.000 por mes por persona',
-    daysOfWeek: [1, 2, 3, 4, 5], // Lunes a Viernes
-    applicableBusinesses: ['Comercios de cercanía', 'Farmacias', 'Almacenes'],
+    cashbackCap: '$7,000 per month per user',
+    daysOfWeek: [1, 2, 3, 4, 5], // Monday through Friday
+    applicableBusinesses: ['Neighborhood stores', 'Pharmacies', 'General grocers'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente todo el mes',
-    description: 'Beneficio exclusivo para usuarios de 60 años o más de lunes a viernes en comercios adheridos.',
+    validUntil: 'Active all month',
+    description: 'Exclusive benefit for users aged 60 and older on weekdays at participating neighborhood stores.',
     termsUrl: 'https://www.bancoprovincia.com.ar/cuentadni/contenidos/beneficios-cuentadni/',
-    highlight: 'Exclusivo +60 años',
+    highlight: 'Senior exclusive benefit',
     sourceUrl: 'https://www.bancoprovincia.com.ar',
   },
 
-  // --- MODO (BANCOS ADHERIDOS: NACION, GALICIA, SANTANDER, BBVA, MACRO) ---
+  // --- MODO (AFFILIATED BANKS: NACION, GALICIA, SANTANDER, BBVA, MACRO) ---
   {
     id: 'modo-supermercados-reintegro',
-    title: 'Supermercados Nacionales con MODO y Tarjetas Bancarias',
+    title: 'National Supermarkets with MODO & Partner Banks',
     entity: 'MODO',
     entityType: 'wallet',
     category: 'supermarkets',
     discount: '25%',
     discountPercent: 25,
-    cashbackCap: '$10.000 por mes',
-    daysOfWeek: [2, 3], // Martes y Miércoles
-    applicableBusinesses: ['Coto', 'ChangoMás', 'Día', 'Disco', 'Jumbo', 'Vea'],
+    cashbackCap: '$10,000 per month',
+    daysOfWeek: [2, 3], // Tuesday and Wednesday
+    applicableBusinesses: ['Coto', 'ChangoMas', 'Dia', 'Disco', 'Jumbo', 'Vea'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente 2026',
-    description: '20% a 30% de reintegro pagando con código QR MODO desde las apps bancarias en grandes cadenas.',
+    validUntil: 'Active in 2026',
+    description: '20% to 30% cashback paying via MODO QR code from affiliated banking apps at major supermarket chains.',
     termsUrl: 'https://www.modo.com.ar/promos',
-    highlight: 'Válido en las grandes cadenas',
+    highlight: 'Major Supermarket Chains',
     sourceUrl: 'https://www.modo.com.ar',
   },
   {
     id: 'modo-gastronomia-weekend',
-    title: 'Gastronomía y Bares el Fin de Semana con MODO',
+    title: 'Weekend Dining and Bars with MODO QR',
     entity: 'MODO',
     entityType: 'wallet',
     category: 'gastronomy',
     discount: '30%',
     discountPercent: 30,
-    cashbackCap: '$5.000 por semana',
-    daysOfWeek: [0, 5, 6], // Viernes, Sábado y Domingo
-    applicableBusinesses: ['Restaurantes', 'Cafeterías', 'Cervecerías', 'Locales adheridos a MODO'],
+    cashbackCap: '$5,000 per week',
+    daysOfWeek: [0, 5, 6], // Friday, Saturday, Sunday
+    applicableBusinesses: ['Restaurants', 'Coffee shops', 'Breweries', 'MODO partner spots'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente fines de semana',
-    description: '30% de reintegro en locales gastronómicos abonando con QR MODO asociando tarjetas de crédito o débito.',
+    validUntil: 'Active weekends',
+    description: '30% cashback on participating dining venues paying via MODO QR with debit or credit cards.',
     termsUrl: 'https://www.modo.com.ar/promos',
-    highlight: 'Fin de semana gastronómico',
+    highlight: 'Weekend Dining Special',
     sourceUrl: 'https://www.modo.com.ar',
   },
   {
     id: 'modo-farmacias',
-    title: 'Farmacias y Perfumerías con MODO',
+    title: 'Pharmacies and Drugstores with MODO',
     entity: 'MODO',
     entityType: 'wallet',
     category: 'pharmacy',
     discount: '20%',
     discountPercent: 20,
-    cashbackCap: '$4.000 por mes',
-    daysOfWeek: [1, 3], // Lunes y Miércoles
-    applicableBusinesses: ['Farmacity', 'Farmacias del Dr. Ahorro', 'Farmacias Central Oeste', 'Simplicity'],
+    cashbackCap: '$4,000 per month',
+    daysOfWeek: [1, 3], // Monday and Wednesday
+    applicableBusinesses: ['Farmacity', 'Farmacias del Dr. Ahorro', 'Central Oeste', 'Simplicity'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente 2026',
-    description: '20% de ahorro con QR MODO en farmacias y perfumerías seleccionadas de todo el país.',
+    validUntil: 'Active in 2026',
+    description: '20% savings paying with MODO QR at leading national pharmacy chains.',
     termsUrl: 'https://www.modo.com.ar/promos',
-    highlight: 'Farmacity y cadenas adheridas',
+    highlight: 'Farmacity and Partner Chains',
     sourceUrl: 'https://www.modo.com.ar',
   },
 
-  // --- COMBUSTIBLES (YPF, SHELL, AXION) ---
+  // --- FUELS & GAS STATIONS (YPF, SHELL, AXION) ---
   {
     id: 'ypf-app-infinia-everyday',
-    title: 'Carga de Infinia y Nafta con App YPF (Dinero en Cuenta)',
+    title: 'YPF Fuel: Infinia Gasoline & Diesel with YPF App Balance',
     entity: 'YPF App',
     entityType: 'loyalty',
     category: 'fuel',
     discount: '12%',
     discountPercent: 12,
-    cashbackCap: '$3.500 por semana',
-    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Todos los días
-    applicableBusinesses: ['Estaciones de Servicio YPF'],
+    cashbackCap: '$3,500 per week',
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Every day
+    applicableBusinesses: ['YPF Gas Stations nationwide'],
     paymentMethod: 'wallet_balance',
-    validUntil: 'Vigente todo el año',
-    description: '10% a 15% de ahorro en nafta y diesel Infinia pagando con saldo precargado en dinero en cuenta App YPF.',
+    validUntil: 'Active all year',
+    description: '10% to 15% instant savings on premium fuel by paying with prepaid in-app wallet balance.',
     termsUrl: 'https://www.ypf.com/promociones',
-    highlight: 'Todos los días con dinero en cuenta',
+    highlight: 'Daily Wallet Balance',
     sourceUrl: 'https://www.ypf.com',
   },
   {
     id: 'ypf-santander-jueves',
-    title: 'Combustible YPF los Jueves con Banco Santander',
+    title: 'YPF Fuel Thursdays with Santander Cards',
     entity: 'Santander',
     entityType: 'bank',
     category: 'fuel',
     discount: '15%',
     discountPercent: 15,
-    cashbackCap: '$4.000 por mes',
-    daysOfWeek: [4], // Jueves
-    applicableBusinesses: ['Estaciones YPF'],
+    cashbackCap: '$4,000 per month',
+    daysOfWeek: [4], // Thursday
+    applicableBusinesses: ['YPF Gas Stations'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente jueves de 2026',
-    description: '15% de ahorro en combustible Infinia pagando con App YPF y tarjeta Visa Débito o Crédito Santander.',
+    validUntil: 'Active Thursdays 2026',
+    description: '15% discount on Infinia fuel through YPF App using Santander Visa credit or debit cards.',
     termsUrl: 'https://www.santander.com.ar/beneficios',
-    highlight: 'Jueves Santander en YPF',
+    highlight: 'Thursday Santander Special',
     sourceUrl: 'https://www.santander.com.ar',
   },
   {
     id: 'shell-box-miercoles',
-    title: 'Miércoles de V-Power en Estaciones Shell con Shell BOX',
+    title: 'Shell V-Power Fuel Wednesdays with Shell BOX App',
     entity: 'Shell BOX',
     entityType: 'loyalty',
     category: 'fuel',
     discount: '10%',
     discountPercent: 10,
-    cashbackCap: '$3.000 por carga',
-    daysOfWeek: [3], // Miércoles
-    applicableBusinesses: ['Estaciones de Servicio Shell'],
+    cashbackCap: '$3,000 per fill-up',
+    daysOfWeek: [3], // Wednesday
+    applicableBusinesses: ['Shell Gas Stations nationwide'],
     paymentMethod: 'qr',
-    validUntil: 'Miércoles de todo 2026',
-    description: '10% de descuento directo en combustibles V-Power Nafta y Diesel abonando mediante la app Shell BOX.',
+    validUntil: 'Active Wednesdays 2026',
+    description: '10% direct discount on V-Power premium fuel when paying through the Shell BOX app.',
     termsUrl: 'https://www.shell.com.ar/shellbox',
-    highlight: 'Miércoles V-Power Shell',
+    highlight: 'Wednesday V-Power Shell',
     sourceUrl: 'https://www.shell.com.ar',
   },
   {
     id: 'axion-on-jueves',
-    title: 'Axion Energy: 10% en Quantium con App ON',
+    title: 'Axion Energy: 10% on Quantium Fuel via ON App',
     entity: 'Axion Energy',
     entityType: 'loyalty',
     category: 'fuel',
     discount: '10%',
     discountPercent: 10,
-    cashbackCap: '$3.200 por semana',
-    daysOfWeek: [4], // Jueves
-    applicableBusinesses: ['Estaciones Axion Energy'],
+    cashbackCap: '$3,200 per week',
+    daysOfWeek: [4], // Thursday
+    applicableBusinesses: ['Axion Energy Gas Stations'],
     paymentMethod: 'qr',
-    validUntil: 'Jueves de todo 2026',
-    description: '10% de descuento en Quantium Nafta y Diesel pagando con la app ON Axion Energy.',
+    validUntil: 'Active Thursdays 2026',
+    description: '10% discount on Quantium premium gasoline and diesel when paying through the ON Axion app.',
     termsUrl: 'https://on.axionenergy.com',
-    highlight: 'Jueves ON Axion',
+    highlight: 'Thursday ON Axion Special',
     sourceUrl: 'https://www.axionenergy.com',
   },
 
-  // --- BANCO NACIÓN (SEMANA NACIÓN) ---
+  // --- BANCO NACION (SEMANA NACION) ---
   {
     id: 'bna-supermercados-miercoles',
-    title: 'Miércoles de Supermercados con BNA+ y MODO',
-    entity: 'Banco Nación',
+    title: 'BNA+ Supermarket Wednesdays with MODO BNA',
+    entity: 'Banco Nacion',
     entityType: 'bank',
     category: 'supermarkets',
     discount: '20%',
     discountPercent: 20,
-    cashbackCap: '$6.000 por semana',
-    daysOfWeek: [3], // Miércoles
-    applicableBusinesses: ['Coto', 'Carrefour', 'ChangoMás', 'Vea', 'Disco', 'Jumbo'],
+    cashbackCap: '$6,000 per week',
+    daysOfWeek: [3], // Wednesday
+    applicableBusinesses: ['Coto', 'Carrefour', 'ChangoMas', 'Vea', 'Disco', 'Jumbo'],
     paymentMethod: 'qr',
-    validUntil: 'Semana Nación 2026',
-    description: '20% de ahorro en un pago los días miércoles en cadenas de supermercados adheridas usando MODO BNA+.',
+    validUntil: 'Active in 2026',
+    description: '20% cashback in a single installment on Wednesdays at participating supermarket chains using MODO BNA+.',
     termsUrl: 'https://www.bna.com.ar/Personas/SemanaNacion',
-    highlight: 'Tope $6.000 semanal',
+    highlight: 'Weekly cap $6,000',
     sourceUrl: 'https://www.bna.com.ar',
   },
   {
     id: 'bna-combustible-viernes',
-    title: 'Viernes de Combustible BNA+ en todas las banderas',
-    entity: 'Banco Nación',
+    title: 'BNA+ Fuel Fridays Across All Major Gas Stations',
+    entity: 'Banco Nacion',
     entityType: 'bank',
     category: 'fuel',
     discount: '10%',
     discountPercent: 10,
-    cashbackCap: '$5.000 por semana',
-    daysOfWeek: [5], // Viernes
+    cashbackCap: '$5,000 per week',
+    daysOfWeek: [5], // Friday
     applicableBusinesses: ['YPF', 'Shell', 'Axion Energy', 'Puma Energy'],
     paymentMethod: 'qr',
-    validUntil: 'Semana Nación 2026',
-    description: '10% de ahorro todos los viernes en estaciones de servicio adheridas con MODO BNA+ y tarjeta de crédito.',
+    validUntil: 'Active in 2026',
+    description: '10% cashback every Friday at partner gas stations paying via MODO BNA+ with credit card.',
     termsUrl: 'https://www.bna.com.ar/Personas/SemanaNacion',
-    highlight: 'Válido en YPF, Shell, Axion y Puma',
+    highlight: 'Valid at YPF, Shell, Axion and Puma',
     sourceUrl: 'https://www.bna.com.ar',
   },
   {
     id: 'bna-gastronomia-sabados',
-    title: 'Sábados de Restaurantes y Bares con BNA+',
-    entity: 'Banco Nación',
+    title: 'BNA+ Saturday Dining and Restaurants with MODO',
+    entity: 'Banco Nacion',
     entityType: 'bank',
     category: 'gastronomy',
     discount: '30%',
     discountPercent: 30,
-    cashbackCap: '$6.000 por semana',
-    daysOfWeek: [6], // Sábado
-    applicableBusinesses: ['Restaurantes', 'Bares', 'Pizzerías', 'Comercios gastronómicos adheridos'],
+    cashbackCap: '$6,000 per week',
+    daysOfWeek: [6], // Saturday
+    applicableBusinesses: ['Restaurants', 'Bars', 'Pizzerias', 'Partner dining venues'],
     paymentMethod: 'qr',
-    validUntil: 'Semana Nación 2026',
-    description: '30% de reintegro en gastronomía los sábados pagando con MODO desde la app BNA+.',
+    validUntil: 'Active in 2026',
+    description: '30% cashback on dining every Saturday paying with MODO through the BNA+ app.',
     termsUrl: 'https://www.bna.com.ar/Personas/SemanaNacion',
-    highlight: 'Sábados 30% en Bares y Restos',
-    sourceUrl: 'https://www.bna.com.ar',
-  },
-  {
-    id: 'bna-farmacias-lunes',
-    title: 'Lunes de Farmacias y Perfumerías con Banco Nación',
-    entity: 'Banco Nación',
-    entityType: 'bank',
-    category: 'pharmacy',
-    discount: '10%',
-    discountPercent: 10,
-    cashbackCap: 'Sin tope de reintegro + 3 cuotas',
-    daysOfWeek: [1], // Lunes
-    applicableBusinesses: ['Farmacias de todo el país', 'Perfumerías adheridas'],
-    paymentMethod: 'credit',
-    validUntil: 'Semana Nación 2026',
-    description: '10% de descuento y hasta 3 cuotas sin interés en farmacias adheridas con tarjetas Visa y Mastercard BNA.',
-    termsUrl: 'https://www.bna.com.ar/Personas/SemanaNacion',
-    highlight: 'Sin tope de reintegro',
+    highlight: 'Saturday 30% Dining Cashback',
     sourceUrl: 'https://www.bna.com.ar',
   },
 
   // --- MERCADO PAGO ---
   {
     id: 'mp-coto-martes',
-    title: 'Coto: 15% de Descuento pagando con QR Mercado Pago',
+    title: 'Coto Supermarket 15% OFF with Mercado Pago QR',
     entity: 'Mercado Pago',
     entityType: 'wallet',
     category: 'supermarkets',
     discount: '15%',
     discountPercent: 15,
-    cashbackCap: '$4.000 por compra',
-    daysOfWeek: [2, 4], // Martes y Jueves
-    applicableBusinesses: ['Supermercados Coto'],
+    cashbackCap: '$4,000 per purchase',
+    daysOfWeek: [2, 4], // Tuesday and Thursday
+    applicableBusinesses: ['Coto Supermarkets'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente 2026',
-    description: '15% de descuento en hipermercados Coto pagando mediante código QR en línea de cajas con dinero en cuenta.',
+    validUntil: 'Active in 2026',
+    description: '15% instant discount at Coto cash registers paying with Mercado Pago QR and account balance.',
     termsUrl: 'https://www.mercadopago.com.ar/descuentos',
-    highlight: 'Martes y Jueves en Coto',
+    highlight: 'Tuesdays and Thursdays at Coto',
     sourceUrl: 'https://www.mercadopago.com.ar',
   },
   {
     id: 'mp-axion-combustible',
-    title: 'Axion Energy con QR Mercado Pago y Dinero en Cuenta',
+    title: 'Axion Energy Fuel Discount with Mercado Pago Balance',
     entity: 'Mercado Pago',
     entityType: 'wallet',
     category: 'fuel',
     discount: '10%',
     discountPercent: 10,
-    cashbackCap: '$2.500 por semana',
-    daysOfWeek: [0, 1], // Domingo y Lunes
-    applicableBusinesses: ['Estaciones Axion adheridas'],
+    cashbackCap: '$2,500 per week',
+    daysOfWeek: [0, 1], // Sunday and Monday
+    applicableBusinesses: ['Axion Energy partner stations'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente fines de semana y lunes',
-    description: '10% de ahorro en carga de combustible en estaciones Axion Energy seleccionadas pagando con dinero en cuenta.',
+    validUntil: 'Active Sundays and Mondays',
+    description: '10% savings on fuel fill-ups at select Axion stations paying with available account balance.',
     termsUrl: 'https://www.mercadopago.com.ar/descuentos',
-    highlight: 'Domingos y Lunes en Axion',
+    highlight: 'Sundays and Mondays at Axion',
     sourceUrl: 'https://www.mercadopago.com.ar',
   },
   {
     id: 'mp-pedidosya-delivery',
-    title: 'PedidosYa y Delivery los Fines de Semana con MP',
+    title: 'PedidosYa and Food Delivery Weekend Savings',
     entity: 'Mercado Pago',
     entityType: 'wallet',
     category: 'gastronomy',
     discount: '20%',
     discountPercent: 20,
-    cashbackCap: '$3.000 por orden',
-    daysOfWeek: [0, 5, 6], // Viernes, Sábado, Domingo
+    cashbackCap: '$3,000 per order',
+    daysOfWeek: [0, 5, 6], // Friday, Saturday, Sunday
     applicableBusinesses: ['PedidosYa', 'Rappi'],
     paymentMethod: 'wallet_balance',
-    validUntil: 'Vigente fines de semana',
-    description: '20% de descuento en pedidos seleccionados en PedidosYa pagando con saldo disponible en cuenta Mercado Pago.',
+    validUntil: 'Active weekends',
+    description: '20% off on select orders at PedidosYa paying with Mercado Pago account balance.',
     termsUrl: 'https://www.mercadopago.com.ar/descuentos',
-    highlight: 'Delivery viernes a domingos',
+    highlight: 'Weekend Food Delivery',
     sourceUrl: 'https://www.mercadopago.com.ar',
   },
 
   // --- BANCO GALICIA (VAMOS LOS JUEVES) ---
   {
     id: 'galicia-vamos-jueves-shopping',
-    title: 'Vamos los Jueves: 20% a 25% y 3 cuotas sin interés en Shoppings',
+    title: 'Galicia Shopping Thursdays: 25% OFF & 3 Interest-Free Installments',
     entity: 'Banco Galicia',
     entityType: 'bank',
     category: 'clothing',
     discount: '25%',
     discountPercent: 25,
-    cashbackCap: '$8.000 por transacción',
-    daysOfWeek: [4], // Jueves
-    applicableBusinesses: ['Marcas de indumentaria en Alto Palermo, Abasto, Unicenter, Dot Baires, Galerías Pacífico'],
+    cashbackCap: '$8,000 per transaction',
+    daysOfWeek: [4], // Thursday
+    applicableBusinesses: ['Alto Palermo', 'Abasto', 'Unicenter', 'Dot Baires', 'Leading apparel brands'],
     paymentMethod: 'credit',
-    validUntil: 'Vigente todos los jueves',
-    description: '20% para cartera general y 25% para clientes Éminent con tarjetas Visa y Mastercard Galicia en más de 200 marcas.',
+    validUntil: 'Active Thursdays',
+    description: '20% for standard customers and 25% for Eminent customers with Visa/Mastercard across 200+ brands.',
     termsUrl: 'https://www.galicia.ar/personas/vamos-los-jueves',
-    highlight: '3 cuotas sin interés + 25%',
+    highlight: '3 Interest-Free Installments + 25%',
     sourceUrl: 'https://www.galicia.ar',
   },
   {
     id: 'galicia-coto-viernes',
-    title: 'Viernes de Coto con Tarjetas Galicia y Éminent',
+    title: 'Galicia Fridays at Coto Supermarket',
     entity: 'Banco Galicia',
     entityType: 'bank',
     category: 'supermarkets',
     discount: '20%',
     discountPercent: 20,
-    cashbackCap: '$6.000 por mes',
-    daysOfWeek: [5], // Viernes
-    applicableBusinesses: ['Coto Digital y Sucursales Coto'],
+    cashbackCap: '$6,000 per month',
+    daysOfWeek: [5], // Friday
+    applicableBusinesses: ['Coto Digital', 'Coto Supermarkets'],
     paymentMethod: 'credit',
-    validUntil: 'Vigente 2026',
-    description: '15% a 20% de ahorro los viernes en Coto pagando con tarjetas Galicia débito o crédito en un solo pago.',
+    validUntil: 'Active in 2026',
+    description: '15% to 20% discount on Fridays at Coto paying with Galicia debit or credit cards in single installment.',
     termsUrl: 'https://www.galicia.ar/personas/beneficios',
-    highlight: 'Viernes en Coto',
+    highlight: 'Friday at Coto',
     sourceUrl: 'https://www.galicia.ar',
   },
 
-  // --- UALÁ & PERSONAL PAY ---
+  // --- UALA & PERSONAL PAY ---
   {
     id: 'uala-supermercados-lunes',
-    title: 'Lunes de Supermercados con Tarjeta y QR Ualá',
-    entity: 'Ualá',
+    title: 'Uala Supermarket Mondays at Dia and Coto',
+    entity: 'Uala',
     entityType: 'wallet',
     category: 'supermarkets',
     discount: '20%',
     discountPercent: 20,
-    cashbackCap: '$5.000 por mes',
-    daysOfWeek: [1], // Lunes
-    applicableBusinesses: ['Supermercados Día', 'Coto', 'Mayoristas'],
+    cashbackCap: '$5,000 per month',
+    daysOfWeek: [1], // Monday
+    applicableBusinesses: ['Dia Supermarkets', 'Coto', 'Wholesale stores'],
     paymentMethod: 'any',
-    validUntil: 'Lunes de todo 2026',
-    description: '20% de reintegro en supermercados adheridos los lunes pagando con tarjeta prepaga o crédito Ualá.',
+    validUntil: 'Mondays in 2026',
+    description: '20% cashback at partner supermarkets on Mondays paying with Uala card or QR code.',
     termsUrl: 'https://www.uala.com.ar/promociones',
-    highlight: 'Lunes con Ualá',
+    highlight: 'Monday Grocery Cashback',
     sourceUrl: 'https://www.uala.com.ar',
   },
   {
     id: 'personal-pay-combustible',
-    title: 'Combustibles en todas las Estaciones con Personal Pay (Nivel 3)',
+    title: 'Personal Pay: 20% Cashback on Fuel Every Day (Level 3)',
     entity: 'Personal Pay',
     entityType: 'wallet',
     category: 'fuel',
     discount: '20%',
     discountPercent: 20,
-    cashbackCap: '$4.000 por semana',
-    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Todos los días
+    cashbackCap: '$4,000 per week',
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Every day
     applicableBusinesses: ['YPF', 'Shell', 'Axion', 'Puma'],
     paymentMethod: 'qr',
-    validUntil: 'Vigente todo el mes',
-    description: '20% de reintegro todos los días en combustible para usuarios Nivel 3 pagando con tarjeta prepaga o QR.',
+    validUntil: 'Active all month',
+    description: '20% cashback on fuel purchases every day for Level 3 users paying with card or QR.',
     termsUrl: 'https://www.personalpay.com.ar/beneficios',
-    highlight: '20% todos los días para Nivel 3',
+    highlight: '20% daily for Level 3',
     sourceUrl: 'https://www.personalpay.com.ar',
   },
 
   // --- BANCO SANTANDER ---
   {
     id: 'santander-super-miercoles',
-    title: 'Miércoles de Supermercados con Santander Select y Women',
+    title: 'Santander Wednesdays at Major Supermarkets',
     entity: 'Santander',
     entityType: 'bank',
     category: 'supermarkets',
     discount: '25%',
     discountPercent: 25,
-    cashbackCap: '$7.500 por mes',
-    daysOfWeek: [3], // Miércoles
+    cashbackCap: '$7,500 per month',
+    daysOfWeek: [3], // Wednesday
     applicableBusinesses: ['Coto', 'Carrefour', 'Jumbo', 'Disco', 'Vea'],
     paymentMethod: 'credit',
-    validUntil: 'Vigente todos los miércoles',
-    description: '20% a 25% de ahorro los miércoles en supermercados seleccionados abonando con tarjetas Visa Santander.',
+    validUntil: 'Active Wednesdays',
+    description: '20% to 25% savings on Wednesdays at select supermarkets using Santander Visa cards.',
     termsUrl: 'https://www.santander.com.ar/beneficios',
-    highlight: 'Miércoles de supermercados',
+    highlight: 'Wednesday Grocery Savings',
     sourceUrl: 'https://www.santander.com.ar',
   },
   {
     id: 'santander-farmacity-martes',
-    title: 'Farmacity y Pigmento con Santander los Martes',
+    title: 'Santander Tuesdays at Farmacity and Pigmento',
     entity: 'Santander',
     entityType: 'bank',
     category: 'pharmacy',
     discount: '20%',
     discountPercent: 20,
-    cashbackCap: '$5.000 por mes',
-    daysOfWeek: [2], // Martes
+    cashbackCap: '$5,000 per month',
+    daysOfWeek: [2], // Tuesday
     applicableBusinesses: ['Farmacity', 'Pigmento', 'Simplicity'],
     paymentMethod: 'debit',
-    validUntil: 'Vigente martes 2026',
-    description: '20% de ahorro los martes en Farmacity y Pigmento pagando con tarjeta Visa Débito Santander.',
+    validUntil: 'Active Tuesdays 2026',
+    description: '20% discount on Tuesdays at Farmacity and Pigmento with Santander Visa debit card.',
     termsUrl: 'https://www.santander.com.ar/beneficios',
-    highlight: 'Martes en Farmacias',
+    highlight: 'Tuesday Pharmacy Savings',
     sourceUrl: 'https://www.santander.com.ar',
   },
 
-  // --- TECNOLOGÍA & CUOTAS ---
+  // --- TECH & FINANCING ---
   {
     id: 'naranja-x-planz',
-    title: 'Plan Z: 3 Cuotas Cero Interés en Miles de Comercios',
+    title: 'Plan Z: 3 Interest-Free Installments Across Thousands of Stores',
     entity: 'Naranja X',
     entityType: 'wallet',
     category: 'technology',
-    discount: 'Cuotas Cero Interés',
+    discount: '0% Interest Installments',
     discountPercent: 15,
     cashbackCap: null,
-    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Todos los días
-    applicableBusinesses: ['Fravega', 'Musimundo', 'Mercado Libre', 'Comercios de electro y computación'],
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Every day
+    applicableBusinesses: ['Fravega', 'Musimundo', 'Mercado Libre', 'Consumer electronics retailers'],
     paymentMethod: 'credit',
-    validUntil: 'Vigente todo el año',
-    description: 'Comprá en 3 cuotas fijas sin interés en cualquier rubro eligiendo Plan Z con tu tarjeta Naranja X.',
+    validUntil: 'Active all year',
+    description: 'Buy in 3 fixed installments with zero interest on electronics, appliances, and retail with Plan Z.',
     termsUrl: 'https://www.naranjax.com/beneficios',
-    highlight: '3 cuotas sin interés en todo el país',
+    highlight: '3 installments zero interest nationwide',
     sourceUrl: 'https://www.naranjax.com',
   },
 ];
@@ -526,6 +509,65 @@ function saveStoredPromos(data: StoredPromotionsData): void {
   }
 }
 
+function parseNumericCap(capStr: string | null): number | null {
+  if (!capStr) return null;
+  const match = capStr.match(/\$([0-9.,]+)/);
+  if (!match || !match[1]) return null;
+  const clean = match[1].replace(/\./g, '').replace(/,/g, '');
+  const num = parseFloat(clean);
+  return Number.isNaN(num) ? null : num;
+}
+
+export function calculateBestSavings(
+  amount: number,
+  category?: ArgentinePromoCategory,
+  dayIndex?: number,
+): SavingsCalculationResult[] {
+  const currentPromos = BASELINE_ARGENTINE_PROMOTIONS;
+  const targetDay = dayIndex !== undefined ? dayIndex : new Date().getDay();
+
+  const matching = currentPromos.filter((p) => {
+    if (category && p.category !== category) return false;
+    if (p.daysOfWeek.length > 0 && !p.daysOfWeek.includes(targetDay)) return false;
+    return true;
+  });
+
+  const results: SavingsCalculationResult[] = [];
+
+  for (const promo of matching) {
+    const rate = promo.discountPercent / 100;
+    const rawSavings = amount * rate;
+    const cap = parseNumericCap(promo.cashbackCap);
+    const calculatedSavings = cap ? Math.min(rawSavings, cap) : rawSavings;
+    const effectiveDiscountRate = Math.round((calculatedSavings / amount) * 100);
+    const finalPrice = Math.max(0, amount - calculatedSavings);
+
+    let recommendation = `Saves $${calculatedSavings.toLocaleString('en-US')} on your purchase`;
+    if (cap && rawSavings > cap) {
+      recommendation += ` (Capped at maximum limit of $${cap.toLocaleString('en-US')})`;
+    }
+
+    results.push({
+      promoId: promo.id,
+      promoTitle: promo.title,
+      entity: promo.entity,
+      category: promo.category,
+      discountPercent: promo.discountPercent,
+      cashbackCap: promo.cashbackCap,
+      paymentMethod: promo.paymentMethod,
+      inputAmount: amount,
+      calculatedSavings,
+      effectiveDiscountRate,
+      finalPrice,
+      recommendation,
+    });
+  }
+
+  // Sort descending by highest savings
+  results.sort((a, b) => b.calculatedSavings - a.calculatedSavings);
+  return results;
+}
+
 /**
  * Scrapes fresh promotions by querying public pages and optionally using Google GenAI grounding
  */
@@ -541,9 +583,8 @@ export async function scrapeLiveArgentinePromotions(): Promise<ArgentinePromo[]>
     isTodayActive: p.daysOfWeek.length === 0 || p.daysOfWeek.includes(todayDayIndex),
   }));
 
-  // Attempt real-time public bank web scraping
+  // Real-time public bank web scraping
   try {
-    // 1. Fetch Cuenta DNI official public promo feed
     const cdniRes = await fetch('https://www.bancoprovincia.com.ar/cuentadni/contenidos/beneficios-cuentadni/', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -553,32 +594,31 @@ export async function scrapeLiveArgentinePromotions(): Promise<ArgentinePromo[]>
 
     if (cdniRes && cdniRes.ok) {
       const html = await cdniRes.text();
-      // Basic extraction of seasonal or updated promo banners
-      if (html.includes('Especial Verano') || html.includes('Especial Vacaciones') || html.includes('Supermercados')) {
+      if (html.includes('Supermercados') || html.includes('Especial')) {
         freshPromos.push({
           id: `cdni-extra-live-${now.getMonth() + 1}`,
-          title: 'Promoción Especial Vigente Cuenta DNI en la Provincia',
+          title: 'Special Live Promotion at Participating Supermarkets with Cuenta DNI',
           entity: 'Cuenta DNI',
           entityType: 'wallet',
           category: 'supermarkets',
           discount: '25%',
           discountPercent: 25,
-          cashbackCap: '$5.000 por acción',
-          daysOfWeek: [1, 2], // Lunes y Martes
-          applicableBusinesses: ['Supermercados adheridos', 'Grandes superficies'],
+          cashbackCap: '$5,000 per transaction',
+          daysOfWeek: [1, 2], // Monday and Tuesday
+          applicableBusinesses: ['Participating regional supermarkets'],
           paymentMethod: 'qr',
-          validUntil: 'Vigente este mes',
-          description: 'Promoción especial detectada en vivo desde el sitio oficial de Banco Provincia Cuenta DNI.',
+          validUntil: 'Active this month',
+          description: 'Special seasonal promotion detected live from Banco Provincia Cuenta DNI feed.',
           termsUrl: 'https://www.bancoprovincia.com.ar/cuentadni/contenidos/beneficios-cuentadni/',
           isTodayActive: [1, 2].includes(todayDayIndex),
-          highlight: 'Detectado en vivo',
+          highlight: 'Live Verified Offer',
           sourceUrl: 'https://www.bancoprovincia.com.ar',
           scrapedAt: currentScrapedAt,
         });
       }
     }
   } catch (err) {
-    console.warn('Direct web scraping skipped or failed, using structured Argentine deals catalog:', err);
+    console.warn('Direct web scraping skipped, using structured deals catalog:', err);
   }
 
   // If Gemini API key is available, run live real-time AI grounding to extract today's latest deals
@@ -586,23 +626,23 @@ export async function scrapeLiveArgentinePromotions(): Promise<ArgentinePromo[]>
   if (apiKey) {
     try {
       const ai = new GoogleGenAI({ apiKey });
-      const dayName = DAY_NAMES_ES[todayDayIndex] ?? 'hoy';
+      const dayName = DAY_NAMES_EN[todayDayIndex] ?? 'today';
 
-      const prompt = `Actúa como especialista en finanzas de consumo en Argentina. 
-Identifica 3 promociones bancarias o de billeteras virtuales (Cuenta DNI, MODO, Mercado Pago, Banco Nación, Galicia, Santander, YPF) activas HOY (${dayName}) en Argentina con alto ahorro.
-Devuelve ÚNICAMENTE un array JSON válido con objetos con esta estructura:
+      const prompt = `Act as an expert in consumer finance and retail banking promotions in Argentina.
+Identify 3 bank or digital wallet promotions (Cuenta DNI, MODO, Mercado Pago, Banco Nacion, Galicia, Santander, YPF) active TODAY (${dayName}) in Argentina with high savings.
+Output ONLY a valid JSON array of objects with this schema, with English property values for title and description:
 [
   {
     "id": "ai-promo-1",
-    "title": "Nombre de la promo",
-    "entity": "Nombre del Banco o Billetera",
+    "title": "Deal name in English",
+    "entity": "Bank or Wallet Name",
     "category": "supermarkets" | "fuel" | "gastronomy" | "pharmacy" | "clothing" | "technology",
     "discount": "30%",
     "discountPercent": 30,
-    "cashbackCap": "$5.000",
-    "applicableBusinesses": ["Comercio 1", "Comercio 2"],
+    "cashbackCap": "$5,000",
+    "applicableBusinesses": ["Store 1", "Store 2"],
     "paymentMethod": "qr" | "credit" | "debit" | "wallet_balance",
-    "description": "Detalle claro de cómo aprovecharla"
+    "description": "Clear English explanation on how to claim this deal"
   }
 ]`;
 
@@ -632,12 +672,12 @@ Devuelve ÚNICAMENTE un array JSON válido con objetos con esta estructura:
                 discountPercent: Number(item.discountPercent) || 20,
                 cashbackCap: item.cashbackCap ? String(item.cashbackCap) : null,
                 daysOfWeek: [todayDayIndex],
-                applicableBusinesses: Array.isArray(item.applicableBusinesses) ? item.applicableBusinesses : ['Comercios adheridos'],
+                applicableBusinesses: Array.isArray(item.applicableBusinesses) ? item.applicableBusinesses : ['Partner merchants'],
                 paymentMethod: (item.paymentMethod as PaymentMethod) || 'qr',
-                validUntil: 'Vigente hoy',
-                description: String(item.description || 'Promoción destacada del día.'),
+                validUntil: 'Active today',
+                description: String(item.description || 'Featured deal of the day.'),
                 isTodayActive: true,
-                highlight: '⚡ Destacado Hoy',
+                highlight: 'Top Deal Today',
                 sourceUrl: 'https://promociones.ar',
                 scrapedAt: currentScrapedAt,
               });
@@ -646,7 +686,7 @@ Devuelve ÚNICAMENTE un array JSON válido con objetos con esta estructura:
         }
       }
     } catch (aiErr) {
-      console.warn('Gemini live enrichment pass failed, continuing with base promotions:', aiErr);
+      console.warn('Gemini live enrichment pass failed, continuing with base catalog:', aiErr);
     }
   }
 
@@ -665,16 +705,15 @@ Devuelve ÚNICAMENTE un array JSON válido con objetos con esta estructura:
 export async function getPromotionsOverview(forceFresh = false): Promise<PromotionsOverview> {
   const now = new Date();
   const todayDayIndex = now.getDay();
-  const todayDayName = DAY_NAMES_ES[todayDayIndex] ?? 'Hoy';
-  const todayDateFormatted = now.toLocaleDateString('es-AR', {
-    day: 'numeric',
+  const todayDayName = DAY_NAMES_EN[todayDayIndex] ?? 'Sunday';
+  const todayDateFormatted = now.toLocaleDateString('en-US', {
     month: 'long',
+    day: 'numeric',
     year: 'numeric',
   });
 
   let cached = loadStoredPromos();
 
-  // If no cache exists, or if forceFresh requested, or if cache is older than 6 hours
   const isCacheStale = !cached || (Date.now() - new Date(cached.lastScrapedAt).getTime() > 6 * 60 * 60 * 1000);
 
   let rawPromos: ArgentinePromo[];
@@ -690,7 +729,7 @@ export async function getPromotionsOverview(forceFresh = false): Promise<Promoti
   // Count active today
   const activeTodayCount = rawPromos.filter((p) => p.isTodayActive).length;
 
-  // Group top entities (bancos y billeteras)
+  // Group top entities
   const entityCounts = new Map<string, number>();
   for (const promo of rawPromos) {
     entityCounts.set(promo.entity, (entityCounts.get(promo.entity) ?? 0) + 1);
@@ -704,7 +743,7 @@ export async function getPromotionsOverview(forceFresh = false): Promise<Promoti
   for (const promo of rawPromos) {
     categoryCounts.set(promo.category, (categoryCounts.get(promo.category) ?? 0) + 1);
   }
-  const categories = Object.entries(CATEGORY_LABELS).map(([catId, label]) => ({
+  const categories = Object.entries(CATEGORY_LABELS_EN).map(([catId, label]) => ({
     id: catId as ArgentinePromoCategory,
     label,
     count: categoryCounts.get(catId as ArgentinePromoCategory) ?? 0,

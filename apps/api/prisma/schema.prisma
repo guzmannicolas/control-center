@@ -251,6 +251,7 @@ model Brand {
   whatsappNumber  String?       @map("whatsapp_number")
   telegramChatId  String?       @map("telegram_chat_id")
   dossierMd       String?       @db.Text @map("dossier_md")
+  socialStyleMd   String?       @db.Text @map("social_style_md")
   instagramHandle String?       @map("instagram_handle")
   activePlatforms String[]      @default(["INSTAGRAM", "FACEBOOK"]) @map("active_platforms")
   scrapedPosts    Json          @default("[]") @map("scraped_posts")

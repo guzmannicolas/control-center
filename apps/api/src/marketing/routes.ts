@@ -16,7 +16,7 @@ import {
   type AdCampaignView,
   type BrandView,
 } from '@cc/shared';
-import { generateSocialCreative, auditAdCampaigns } from './agent.js';
+import { generateSocialCreative, auditAdCampaigns, synthesizeSocialStylePlaybook } from './agent.js';
 import { dispatchDraftApproval } from './dispatch.js';
 import { ensureMarketingSeed } from './seed-helper.js';
 import { scrapeInstagramProfile, extractInstagramPostFromEmbed } from './instagram-scraper.js';
@@ -34,6 +34,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     whatsappNumber: b.whatsappNumber ?? null,
     telegramChatId: b.telegramChatId ?? null,
     dossierMd: b.dossierMd ?? null,
+    socialStyleMd: b.socialStyleMd ?? null,
     instagramHandle: b.instagramHandle ?? null,
     activePlatforms: (b.activePlatforms ?? ['INSTAGRAM', 'FACEBOOK']) as any,
     scrapedPosts: (b.scrapedPosts ?? []) as any,
@@ -263,6 +264,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         styleDirectives: brand.styleDirectives as Record<string, unknown>,
         targetAudience: brand.targetAudience,
         dossierMd: brand.dossierMd ?? undefined,
+        socialStyleMd: (brand as any).socialStyleMd ?? undefined,
         instagramHandle: (brand as any).instagramHandle ?? undefined,
         scrapedPosts: (brand as any).scrapedPosts ?? undefined,
       },
@@ -608,6 +610,97 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
       select: { id: true, slug: true, name: true, dossierMd: true },
     });
     return { brand: updated };
+  });
+
+  // GET /api/marketing/brands/:slug/social-style
+  app.get('/brands/:slug/social-style', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const brand = await prisma.brand.findUnique({
+      where: { slug },
+      select: { id: true, slug: true, name: true, socialStyleMd: true },
+    });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+    return { brand, socialStyleMd: brand.socialStyleMd };
+  });
+
+  // PUT /api/marketing/brands/:slug/social-style
+  app.put('/brands/:slug/social-style', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const body = req.body as { socialStyleMd?: string };
+    if (typeof body.socialStyleMd !== 'string') {
+      return reply.code(400).send({ error: 'socialStyleMd string is required' });
+    }
+    const updated = await prisma.brand.update({
+      where: { slug },
+      data: { socialStyleMd: body.socialStyleMd },
+    });
+    return { brand: toBrandView(updated), socialStyleMd: updated.socialStyleMd };
+  });
+
+  // POST /api/marketing/brands/:slug/analyze-style (AI Style Synthesis)
+  app.post('/brands/:slug/analyze-style', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const body = (req.body ?? {}) as { handle?: string; postUrls?: string[]; sampleCaptions?: string };
+    const brand = await prisma.brand.findUnique({ where: { slug } });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    const handleToUse = body.handle ? body.handle.replace(/^@/, '').trim() : ((brand as any).instagramHandle || 'nikipepperstattoo');
+
+    // 1. Extract postUrls if provided
+    const extractedPosts = [];
+    if (Array.isArray(body.postUrls)) {
+      for (const u of body.postUrls) {
+        if (typeof u === 'string' && u.trim().length > 3) {
+          const p = await extractInstagramPostFromEmbed(u);
+          if (p) extractedPosts.push(p);
+        }
+      }
+    }
+
+    // 2. Scrape or extract for the handle
+    const scraped = await scrapeInstagramProfile(handleToUse, slug);
+
+    // Merge posts avoiding duplicates
+    const combined = [...extractedPosts, ...scraped.posts, ...((brand as any).scrapedPosts ?? [])];
+    const seen = new Set();
+    const uniquePosts = combined.filter((p) => {
+      const key = p.id || p.permalink;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // 3. AI Synthesizes the Social Media Style Playbook (.md)
+    const generatedMd = await synthesizeSocialStylePlaybook({
+      brand: {
+        name: brand.name,
+        website: brand.website,
+        toneOfVoice: brand.toneOfVoice,
+        dossierMd: brand.dossierMd,
+        styleDirectives: (brand.styleDirectives ?? {}) as any,
+        targetAudience: brand.targetAudience,
+      },
+      handle: handleToUse,
+      scrapedPosts: uniquePosts,
+      sampleCaptions: body.sampleCaptions,
+    });
+
+    // 4. Save to Brand
+    const updated = await prisma.brand.update({
+      where: { slug },
+      data: {
+        instagramHandle: handleToUse,
+        socialStyleMd: generatedMd,
+        scrapedPosts: uniquePosts,
+      },
+    });
+
+    return {
+      brand: toBrandView(updated),
+      socialStyleMd: generatedMd,
+      scraped,
+      message: 'Social Media Style Playbook generated and saved for @' + handleToUse,
+    };
   });
 
   // 13. PUT /api/marketing/brands/:slug/platforms

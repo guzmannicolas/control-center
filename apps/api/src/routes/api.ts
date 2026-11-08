@@ -19,6 +19,7 @@ import {
 import {
   getPromotionsOverview,
   scrapeLiveArgentinePromotions,
+  calculateBestSavings,
 } from '../promociones/engine.js';
 import {
   listDirectory,
@@ -1255,5 +1256,11 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   app.post('/promociones/scrape', async (): Promise<PromotionsOverview> => {
     // Triggers a live fresh scraping pass across Argentine sources
     return getPromotionsOverview(true);
+  });
+
+  app.post('/promociones/calculate', async (req) => {
+    const body = (req.body ?? {}) as { amount: number; category?: any; dayIndex?: number };
+    const results = calculateBestSavings(Number(body.amount) || 0, body.category, body.dayIndex);
+    return { results };
   });
 };

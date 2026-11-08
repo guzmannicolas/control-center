@@ -17,7 +17,7 @@ import {
   VpsIcon,
   FilesIcon,
   MarketingIcon,
-  PromoIcon,
+  DealsIcon,
 } from './components/Icons.tsx';
 import { DatabasesPage } from './pages/Databases.tsx';
 import { DomainsPage } from './pages/Domains.tsx';
@@ -36,7 +36,7 @@ import { KnowledgePage } from './pages/Knowledge.tsx';
 import { FilesPage } from './pages/Files.tsx';
 import { VaultPage } from './pages/Vault.tsx';
 import { MarketingPage } from './pages/Marketing.tsx';
-import { PromocionesPage } from './pages/Promociones.tsx';
+import { DealsPage } from './pages/Deals.tsx';
 
 export interface Section {
   path: string;
@@ -48,7 +48,8 @@ export interface Section {
 // Every part of the control center is one entry here: the menu, the URLs and the pages come from this list.
 export const SECTIONS: Section[] = [
   { path: '/', label: 'Overview', Icon: OverviewIcon, Page: OverviewPage },
-  { path: '/promociones', label: 'Promociones', Icon: PromoIcon, Page: PromocionesPage },
+  { path: '/deals', label: 'Deals', Icon: DealsIcon, Page: DealsPage },
+  { path: '/promociones', label: 'Deals', Icon: DealsIcon, Page: DealsPage },
   { path: '/leads', label: 'Sales', Icon: LeadsIcon, Page: LeadsPage },
   { path: '/marketing', label: 'Marketing', Icon: MarketingIcon, Page: MarketingPage },
   { path: '/vps', label: 'VPS', Icon: VpsIcon, Page: VpsPage },

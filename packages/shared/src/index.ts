@@ -440,6 +440,7 @@ export interface BrandView {
   whatsappNumber: string | null;
   telegramChatId: string | null;
   dossierMd: string | null;
+  socialStyleMd: string | null;
   instagramHandle: string | null;
   activePlatforms: SocialPlatform[];
   scrapedPosts: InstagramPostReference[];
@@ -573,6 +574,13 @@ export const SyncInstagramInput = z.object({
 });
 export type SyncInstagramInput = z.infer<typeof SyncInstagramInput>;
 
+export const AnalyzeSocialStyleInput = z.object({
+  handle: z.string().optional(),
+  postUrls: z.array(z.string()).optional(),
+  sampleCaptions: z.string().optional(),
+});
+export type AnalyzeSocialStyleInput = z.infer<typeof AnalyzeSocialStyleInput>;
+
 export const AddInstagramPostInput = z.object({
   url: z.string().min(3, 'URL or shortcode is required'),
   caption: z.string().optional(),
@@ -643,6 +651,28 @@ export interface PromotionsOverview {
   topEntities: { name: string; count: number }[];
   categories: { id: ArgentinePromoCategory; label: string; count: number }[];
 }
+
+export interface SavingsCalculationResult {
+  promoId: string;
+  promoTitle: string;
+  entity: string;
+  category: ArgentinePromoCategory;
+  discountPercent: number;
+  cashbackCap: string | null;
+  paymentMethod: PaymentMethod;
+  inputAmount: number;
+  calculatedSavings: number;
+  effectiveDiscountRate: number;
+  finalPrice: number;
+  recommendation: string;
+}
+
+export const CalculateSavingsInput = z.object({
+  amount: z.number().positive('Amount must be greater than 0'),
+  category: z.enum(PROMO_CATEGORIES).optional(),
+  dayIndex: z.number().min(0).max(6).optional(),
+});
+export type CalculateSavingsInput = z.infer<typeof CalculateSavingsInput>;
 
 export const ScrapePromosInput = z.object({
   forceFresh: z.boolean().default(false),

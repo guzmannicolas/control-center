@@ -62,6 +62,17 @@ export function MarketingPage() {
   const [brandAudience, setBrandAudience] = useState('');
   const [savingBrand, setSavingBrand] = useState(false);
 
+  // Social Style Playbook (.md) State
+  const [showStylePlaybookModal, setShowStylePlaybookModal] = useState(false);
+  const [stylePlaybookContent, setStylePlaybookContent] = useState('');
+  const [loadingStylePlaybook, setLoadingStylePlaybook] = useState(false);
+  const [savingStylePlaybook, setSavingStylePlaybook] = useState(false);
+  const [analyzingStyle, setAnalyzingStyle] = useState(false);
+  const [analyzerHandleInput, setAnalyzerHandleInput] = useState('nikipepperstattoo');
+  const [analyzerUrlsInput, setAnalyzerUrlsInput] = useState('');
+  const [analyzerCaptionsInput, setAnalyzerCaptionsInput] = useState('');
+  const [showAnalyzerPanel, setShowAnalyzerPanel] = useState(true);
+
   // Brand Dossier (.md) state
   const [showDossierModal, setShowDossierModal] = useState(false);
   const [dossierContent, setDossierContent] = useState('');
@@ -272,6 +283,86 @@ export function MarketingPage() {
     } finally {
       setSavingBrand(false);
     }
+  };
+
+  const openStylePlaybookModal = async () => {
+    setShowStylePlaybookModal(true);
+    setLoadingStylePlaybook(true);
+    try {
+      const res = await api.marketingBrandSocialStyle(selectedBrandSlug);
+      setStylePlaybookContent(res.socialStyleMd || overview?.brand?.socialStyleMd || '');
+      if (overview?.brand?.instagramHandle) {
+        setAnalyzerHandleInput(overview.brand.instagramHandle);
+      }
+    } catch {
+      setStylePlaybookContent(overview?.brand?.socialStyleMd || '');
+    } finally {
+      setLoadingStylePlaybook(false);
+    }
+  };
+
+  const handleSaveStylePlaybook = async () => {
+    setSavingStylePlaybook(true);
+    try {
+      await api.marketingSaveBrandSocialStyle(selectedBrandSlug, stylePlaybookContent);
+      showToast('Social Media Style Playbook (.md) saved successfully. Creative Agent will strictly follow this guide.');
+      setShowStylePlaybookModal(false);
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to save style playbook');
+    } finally {
+      setSavingStylePlaybook(false);
+    }
+  };
+
+  const handleRunAIStyleAnalysis = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setAnalyzingStyle(true);
+    try {
+      const rawUrls = analyzerUrlsInput
+        .split(/[\n,]+/)
+        .map((u) => u.trim())
+        .filter((u) => u.length > 5);
+
+      const res = await api.marketingAnalyzeSocialStyle(selectedBrandSlug, {
+        handle: analyzerHandleInput.trim() || undefined,
+        postUrls: rawUrls.length > 0 ? rawUrls : undefined,
+        sampleCaptions: analyzerCaptionsInput.trim() || undefined,
+      });
+
+      setStylePlaybookContent(res.socialStyleMd);
+      showToast('AI Style Playbook generated successfully from analyzed content.');
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to analyze social style');
+    } finally {
+      setAnalyzingStyle(false);
+    }
+  };
+
+  const handleUploadStylePlaybookFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === 'string') {
+        setStylePlaybookContent(text);
+        showToast(`Loaded ${file.name} into editor. Click 'Save Style Playbook' to persist.`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleDownloadStylePlaybook = () => {
+    const blob = new Blob([stylePlaybookContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${selectedBrandSlug}-social-style-playbook.md`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const openDossierModal = async () => {
@@ -576,21 +667,29 @@ export function MarketingPage() {
 
             <button
               type="button"
-              onClick={() => setShowInstagramModal(true)}
+              onClick={() => void openStylePlaybookModal()}
               style={{
-                background: 'var(--surface)',
-                color: 'var(--ink)',
-                border: '1px solid var(--border)',
+                background: overview?.brand?.socialStyleMd ? 'rgba(37,99,235,0.08)' : 'var(--surface)',
+                color: overview?.brand?.socialStyleMd ? '#2563eb' : 'var(--ink)',
+                border: overview?.brand?.socialStyleMd ? '1px solid #2563eb' : '1px solid var(--border)',
                 padding: '8px 12px',
                 borderRadius: '6px',
                 fontSize: '13px',
                 fontWeight: 600,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
               }}
-              title="Scrape and view live Instagram publications for AI style alignment"
+              title="View, analyze or edit the Markdown Social Media Style Playbook used by the AI Agent"
             >
-              Instagram Style ({overview?.brand?.scrapedPosts?.length || 0})
+              <span>Social Style (.md)</span>
+              {overview?.brand?.socialStyleMd && (
+                <span style={{ fontSize: '10px', background: '#2563eb', color: '#fff', padding: '1px 5px', borderRadius: '4px' }}>
+                  Active
+                </span>
+              )}
             </button>
           </div>
 
@@ -2229,6 +2328,313 @@ export function MarketingPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Social Style Playbook Modal */}
+      {showStylePlaybookModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '960px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: '92vh',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                  Social Style & Personalization Playbook (.md) — {overview?.brand?.name || selectedBrandSlug}
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
+                  The AI Creative Agent reads this Markdown playbook whenever generating or scheduling posts to ensure 100% voice, hook, and narrative alignment.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStylePlaybookModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--muted)', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+
+            {/* AI Style Analysis & Synthesis Collapsible */}
+            <div
+              style={{
+                background: 'var(--page)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '14px',
+                marginBottom: '12px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  marginBottom: showAnalyzerPanel ? '12px' : 0,
+                }}
+                onClick={() => setShowAnalyzerPanel(!showAnalyzerPanel)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700 }}>
+                    AI Style Analyzer & Scraper
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    (Analyze Instagram account, post URLs, or sample captions to synthesize this .md)
+                  </span>
+                </div>
+                <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>
+                  {showAnalyzerPanel ? 'Collapse' : 'Expand'}
+                </span>
+              </div>
+
+              {showAnalyzerPanel && (
+                <form onSubmit={handleRunAIStyleAnalysis} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', marginBottom: '4px' }}>
+                        Instagram Handle
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--muted)' }}>@</span>
+                        <input
+                          type="text"
+                          value={analyzerHandleInput}
+                          onChange={(e) => setAnalyzerHandleInput(e.target.value)}
+                          placeholder="nikipepperstattoo"
+                          style={{
+                            width: '100%',
+                            padding: '6px 10px',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            color: 'var(--ink)',
+                            fontSize: '12px',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', marginBottom: '4px' }}>
+                        Direct Post URLs (Optional, comma-separated)
+                      </label>
+                      <input
+                        type="text"
+                        value={analyzerUrlsInput}
+                        onChange={(e) => setAnalyzerUrlsInput(e.target.value)}
+                        placeholder="https://www.instagram.com/p/DQGti8QEhOB/ (extracts real copy without login)"
+                        style={{
+                          width: '100%',
+                          padding: '6px 10px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          color: 'var(--ink)',
+                          fontSize: '12px',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', marginBottom: '4px' }}>
+                      Sample Captions, Bio or Tone Notes (Optional — bypasses Instagram login blocks immediately)
+                    </label>
+                    <textarea
+                      value={analyzerCaptionsInput}
+                      onChange={(e) => setAnalyzerCaptionsInput(e.target.value)}
+                      placeholder="Paste 1-3 recent post captions, bio text, or personal style notes here..."
+                      rows={2}
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        color: 'var(--ink)',
+                        fontSize: '12px',
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                      The AI reads all available posts, URLs, and notes to synthesize the full Markdown playbook.
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={analyzingStyle}
+                      style={{
+                        background: '#059669',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '6px 16px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: analyzingStyle ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {analyzingStyle ? 'Analyzing & Synthesizing...' : 'Analyze & Generate Style Playbook (.md)'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Markdown Toolbar */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
+                padding: '8px 12px',
+                background: 'var(--page)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                marginBottom: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label
+                  style={{
+                    background: 'var(--surface)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--border)',
+                    padding: '5px 10px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Upload .md
+                  <input
+                    type="file"
+                    accept=".md,.markdown,text/markdown,text/plain"
+                    onChange={handleUploadStylePlaybookFile}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadStylePlaybook}
+                  disabled={!stylePlaybookContent}
+                  style={{
+                    background: 'var(--surface)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--border)',
+                    padding: '5px 10px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: stylePlaybookContent ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Download .md
+                </button>
+              </div>
+
+              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                {stylePlaybookContent.length} chars | {stylePlaybookContent.trim().split(/\s+/).filter(Boolean).length} words
+              </span>
+            </div>
+
+            {/* Markdown Editor */}
+            {loadingStylePlaybook ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', flex: 1 }}>
+                Loading style playbook...
+              </div>
+            ) : (
+              <textarea
+                value={stylePlaybookContent}
+                onChange={(e) => setStylePlaybookContent(e.target.value)}
+                placeholder="# Brand Social Media Style Playbook&#10;&#10;## 1. Tone of Voice...&#10;&#10;## 2. Caption Formulas..."
+                style={{
+                  width: '100%',
+                  flex: 1,
+                  minHeight: '280px',
+                  background: 'var(--page)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  color: 'var(--ink)',
+                  fontSize: '13px',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  lineHeight: '1.5',
+                  resize: 'none',
+                }}
+              />
+            )}
+
+            {/* Modal Footer */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                Saved playbooks are loaded automatically when drafting or scheduling publications.
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowStylePlaybookModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'var(--page)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--ink)',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveStylePlaybook()}
+                  disabled={savingStylePlaybook || loadingStylePlaybook}
+                  style={{
+                    padding: '8px 20px',
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    cursor: savingStylePlaybook ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {savingStylePlaybook ? 'Saving...' : 'Save Style Playbook (.md)'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
