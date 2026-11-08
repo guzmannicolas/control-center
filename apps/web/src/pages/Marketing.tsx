@@ -35,7 +35,7 @@ export function MarketingPage() {
   const [newTopic, setNewTopic] = useState('');
   const [newPlatform, setNewPlatform] = useState<SocialPlatform>('INSTAGRAM');
   const [newPostType, setNewPostType] = useState<SocialPostType>('REEL');
-  const [newObjective, setNewObjective] = useState('Conversiones a venta en web');
+  const [newObjective, setNewObjective] = useState('Website conversion sales');
   const [newMediaUrl, setNewMediaUrl] = useState('');
   const [newScheduledDate, setNewScheduledDate] = useState('');
 
@@ -90,17 +90,16 @@ export function MarketingPage() {
         setBrandAudience(ovData.brand.targetAudience || '');
       }
 
-      // Pick first draft token for client portal simulation if available
       if (draftsData.drafts.length > 0 && draftsData.drafts[0]) {
         setClientTestToken(draftsData.drafts[0].approvalToken);
       }
     } catch (err) {
       if (isUnauthorized(err)) {
-        setError('Tu sesión ha expirado. Por favor iniciá sesión nuevamente.');
+        setError('Your session has expired. Please log in again.');
       } else if (isNetworkError(err)) {
-        setError('No se pudo conectar con el servidor.');
+        setError('Unable to reach the server.');
       } else {
-        setError(err instanceof Error ? err.message : 'Error al cargar datos de marketing');
+        setError(err instanceof Error ? err.message : 'Failed to load marketing engine data');
       }
     } finally {
       setLoading(false);
@@ -111,7 +110,6 @@ export function MarketingPage() {
     void loadData(selectedBrandSlug);
   }, [selectedBrandSlug]);
 
-  // Load public preview for client portal tab
   useEffect(() => {
     if (clientTestToken && activeTab === 'client_portal') {
       void (async () => {
@@ -125,7 +123,6 @@ export function MarketingPage() {
     }
   }, [clientTestToken, activeTab]);
 
-  // Handle draft generation with AI
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTopic.trim()) return;
@@ -146,16 +143,15 @@ export function MarketingPage() {
       setShowGenerateModal(false);
       setNewTopic('');
       setNewMediaUrl('');
-      showToast(`✨ Borrador generado exitosamente por el Creative Agent (${res.creativeInfo?.source === 'ai' ? 'Gemini AI' : 'Motor Creativo'})`);
+      showToast(`Draft generated successfully via Creative Agent (${res.creativeInfo?.source === 'ai' ? 'Gemini AI' : 'Creative Engine'})`);
       void loadData(selectedBrandSlug);
     } catch (err: any) {
-      alert(err.message || 'Error al generar borrador');
+      alert(err.message || 'Error generating draft');
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Status change (Approve, Reject, Draft, Published)
   const handleUpdateStatus = async (id: string, status: SocialDraftStatus, feedback?: string) => {
     setStatusUpdatingId(id);
     try {
@@ -163,35 +159,33 @@ export function MarketingPage() {
       setDrafts((prev) => prev.map((d) => (d.id === id ? res.draft : d)));
       setRejectFeedbackDraftId(null);
       setRejectFeedbackText('');
-      showToast(status === 'APPROVED' ? '✓ Post aprobado para publicación' : `Estado actualizado a ${status}`);
+      showToast(status === 'APPROVED' ? 'Post approved for publishing' : `Status updated to ${status}`);
     } catch (err: any) {
-      alert(err.message || 'Error al actualizar estado');
+      alert(err.message || 'Failed to update status');
     } finally {
       setStatusUpdatingId(null);
     }
   };
 
-  // Dispatch approval via WhatsApp
   const handleDispatchApproval = async (id: string) => {
     setDispatchingId(id);
     try {
       const res = await api.marketingDispatchApproval(id);
       if (res.ok) {
-        showToast(`📲 Previsualización y enlace de aprobación despachados vía ${res.channel.toUpperCase()} a ${res.recipient}`);
+        showToast(`Preview and approval link dispatched via ${res.channel.toUpperCase()} to ${res.recipient}`);
       } else {
-        alert(res.error || 'Error al despachar aprobación');
+        alert(res.error || 'Failed to dispatch approval');
       }
     } catch (err: any) {
-      alert(err.message || 'Error al despachar aprobación');
+      alert(err.message || 'Failed to dispatch approval');
     } finally {
       setDispatchingId(null);
     }
   };
 
-  // Ad Campaign Update (Budget / Status with Safety Guardrail)
   const handleSaveBudget = async (campaign: AdCampaignView) => {
     if (editBudgetVal > campaign.safetyGuardrail) {
-      alert(`🛑 ERROR DE SEGURIDAD (GUARDRAIL): El presupuesto solicitado ($${editBudgetVal}) supera el límite máximo de $${campaign.safetyGuardrail}. La IA y el sistema tienen prohibido sobrepasarlo.`);
+      alert(`SAFETY GUARDRAIL VIOLATION: Requested budget ($${editBudgetVal}) exceeds maximum hardcoded limit of $${campaign.safetyGuardrail}. Automated engines are blocked from exceeding this threshold.`);
       return;
     }
 
@@ -199,9 +193,9 @@ export function MarketingPage() {
       const res = await api.marketingUpdateAdCampaign(campaign.id, { dailyBudget: editBudgetVal });
       setCampaigns((prev) => prev.map((c) => (c.id === campaign.id ? res.campaign : c)));
       setEditingCampaignId(null);
-      showToast(`Presupuesto diario actualizado a $${editBudgetVal.toFixed(2)}/día dentro del guardrail de seguridad`);
+      showToast(`Daily budget updated to $${editBudgetVal.toFixed(2)}/day within safety guardrail`);
     } catch (err: any) {
-      alert(err.message || 'Error al actualizar presupuesto');
+      alert(err.message || 'Failed to update budget');
     }
   };
 
@@ -210,31 +204,29 @@ export function MarketingPage() {
     try {
       const res = await api.marketingUpdateAdCampaign(campaign.id, { status: nextStatus });
       setCampaigns((prev) => prev.map((c) => (c.id === campaign.id ? res.campaign : c)));
-      showToast(`Campaña ${campaign.campaignName} marcada como ${nextStatus}`);
+      showToast(`Campaign ${campaign.campaignName} marked as ${nextStatus}`);
     } catch (err: any) {
-      alert(err.message || 'Error al cambiar estado de campaña');
+      alert(err.message || 'Failed to update campaign status');
     }
   };
 
-  // Run Ad Audit
   const handleRunAudit = async () => {
     setAuditingAds(true);
     try {
       const res = await api.marketingAuditAds();
       setAuditInfo(res.audit);
-      showToast('🛡️ Auditoría de Pauta completada. Guardrails y rendimientos verificados.');
+      showToast('Ad audit complete. Guardrails and performance verified.');
     } catch (err: any) {
-      alert(err.message || 'Error al auditar pauta');
+      alert(err.message || 'Failed to audit campaigns');
     } finally {
       setAuditingAds(false);
     }
   };
 
-  // Save Brand settings
   const handleSaveBrand = async () => {
     setSavingBrand(true);
     try {
-      const res = await api.marketingUpsertBrand({
+      await api.marketingUpsertBrand({
         slug: selectedBrandSlug,
         name: overview?.brand?.name || 'Niki Peppers',
         website: overview?.brand?.website || 'https://nikipeppers.com',
@@ -242,16 +234,15 @@ export function MarketingPage() {
         whatsappNumber: brandWhatsapp,
         targetAudience: brandAudience,
       });
-      showToast('✓ Directivas de marca y tono de voz actualizados con éxito');
+      showToast('Brand directives and tone of voice updated successfully');
       void loadData(selectedBrandSlug);
     } catch (err: any) {
-      alert(err.message || 'Error al guardar configuración de marca');
+      alert(err.message || 'Failed to update brand directives');
     } finally {
       setSavingBrand(false);
     }
   };
 
-  // Filtered drafts
   const filteredDrafts = drafts.filter((d) => {
     if (filterStatus !== 'all' && d.status !== filterStatus) return false;
     if (filterPlatform !== 'all' && d.platform !== filterPlatform) return false;
@@ -260,7 +251,6 @@ export function MarketingPage() {
 
   return (
     <div style={{ padding: '24px 20px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'inherit' }}>
-      {/* Toast Notification */}
       {toastMessage && (
         <div
           style={{
@@ -272,16 +262,13 @@ export function MarketingPage() {
             color: '#fafafa',
             border: '1px solid #27272a',
             padding: '14px 20px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
             fontSize: '14px',
             fontWeight: 500,
           }}
         >
-          <span>{toastMessage}</span>
+          {toastMessage}
         </div>
       )}
 
@@ -309,25 +296,24 @@ export function MarketingPage() {
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 padding: '3px 8px',
-                borderRadius: '6px',
-                background: '#450a0a',
-                color: '#f87171',
-                border: '1px solid #7f1d1d',
+                borderRadius: '4px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: '#ef4444',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
                 letterSpacing: '0.05em',
               }}
             >
-              Piloto Autónomo
+              Autonomous Pilot
             </span>
           </div>
           <p style={{ margin: '4px 0 0', fontSize: '14px', color: 'var(--muted)' }}>
-            Supervisión algorítmica de pauta publicitaria (Meta & Google Ads) y agente de contenido con aprobación humana
+            Supervised ad spend management (Meta & Google Ads) and AI creative production with human-in-the-loop approval
           </p>
         </div>
 
-        {/* Brand Selector & Quick Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>Marca:</span>
+            <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>Brand:</span>
             <select
               value={selectedBrandSlug}
               onChange={(e) => setSelectedBrandSlug(e.target.value)}
@@ -336,7 +322,7 @@ export function MarketingPage() {
                 color: 'var(--ink)',
                 border: '1px solid var(--border)',
                 padding: '8px 12px',
-                borderRadius: '8px',
+                borderRadius: '6px',
                 fontSize: '14px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -354,22 +340,17 @@ export function MarketingPage() {
           <button
             onClick={() => setShowGenerateModal(true)}
             style={{
-              background: '#e11d48',
+              background: '#2563eb',
               color: '#ffffff',
               border: 'none',
               padding: '8px 16px',
-              borderRadius: '8px',
+              borderRadius: '6px',
               fontSize: '13px',
               fontWeight: 600,
               cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: '0 2px 8px rgba(225, 29, 72, 0.3)',
             }}
           >
-            <span>✨</span>
-            <span>Generar Borrador con IA</span>
+            Generate Draft with AI
           </button>
         </div>
       </div>
@@ -384,43 +365,40 @@ export function MarketingPage() {
             marginBottom: '28px',
           }}
         >
-          {/* Daily Budget vs Guardrail */}
           <div
             style={{
               background: 'var(--surface)',
               border: '1px solid var(--border)',
-              borderRadius: '12px',
+              borderRadius: '8px',
               padding: '18px',
-              position: 'relative',
-              overflow: 'hidden',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                Pauta Diaria / Guardrail
+                Daily Budget / Guardrail
               </span>
               <span
                 style={{
                   fontSize: '11px',
                   fontWeight: 700,
                   padding: '2px 8px',
-                  borderRadius: '999px',
-                  background: overview.ads.guardrailBreachedCount > 0 ? '#450a0a' : '#052e16',
-                  color: overview.ads.guardrailBreachedCount > 0 ? '#f87171' : '#4ade80',
-                  border: `1px solid ${overview.ads.guardrailBreachedCount > 0 ? '#991b1b' : '#166534'}`,
+                  borderRadius: '4px',
+                  background: overview.ads.guardrailBreachedCount > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                  color: overview.ads.guardrailBreachedCount > 0 ? '#ef4444' : '#10b981',
+                  border: `1px solid ${overview.ads.guardrailBreachedCount > 0 ? '#ef4444' : '#10b981'}`,
                 }}
               >
-                {overview.ads.guardrailBreachedCount > 0 ? '⚠️ Guardrail Breached' : '🛡️ Límite Seguro'}
+                {overview.ads.guardrailBreachedCount > 0 ? 'Guardrail Exceeded' : 'Protected Limit'}
               </span>
             </div>
             <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px' }}>
               ${overview.ads.totalDailyBudget.toFixed(2)}
               <span style={{ fontSize: '14px', color: 'var(--muted)', fontWeight: 500 }}>
                 {' '}
-                / max ${overview.ads.safetyGuardrailTotal.toFixed(2)} día
+                / max ${overview.ads.safetyGuardrailTotal.toFixed(2)} day
               </span>
             </div>
-            <div style={{ marginTop: '10px', height: '6px', background: '#27272a', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ marginTop: '10px', height: '6px', background: 'var(--grid)', borderRadius: '3px', overflow: 'hidden' }}>
               <div
                 style={{
                   height: '100%',
@@ -432,33 +410,31 @@ export function MarketingPage() {
             </div>
           </div>
 
-          {/* Performance: Blended ROAS & CPA */}
           <div
             style={{
               background: 'var(--surface)',
               border: '1px solid var(--border)',
-              borderRadius: '12px',
+              borderRadius: '8px',
               padding: '18px',
             }}
           >
             <div style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-              Retorno Pauta (Blended ROAS)
+              Blended ROAS
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '8px' }}>
-              <span style={{ fontSize: '24px', fontWeight: 800, color: '#38bdf8' }}>{overview.ads.avgRoas.toFixed(2)}x</span>
-              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>CPA Prom: ${overview.ads.avgCpa.toFixed(2)}</span>
+              <span style={{ fontSize: '24px', fontWeight: 800, color: '#2563eb' }}>{overview.ads.avgRoas.toFixed(2)}x</span>
+              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Avg CPA: ${overview.ads.avgCpa.toFixed(2)}</span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '8px' }}>
-              Gasto total acumulado: <strong>${overview.ads.totalSpendToDate.toFixed(2)}</strong> ({overview.ads.activeCampaignsCount} campañas activas)
+              Total spend to date: <strong>${overview.ads.totalSpendToDate.toFixed(2)}</strong> ({overview.ads.activeCampaignsCount} active campaigns)
             </div>
           </div>
 
-          {/* Pending Approvals */}
           <div
             style={{
               background: 'var(--surface)',
               border: overview.social.pendingApprovalsCount > 0 ? '1px solid #f59e0b' : '1px solid var(--border)',
-              borderRadius: '12px',
+              borderRadius: '8px',
               padding: '18px',
             }}
           >
@@ -467,31 +443,30 @@ export function MarketingPage() {
                 Human-in-the-Loop
               </span>
               {overview.social.pendingApprovalsCount > 0 && (
-                <span style={{ background: '#78350f', color: '#fcd34d', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '999px' }}>
-                  Requiere Aprobación
+                <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', border: '1px solid #f59e0b' }}>
+                  Action Required
                 </span>
               )}
             </div>
             <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: overview.social.pendingApprovalsCount > 0 ? '#f59e0b' : 'inherit' }}>
               {overview.social.pendingApprovalsCount}{' '}
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--muted)' }}>posts pendientes</span>
+              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--muted)' }}>pending approval</span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '8px' }}>
-              {overview.social.approvedScheduledCount} aprobados/programados · {overview.social.publishedCount} publicados
+              {overview.social.approvedScheduledCount} approved/scheduled · {overview.social.publishedCount} published
             </div>
           </div>
 
-          {/* Autonomous Agents Status */}
           <div
             style={{
               background: 'var(--surface)',
               border: '1px solid var(--border)',
-              borderRadius: '12px',
+              borderRadius: '8px',
               padding: '18px',
             }}
           >
             <div style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-              Estado Agentes Autónomos
+              Autonomous Agents
             </div>
             <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
@@ -499,14 +474,14 @@ export function MarketingPage() {
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
                   Traffic Guardian
                 </span>
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>ACTIVO</span>
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>ACTIVE</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#38bdf8' }} />
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563eb' }} />
                   Social Creative
                 </span>
-                <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 600 }}>GEMINI 3.8 / 2.5</span>
+                <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>GEMINI 2.5/3.8</span>
               </div>
             </div>
           </div>
@@ -528,7 +503,7 @@ export function MarketingPage() {
             padding: '10px 18px',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'creative' ? '2px solid #e11d48' : '2px solid transparent',
+            borderBottom: activeTab === 'creative' ? '2px solid #2563eb' : '2px solid transparent',
             color: activeTab === 'creative' ? 'var(--ink)' : 'var(--muted)',
             fontWeight: activeTab === 'creative' ? 700 : 500,
             fontSize: '14px',
@@ -538,14 +513,13 @@ export function MarketingPage() {
             gap: '8px',
           }}
         >
-          <span>📸</span>
-          <span>Social Creative Agent (Borradores & Aprobación)</span>
+          <span>Social Creative Studio (Drafts & Approvals)</span>
           {overview && overview.social.pendingApprovalsCount > 0 && (
             <span
               style={{
                 fontSize: '11px',
                 padding: '2px 6px',
-                borderRadius: '10px',
+                borderRadius: '4px',
                 background: '#f59e0b',
                 color: '#000',
                 fontWeight: 700,
@@ -562,18 +536,14 @@ export function MarketingPage() {
             padding: '10px 18px',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'ads' ? '2px solid #3b82f6' : '2px solid transparent',
+            borderBottom: activeTab === 'ads' ? '2px solid #2563eb' : '2px solid transparent',
             color: activeTab === 'ads' ? 'var(--ink)' : 'var(--muted)',
             fontWeight: activeTab === 'ads' ? 700 : 500,
             fontSize: '14px',
             cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
           }}
         >
-          <span>📊</span>
-          <span>Ads & Traffic Engine (Meta & Google)</span>
+          Ads & Traffic Engine (Meta & Google)
         </button>
 
         <button
@@ -582,18 +552,14 @@ export function MarketingPage() {
             padding: '10px 18px',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'client_portal' ? '2px solid #10b981' : '2px solid transparent',
+            borderBottom: activeTab === 'client_portal' ? '2px solid #2563eb' : '2px solid transparent',
             color: activeTab === 'client_portal' ? 'var(--ink)' : 'var(--muted)',
             fontWeight: activeTab === 'client_portal' ? 700 : 500,
             fontSize: '14px',
             cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
           }}
         >
-          <span>📲</span>
-          <span>Simulador Portal Cliente (Token Aprobación)</span>
+          Client Portal Simulator (Approval Token)
         </button>
 
         <button
@@ -602,25 +568,20 @@ export function MarketingPage() {
             padding: '10px 18px',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'brand' ? '2px solid #8b5cf6' : '2px solid transparent',
+            borderBottom: activeTab === 'brand' ? '2px solid #2563eb' : '2px solid transparent',
             color: activeTab === 'brand' ? 'var(--ink)' : 'var(--muted)',
             fontWeight: activeTab === 'brand' ? 700 : 500,
             fontSize: '14px',
             cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
           }}
         >
-          <span>🌶️</span>
-          <span>Directivas de Marca & Tono</span>
+          Brand Directives & Voice Tone
         </button>
       </div>
 
       {/* TAB 1: SOCIAL CREATIVE STUDIO */}
       {activeTab === 'creative' && (
         <div>
-          {/* Filter Bar & Controls */}
           <div
             style={{
               display: 'flex',
@@ -632,14 +593,14 @@ export function MarketingPage() {
             }}
           >
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Estado:</span>
+              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Status:</span>
               {(['all', 'PENDING_APPROVAL', 'APPROVED', 'DRAFT', 'PUBLISHED'] as const).map((st) => (
                 <button
                   key={st}
                   onClick={() => setFilterStatus(st)}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
+                    borderRadius: '4px',
                     border: filterStatus === st ? '1px solid var(--ink)' : '1px solid var(--border)',
                     background: filterStatus === st ? 'var(--ink)' : 'var(--surface)',
                     color: filterStatus === st ? 'var(--page)' : 'var(--ink)',
@@ -649,44 +610,43 @@ export function MarketingPage() {
                   }}
                 >
                   {st === 'all'
-                    ? 'Todos'
+                    ? 'All'
                     : st === 'PENDING_APPROVAL'
-                    ? '⏳ Pendientes'
+                    ? 'Pending'
                     : st === 'APPROVED'
-                    ? '✅ Aprobados'
+                    ? 'Approved'
                     : st === 'DRAFT'
-                    ? '📝 Borradores'
-                    : '🚀 Publicados'}
+                    ? 'Draft'
+                    : 'Published'}
                 </button>
               ))}
 
-              <span style={{ fontSize: '13px', color: 'var(--muted)', marginLeft: '12px' }}>Plataforma:</span>
+              <span style={{ fontSize: '13px', color: 'var(--muted)', marginLeft: '12px' }}>Platform:</span>
               {(['all', 'INSTAGRAM', 'TIKTOK', 'FACEBOOK'] as const).map((plat) => (
                 <button
                   key={plat}
                   onClick={() => setFilterPlatform(plat)}
                   style={{
                     padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: filterPlatform === plat ? '1px solid #3b82f6' : '1px solid var(--border)',
-                    background: filterPlatform === plat ? 'rgba(59, 130, 246, 0.15)' : 'var(--surface)',
-                    color: filterPlatform === plat ? '#3b82f6' : 'var(--ink)',
+                    borderRadius: '4px',
+                    border: filterPlatform === plat ? '1px solid #2563eb' : '1px solid var(--border)',
+                    background: filterPlatform === plat ? 'rgba(37, 99, 235, 0.1)' : 'var(--surface)',
+                    color: filterPlatform === plat ? '#2563eb' : 'var(--ink)',
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: 'pointer',
                   }}
                 >
-                  {plat === 'all' ? 'Todas' : plat}
+                  {plat === 'all' ? 'All' : plat}
                 </button>
               ))}
             </div>
 
             <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Mostrando <strong>{filteredDrafts.length}</strong> borradores de contenido
+              Showing <strong>{filteredDrafts.length}</strong> content drafts
             </div>
           </div>
 
-          {/* Drafts Grid */}
           <div
             style={{
               display: 'grid',
@@ -706,14 +666,12 @@ export function MarketingPage() {
                   style={{
                     background: 'var(--surface)',
                     border: isPending ? '1.5px solid #f59e0b' : '1px solid var(--border)',
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                     overflow: 'hidden',
                     display: 'flex',
                     flexDirection: 'column',
-                    boxShadow: isPending ? '0 4px 20px rgba(245, 158, 11, 0.08)' : 'none',
                   }}
                 >
-                  {/* Card Header */}
                   <div
                     style={{
                       padding: '12px 16px',
@@ -730,58 +688,53 @@ export function MarketingPage() {
                           fontSize: '11px',
                           fontWeight: 700,
                           padding: '3px 8px',
-                          borderRadius: '6px',
-                          background:
-                            draft.platform === 'INSTAGRAM'
-                              ? 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)'
-                              : draft.platform === 'TIKTOK'
-                              ? '#000000'
-                              : '#1877f2',
-                          color: '#fff',
+                          borderRadius: '4px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--ink)',
                         }}
                       >
-                        {draft.platform} · {draft.postType}
+                        {draft.platform} / {draft.postType}
                       </span>
                       <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
                         {draft.brandName || selectedBrandSlug}
                       </span>
                     </div>
 
-                    {/* Status Badge */}
                     <span
                       style={{
                         fontSize: '11px',
                         fontWeight: 700,
-                        padding: '3px 10px',
-                        borderRadius: '999px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
                         background: isPending
-                          ? '#78350f'
+                          ? 'rgba(245, 158, 11, 0.1)'
                           : isApproved
-                          ? '#052e16'
+                          ? 'rgba(16, 185, 129, 0.1)'
                           : isPublished
-                          ? '#1e3a8a'
+                          ? 'rgba(37, 99, 235, 0.1)'
                           : isRejected
-                          ? '#450a0a'
-                          : '#27272a',
+                          ? 'rgba(239, 68, 68, 0.1)'
+                          : 'var(--grid)',
                         color: isPending
-                          ? '#fde68a'
+                          ? '#f59e0b'
                           : isApproved
-                          ? '#86efac'
+                          ? '#10b981'
                           : isPublished
-                          ? '#bfdbfe'
+                          ? '#2563eb'
                           : isRejected
-                          ? '#fca5a5'
-                          : '#a1a1aa',
+                          ? '#ef4444'
+                          : 'var(--muted)',
                         border: `1px solid ${
                           isPending
-                            ? '#b45309'
+                            ? '#f59e0b'
                             : isApproved
-                            ? '#166534'
+                            ? '#10b981'
                             : isPublished
-                            ? '#1d4ed8'
+                            ? '#2563eb'
                             : isRejected
-                            ? '#991b1b'
-                            : '#3f3f46'
+                            ? '#ef4444'
+                            : 'var(--border)'
                         }`,
                       }}
                     >
@@ -789,7 +742,6 @@ export function MarketingPage() {
                     </span>
                   </div>
 
-                  {/* Media Visual Preview */}
                   {draft.mediaUrls && draft.mediaUrls.length > 0 && (
                     <div style={{ width: '100%', height: '200px', background: '#111', overflow: 'hidden', position: 'relative' }}>
                       <img
@@ -811,13 +763,12 @@ export function MarketingPage() {
                             fontWeight: 600,
                           }}
                         >
-                          1/{draft.mediaUrls.length} Carrusel
+                          1/{draft.mediaUrls.length} Carousel
                         </span>
                       )}
                     </div>
                   )}
 
-                  {/* Caption & Body */}
                   <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <div
                       style={{
@@ -827,13 +778,11 @@ export function MarketingPage() {
                         color: 'var(--ink)',
                         maxHeight: '180px',
                         overflowY: 'auto',
-                        paddingRight: '4px',
                       }}
                     >
                       {draft.caption}
                     </div>
 
-                    {/* Feedback box if any */}
                     {draft.feedback && (
                       <div
                         style={{
@@ -846,17 +795,15 @@ export function MarketingPage() {
                           color: '#ef4444',
                         }}
                       >
-                        <strong>Feedback cliente:</strong> {draft.feedback}
+                        <strong>Client Feedback:</strong> {draft.feedback}
                       </div>
                     )}
 
-                    {/* Scheduled Info */}
                     <div style={{ marginTop: 'auto', paddingTop: '12px', fontSize: '11.5px', color: 'var(--muted)' }}>
-                      🗓️ {draft.scheduledFor ? `Programado: ${new Date(draft.scheduledFor).toLocaleString('es-AR')}` : 'Sin fecha fija (inmediato post-aprobación)'}
+                      Scheduled: {draft.scheduledFor ? new Date(draft.scheduledFor).toLocaleString() : 'Immediate upon approval'}
                     </div>
                   </div>
 
-                  {/* Card Actions Toolbar */}
                   <div
                     style={{
                       padding: '12px 16px',
@@ -876,21 +823,16 @@ export function MarketingPage() {
                           style={{
                             flex: 1,
                             padding: '8px 12px',
-                            borderRadius: '6px',
+                            borderRadius: '4px',
                             background: '#16a34a',
                             color: '#ffffff',
                             border: 'none',
                             fontSize: '12px',
                             fontWeight: 600,
                             cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '4px',
                           }}
                         >
-                          <span>✓</span>
-                          <span>Aprobar</span>
+                          Approve
                         </button>
 
                         <button
@@ -901,7 +843,7 @@ export function MarketingPage() {
                           }}
                           style={{
                             padding: '8px 12px',
-                            borderRadius: '6px',
+                            borderRadius: '4px',
                             background: 'transparent',
                             color: '#ef4444',
                             border: '1px solid #ef4444',
@@ -910,7 +852,7 @@ export function MarketingPage() {
                             cursor: 'pointer',
                           }}
                         >
-                          Rechazar
+                          Reject
                         </button>
                       </>
                     )}
@@ -922,7 +864,7 @@ export function MarketingPage() {
                         style={{
                           flex: 1,
                           padding: '8px 12px',
-                          borderRadius: '6px',
+                          borderRadius: '4px',
                           background: '#2563eb',
                           color: '#ffffff',
                           border: 'none',
@@ -931,43 +873,37 @@ export function MarketingPage() {
                           cursor: 'pointer',
                         }}
                       >
-                        🚀 Marcar Publicado
+                        Mark as Published
                       </button>
                     )}
 
-                    {/* Dispatch to WhatsApp */}
                     <button
                       disabled={dispatchingId === draft.id}
                       onClick={() => handleDispatchApproval(draft.id)}
-                      title="Enviar vista previa a WhatsApp del cliente"
+                      title="Send interactive review message to client WhatsApp"
                       style={{
                         padding: '8px 12px',
-                        borderRadius: '6px',
-                        background: '#065f46',
-                        color: '#34d399',
-                        border: '1px solid #059669',
+                        borderRadius: '4px',
+                        background: 'transparent',
+                        color: 'var(--ink)',
+                        border: '1px solid var(--border)',
                         fontSize: '12px',
                         fontWeight: 600,
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
                       }}
                     >
-                      <span>📲</span>
-                      <span>{dispatchingId === draft.id ? 'Enviando...' : 'WhatsApp'}</span>
+                      {dispatchingId === draft.id ? 'Dispatching...' : 'Dispatch WhatsApp'}
                     </button>
 
-                    {/* Client Portal Link */}
                     <button
                       onClick={() => {
                         setClientTestToken(draft.approvalToken);
                         setActiveTab('client_portal');
                       }}
-                      title="Simular cómo ve el cliente el post con su token único"
+                      title="Preview client approval page"
                       style={{
                         padding: '8px 10px',
-                        borderRadius: '6px',
+                        borderRadius: '4px',
                         background: 'transparent',
                         color: 'var(--muted)',
                         border: '1px solid var(--border)',
@@ -975,28 +911,27 @@ export function MarketingPage() {
                         cursor: 'pointer',
                       }}
                     >
-                      🔗 Ver Portal
+                      Client Portal
                     </button>
                   </div>
 
-                  {/* Reject Feedback prompt inline */}
                   {rejectFeedbackDraftId === draft.id && (
-                    <div style={{ padding: '12px 16px', background: '#1c1917', borderTop: '1px solid #44403c' }}>
-                      <label style={{ fontSize: '11px', color: '#fca5a5', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                        Motivo o ajustes solicitados por el cliente:
+                    <div style={{ padding: '12px 16px', background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
+                      <label style={{ fontSize: '11px', color: '#ef4444', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                        Reason / requested adjustments:
                       </label>
                       <input
                         type="text"
                         value={rejectFeedbackText}
                         onChange={(e) => setRejectFeedbackText(e.target.value)}
-                        placeholder="Ej: Cambiar foto por frasco Scorpion Habanero"
+                        placeholder="e.g. Replace photo with Scorpion Habanero jar"
                         style={{
                           width: '100%',
                           padding: '6px 10px',
-                          background: '#0c0a09',
-                          border: '1px solid #78350f',
-                          color: '#fff',
-                          borderRadius: '6px',
+                          background: 'var(--page)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--ink)',
+                          borderRadius: '4px',
                           fontSize: '12px',
                           marginBottom: '8px',
                           boxSizing: 'border-box',
@@ -1016,20 +951,20 @@ export function MarketingPage() {
                             cursor: 'pointer',
                           }}
                         >
-                          Confirmar Rechazo
+                          Confirm Rejection
                         </button>
                         <button
                           onClick={() => setRejectFeedbackDraftId(null)}
                           style={{
                             padding: '6px 10px',
                             background: 'transparent',
-                            color: '#a8a29e',
+                            color: 'var(--muted)',
                             border: 'none',
                             fontSize: '12px',
                             cursor: 'pointer',
                           }}
                         >
-                          Cancelar
+                          Cancel
                         </button>
                       </div>
                     </div>
@@ -1038,52 +973,18 @@ export function MarketingPage() {
               );
             })}
           </div>
-
-          {filteredDrafts.length === 0 && (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '48px 20px',
-                background: 'var(--surface)',
-                borderRadius: '12px',
-                border: '1px dashed var(--border)',
-              }}
-            >
-              <div style={{ fontSize: '32px', marginBottom: '12px' }}>✨</div>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>No hay borradores con estos filtros</h3>
-              <p style={{ margin: '8px 0 16px', fontSize: '13px', color: 'var(--muted)' }}>
-                Podés pedirle al Social Creative Agent que elabore un post nuevo adaptado al tono de Niki Peppers.
-              </p>
-              <button
-                onClick={() => setShowGenerateModal(true)}
-                style={{
-                  background: '#e11d48',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Crear Primer Borrador
-              </button>
-            </div>
-          )}
         </div>
       )}
 
       {/* TAB 2: ADS & TRAFFIC ENGINE */}
       {activeTab === 'ads' && (
         <div>
-          {/* Hardcoded Safety Guardrail Banner */}
           <div
             style={{
               padding: '16px 20px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(6, 95, 70, 0.15))',
-              border: '1px solid #059669',
+              borderRadius: '8px',
+              background: 'rgba(16, 185, 129, 0.05)',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
               marginBottom: '24px',
               display: 'flex',
               flexWrap: 'wrap',
@@ -1093,15 +994,12 @@ export function MarketingPage() {
             }}
           >
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '18px' }}>🛡️</span>
-                <span style={{ fontSize: '15px', fontWeight: 700, color: '#34d399' }}>
-                  Safety Guardrails Activos (Límites Estrictos de Presupuesto)
-                </span>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#10b981' }}>
+                Active Safety Guardrails (Strict Budget Capping)
               </div>
               <p style={{ margin: '6px 0 0', fontSize: '13px', color: 'var(--ink-2)', maxWidth: '800px', lineHeight: 1.4 }}>
-                El algoritmo de optimización tiene estrictamente prohibido incrementar los presupuestos diarios por encima del{' '}
-                <strong>safetyGuardrail</strong> configurado por el cliente (${overview?.ads.safetyGuardrailTotal.toFixed(2)}/día acumulado). Cualquier intento de sobrepasar este límite es bloqueado a nivel base de datos.
+                The automated optimization algorithms are strictly prohibited from raising daily campaign budgets past the configured{' '}
+                <strong>safetyGuardrail</strong> (${overview?.ads.safetyGuardrailTotal.toFixed(2)}/day aggregate). Any attempted bypass is blocked at database level.
               </p>
             </div>
 
@@ -1113,47 +1011,42 @@ export function MarketingPage() {
                 color: '#ffffff',
                 border: 'none',
                 padding: '8px 16px',
-                borderRadius: '8px',
+                borderRadius: '6px',
                 fontSize: '13px',
                 fontWeight: 600,
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
               }}
             >
-              <span>{auditingAds ? 'Auditando...' : '🔍 Auditar Campañas con IA'}</span>
+              {auditingAds ? 'Auditing...' : 'Audit Campaigns with AI'}
             </button>
           </div>
 
-          {/* Audit Recommendations Banner if available */}
           {auditInfo && (auditInfo.safetyAlerts?.length > 0 || auditInfo.recommendations?.length > 0) && (
             <div
               style={{
                 background: 'var(--surface)',
                 border: '1px solid var(--border)',
-                borderRadius: '12px',
+                borderRadius: '8px',
                 padding: '16px',
                 marginBottom: '24px',
               }}
             >
-              <h4 style={{ margin: '0 0 10px', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🤖 Diagnóstico del Traffic Guardian Agent</span>
+              <h4 style={{ margin: '0 0 10px', fontSize: '14px', fontWeight: 700 }}>
+                Traffic Guardian Agent Diagnostics
               </h4>
               {auditInfo.safetyAlerts?.map((alert: string, idx: number) => (
-                <div key={idx} style={{ fontSize: '13px', color: '#f87171', marginBottom: '6px' }}>
+                <div key={idx} style={{ fontSize: '13px', color: '#ef4444', marginBottom: '6px' }}>
                   {alert}
                 </div>
               ))}
               {auditInfo.recommendations?.map((rec: string, idx: number) => (
-                <div key={idx} style={{ fontSize: '13px', color: '#38bdf8', marginBottom: '6px' }}>
+                <div key={idx} style={{ fontSize: '13px', color: '#2563eb', marginBottom: '6px' }}>
                   {rec}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Active Campaigns Cards / Table */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {campaigns.map((camp) => {
               const isOverBudget = camp.dailyBudget > camp.safetyGuardrail;
@@ -1165,14 +1058,13 @@ export function MarketingPage() {
                   style={{
                     background: 'var(--surface)',
                     border: '1px solid var(--border)',
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                     padding: '20px',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '16px',
                   }}
                 >
-                  {/* Campaign Header */}
                   <div
                     style={{
                       display: 'flex',
@@ -1188,7 +1080,7 @@ export function MarketingPage() {
                           fontSize: '12px',
                           fontWeight: 700,
                           padding: '4px 10px',
-                          borderRadius: '6px',
+                          borderRadius: '4px',
                           background: camp.platform === 'META' ? '#1877f2' : '#ea4335',
                           color: '#fff',
                         }}
@@ -1198,7 +1090,7 @@ export function MarketingPage() {
                       <div>
                         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>{camp.campaignName}</h3>
                         <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                          ID: {camp.externalCampaignId} · Objetivo: {camp.objective}
+                          ID: {camp.externalCampaignId} · Objective: {camp.objective}
                         </span>
                       </div>
                     </div>
@@ -1208,11 +1100,11 @@ export function MarketingPage() {
                         style={{
                           fontSize: '11px',
                           fontWeight: 700,
-                          padding: '3px 10px',
-                          borderRadius: '999px',
-                          background: camp.status === 'ACTIVE' ? '#052e16' : '#27272a',
-                          color: camp.status === 'ACTIVE' ? '#4ade80' : '#a1a1aa',
-                          border: `1px solid ${camp.status === 'ACTIVE' ? '#166534' : '#3f3f46'}`,
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          background: camp.status === 'ACTIVE' ? 'rgba(16, 185, 129, 0.1)' : 'var(--grid)',
+                          color: camp.status === 'ACTIVE' ? '#10b981' : 'var(--muted)',
+                          border: `1px solid ${camp.status === 'ACTIVE' ? '#10b981' : 'var(--border)'}`,
                         }}
                       >
                         {camp.status}
@@ -1221,7 +1113,7 @@ export function MarketingPage() {
                         onClick={() => handleToggleAdStatus(camp)}
                         style={{
                           padding: '6px 12px',
-                          borderRadius: '6px',
+                          borderRadius: '4px',
                           border: '1px solid var(--border)',
                           background: 'transparent',
                           color: 'var(--ink)',
@@ -1230,12 +1122,11 @@ export function MarketingPage() {
                           fontWeight: 500,
                         }}
                       >
-                        {camp.status === 'ACTIVE' ? 'Pausar' : 'Reanudar'}
+                        {camp.status === 'ACTIVE' ? 'Pause' : 'Resume'}
                       </button>
                     </div>
                   </div>
 
-                  {/* Metrics Strip */}
                   <div
                     style={{
                       display: 'grid',
@@ -1243,11 +1134,11 @@ export function MarketingPage() {
                       gap: '12px',
                       background: 'rgba(0,0,0,0.02)',
                       padding: '12px',
-                      borderRadius: '8px',
+                      borderRadius: '6px',
                     }}
                   >
                     <div>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>Presupuesto Diario</span>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>Daily Budget</span>
                       {editingCampaignId === camp.id ? (
                         <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
                           <input
@@ -1276,7 +1167,7 @@ export function MarketingPage() {
                               cursor: 'pointer',
                             }}
                           >
-                            ✓
+                            Save
                           </button>
                           <button
                             onClick={() => setEditingCampaignId(null)}
@@ -1289,7 +1180,7 @@ export function MarketingPage() {
                               cursor: 'pointer',
                             }}
                           >
-                            ✕
+                            Cancel
                           </button>
                         </div>
                       ) : (
@@ -1300,63 +1191,56 @@ export function MarketingPage() {
                               setEditingCampaignId(camp.id);
                               setEditBudgetVal(camp.dailyBudget);
                             }}
-                            style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                            style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
                           >
-                            Editar
+                            Edit
                           </button>
                         </div>
                       )}
                     </div>
 
                     <div>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>Límite Guardrail</span>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>Guardrail Ceiling</span>
                       <strong style={{ fontSize: '15px', color: isOverBudget ? '#ef4444' : isNearLimit ? '#f59e0b' : '#10b981' }}>
                         max ${camp.safetyGuardrail.toFixed(2)}
                       </strong>
                     </div>
 
                     <div>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>Gasto Acumulado</span>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>Spend to Date</span>
                       <strong style={{ fontSize: '15px' }}>${camp.spendToDate.toFixed(2)}</strong>
                     </div>
 
                     <div>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>ROAS (Retorno)</span>
-                      <strong style={{ fontSize: '15px', color: camp.roas >= 4.0 ? '#10b981' : camp.roas >= 2.0 ? '#38bdf8' : '#f87171' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>ROAS</span>
+                      <strong style={{ fontSize: '15px', color: camp.roas >= 4.0 ? '#10b981' : camp.roas >= 2.0 ? '#2563eb' : '#ef4444' }}>
                         {camp.roas.toFixed(2)}x
                       </strong>
                     </div>
 
                     <div>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>CPA (Costo Adquisición)</span>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>CPA</span>
                       <strong style={{ fontSize: '15px' }}>${camp.cpa.toFixed(2)}</strong>
                     </div>
 
                     <div>
-                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>CTR (Clics)</span>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', display: 'block' }}>CTR</span>
                       <strong style={{ fontSize: '15px' }}>{camp.ctr.toFixed(2)}%</strong>
                     </div>
                   </div>
 
-                  {/* AI Insights & Performance Strategy */}
                   {camp.insights && Object.keys(camp.insights).length > 0 && (
                     <div
                       style={{
                         fontSize: '12.5px',
                         color: 'var(--ink-2)',
-                        background: 'rgba(56, 189, 248, 0.05)',
-                        border: '1px solid rgba(56, 189, 248, 0.2)',
-                        borderRadius: '6px',
+                        background: 'rgba(37, 99, 235, 0.05)',
+                        border: '1px solid rgba(37, 99, 235, 0.2)',
+                        borderRadius: '4px',
                         padding: '10px 14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
                       }}
                     >
-                      <span>💡</span>
-                      <span>
-                        <strong>Insight Agente:</strong> {String(camp.insights.recommendation || camp.insights.audience || 'Rendimiento saludable')}
-                      </span>
+                      <strong>Optimization Directive:</strong> {String(camp.insights.recommendation || camp.insights.audience || 'Operating normally')}
                     </div>
                   )}
                 </div>
@@ -1372,20 +1256,19 @@ export function MarketingPage() {
           <div
             style={{
               padding: '16px',
-              borderRadius: '10px',
-              background: 'rgba(59, 130, 246, 0.08)',
-              border: '1px solid #3b82f6',
+              borderRadius: '8px',
+              background: 'rgba(37, 99, 235, 0.08)',
+              border: '1px solid #2563eb',
               marginBottom: '20px',
               fontSize: '13px',
               color: 'var(--ink-2)',
             }}
           >
-            <strong>📱 Simulador de Enlace de WhatsApp:</strong> Esto es exactamente lo que ve el dueño o responsable de la marca (ej: Niki Peppers) cuando recibe el link con su <strong>approvalToken</strong> en su celular. Puede aprobar o rechazar con 1 clic sin necesidad de estar logueado al panel de Control Center.
+            <strong>Client Approval Link Simulation:</strong> This represents the external view presented to the client when accessing their unique <strong>approvalToken</strong>. No dashboard authentication is required for rapid one-click review.
           </div>
 
-          {/* Token Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Token de borrador:</span>
+            <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Draft token:</span>
             <select
               value={clientTestToken}
               onChange={(e) => setClientTestToken(e.target.value)}
@@ -1407,39 +1290,20 @@ export function MarketingPage() {
             </select>
           </div>
 
-          {/* Mobile Shell Mockup */}
           {publicDraftData ? (
             <div
               style={{
-                background: '#09090b',
-                color: '#fafafa',
-                border: '2px solid #27272a',
-                borderRadius: '24px',
+                background: 'var(--surface)',
+                color: 'var(--ink)',
+                border: '1px solid var(--border)',
+                borderRadius: '12px',
                 padding: '24px',
-                boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div
-                    style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: '#e11d48',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      color: '#fff',
-                    }}
-                  >
-                    NP
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '15px' }}>{publicDraftData.brand.name}</h4>
-                    <span style={{ fontSize: '11px', color: '#a1a1aa' }}>Propuesta de Publicación ({publicDraftData.draft.platform})</span>
-                  </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '15px' }}>{publicDraftData.brand.name}</h4>
+                  <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Publishing Proposal ({publicDraftData.draft.platform})</span>
                 </div>
 
                 <span
@@ -1447,9 +1311,9 @@ export function MarketingPage() {
                     fontSize: '11px',
                     fontWeight: 700,
                     padding: '3px 8px',
-                    borderRadius: '999px',
-                    background: publicDraftData.draft.status === 'PENDING_APPROVAL' ? '#78350f' : '#052e16',
-                    color: publicDraftData.draft.status === 'PENDING_APPROVAL' ? '#fcd34d' : '#4ade80',
+                    borderRadius: '4px',
+                    background: publicDraftData.draft.status === 'PENDING_APPROVAL' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                    color: publicDraftData.draft.status === 'PENDING_APPROVAL' ? '#f59e0b' : '#10b981',
                   }}
                 >
                   {publicDraftData.draft.status}
@@ -1460,25 +1324,25 @@ export function MarketingPage() {
                 <img
                   src={publicDraftData.draft.mediaUrls[0]}
                   alt="Asset"
-                  style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '12px', marginBottom: '16px' }}
+                  style={{ width: '100%', height: '240px', objectFit: 'cover', borderRadius: '8px', marginBottom: '16px' }}
                 />
               )}
 
               <div
                 style={{
-                  background: '#18181b',
+                  background: 'var(--page)',
                   padding: '14px',
-                  borderRadius: '10px',
+                  borderRadius: '6px',
                   fontSize: '13.5px',
                   lineHeight: '1.5',
                   whiteSpace: 'pre-wrap',
                   marginBottom: '20px',
+                  border: '1px solid var(--border)',
                 }}
               >
                 {publicDraftData.draft.caption}
               </div>
 
-              {/* Public Quick Action Buttons */}
               {publicDraftData.draft.status === 'PENDING_APPROVAL' ? (
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
@@ -1487,7 +1351,7 @@ export function MarketingPage() {
                       setPublicActionLoading(true);
                       try {
                         await api.marketingPublicAction(clientTestToken, 'APPROVED');
-                        showToast('✓ Post aprobado vía token público');
+                        showToast('Post approved via token');
                         const res = await api.marketingPublicDraft(clientTestToken);
                         setPublicDraftData(res);
                         void loadData(selectedBrandSlug);
@@ -1501,24 +1365,24 @@ export function MarketingPage() {
                       background: '#16a34a',
                       color: '#fff',
                       border: 'none',
-                      borderRadius: '8px',
+                      borderRadius: '6px',
                       fontSize: '14px',
                       fontWeight: 700,
                       cursor: 'pointer',
                     }}
                   >
-                    {publicActionLoading ? 'Procesando...' : '✅ Aprobar Publicación'}
+                    {publicActionLoading ? 'Processing...' : 'Approve Post'}
                   </button>
 
                   <button
                     disabled={publicActionLoading}
                     onClick={async () => {
-                      const reason = prompt('Indicanos qué cambio o corrección te gustaría que hagamos:');
+                      const reason = prompt('Specify requested revision details:');
                       if (reason === null) return;
                       setPublicActionLoading(true);
                       try {
-                        await api.marketingPublicAction(clientTestToken, 'REJECTED', reason || 'Ajustes solicitados');
-                        showToast('Borrador rechazado con feedback');
+                        await api.marketingPublicAction(clientTestToken, 'REJECTED', reason || 'Adjustments requested');
+                        showToast('Draft marked as rejected with feedback');
                         const res = await api.marketingPublicDraft(clientTestToken);
                         setPublicDraftData(res);
                         void loadData(selectedBrandSlug);
@@ -1528,16 +1392,16 @@ export function MarketingPage() {
                     }}
                     style={{
                       padding: '12px 18px',
-                      background: '#27272a',
-                      color: '#f87171',
-                      border: '1px solid #3f3f46',
-                      borderRadius: '8px',
+                      background: 'transparent',
+                      color: '#ef4444',
+                      border: '1px solid #ef4444',
+                      borderRadius: '6px',
                       fontSize: '14px',
                       fontWeight: 600,
                       cursor: 'pointer',
                     }}
                   >
-                    Solicitar Ajuste
+                    Request Changes
                   </button>
                 </div>
               ) : (
@@ -1545,19 +1409,19 @@ export function MarketingPage() {
                   style={{
                     textAlign: 'center',
                     padding: '12px',
-                    background: '#18181b',
-                    borderRadius: '8px',
-                    color: '#a1a1aa',
+                    background: 'var(--page)',
+                    borderRadius: '6px',
+                    color: 'var(--muted)',
                     fontSize: '13px',
                   }}
                 >
-                  Este post ya fue {publicDraftData.draft.status === 'APPROVED' ? 'aprobado' : 'procesado'}.
+                  This post has already been processed ({publicDraftData.draft.status}).
                 </div>
               )}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '30px', color: 'var(--muted)' }}>
-              Cargando previsualización de token...
+              Loading token preview...
             </div>
           )}
         </div>
@@ -1570,30 +1434,30 @@ export function MarketingPage() {
             style={{
               background: 'var(--surface)',
               border: '1px solid var(--border)',
-              borderRadius: '12px',
+              borderRadius: '8px',
               padding: '24px',
             }}
           >
             <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700 }}>
-              Directivas de Marca y Tono de Voz ({overview?.brand?.name || 'Niki Peppers'})
+              Brand Directives & Voice Tone ({overview?.brand?.name || 'Niki Peppers'})
             </h3>
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-                Tono de Voz (Tone of Voice):
+                Tone of Voice:
               </label>
               <textarea
                 rows={3}
                 value={brandTone}
                 onChange={(e) => setBrandTone(e.target.value)}
-                placeholder="Ej: Picante, gourmet, atrevido, enfocado en gastronomía artesanal..."
+                placeholder="e.g. Artisanal, bold, gourmet, focused on culinary excellence..."
                 style={{
                   width: '100%',
                   padding: '10px',
                   background: 'var(--page)',
                   border: '1px solid var(--border)',
                   color: 'var(--ink)',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   fontSize: '13.5px',
                   boxSizing: 'border-box',
                 }}
@@ -1602,20 +1466,20 @@ export function MarketingPage() {
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-                Público Objetivo (Target Audience):
+                Target Audience:
               </label>
               <input
                 type="text"
                 value={brandAudience}
                 onChange={(e) => setBrandAudience(e.target.value)}
-                placeholder="Ej: Foodies, parrilleros, jóvenes adultos que cocinan en casa..."
+                placeholder="e.g. Foodies, home chefs, craft culinary enthusiasts..."
                 style={{
                   width: '100%',
                   padding: '10px',
                   background: 'var(--page)',
                   border: '1px solid var(--border)',
                   color: 'var(--ink)',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   fontSize: '13.5px',
                   boxSizing: 'border-box',
                 }}
@@ -1624,7 +1488,7 @@ export function MarketingPage() {
 
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-                Número de WhatsApp para Despacho de Aprobaciones:
+                WhatsApp Dispatch Phone:
               </label>
               <input
                 type="text"
@@ -1637,13 +1501,13 @@ export function MarketingPage() {
                   background: 'var(--page)',
                   border: '1px solid var(--border)',
                   color: 'var(--ink)',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                   fontSize: '13.5px',
                   boxSizing: 'border-box',
                 }}
               />
               <span style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
-                El Creative Agent enviará aquí los mensajes interactivos con previsualización del post y links de aprobación rápida.
+                Destination number for automatic interactive post review dispatches.
               </span>
             </div>
 
@@ -1651,17 +1515,17 @@ export function MarketingPage() {
               disabled={savingBrand}
               onClick={handleSaveBrand}
               style={{
-                background: '#e11d48',
+                background: '#2563eb',
                 color: '#fff',
                 border: 'none',
                 padding: '10px 20px',
-                borderRadius: '8px',
+                borderRadius: '6px',
                 fontSize: '14px',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
             >
-              {savingBrand ? 'Guardando...' : 'Guardar Directivas de Marca'}
+              {savingBrand ? 'Saving...' : 'Save Brand Directives'}
             </button>
           </div>
         </div>
@@ -1685,33 +1549,32 @@ export function MarketingPage() {
             style={{
               background: 'var(--surface)',
               border: '1px solid var(--border)',
-              borderRadius: '16px',
+              borderRadius: '12px',
               padding: '24px',
               maxWidth: '540px',
               width: '100%',
-              boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
-                ✨ Generar Contenido con Creative Agent
+                Generate Content with Creative Agent
               </h3>
               <button
                 onClick={() => setShowGenerateModal(false)}
                 style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--muted)', cursor: 'pointer' }}
               >
-                ✕
+                Cancel
               </button>
             </div>
 
             <form onSubmit={handleGenerate}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Plataforma:</label>
+                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Platform:</label>
                   <select
                     value={newPlatform}
                     onChange={(e) => setNewPlatform(e.target.value as SocialPlatform)}
-                    style={{ width: '100%', padding: '8px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)' }}
+                    style={{ width: '100%', padding: '8px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)' }}
                   >
                     <option value="INSTAGRAM">Instagram</option>
                     <option value="TIKTOK">TikTok</option>
@@ -1720,69 +1583,69 @@ export function MarketingPage() {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Tipo de Post:</label>
+                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Post Format:</label>
                   <select
                     value={newPostType}
                     onChange={(e) => setNewPostType(e.target.value as SocialPostType)}
-                    style={{ width: '100%', padding: '8px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)' }}
+                    style={{ width: '100%', padding: '8px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)' }}
                   >
-                    <option value="REEL">Reel / Video Corto</option>
-                    <option value="CAROUSEL">Carrusel</option>
-                    <option value="POST">Post Estático</option>
-                    <option value="STORY">Historia / Story</option>
+                    <option value="REEL">Reel / Video</option>
+                    <option value="CAROUSEL">Carousel</option>
+                    <option value="POST">Feed Post</option>
+                    <option value="STORY">Story</option>
                   </select>
                 </div>
               </div>
 
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                  Tema o Concepto del Post:
+                  Topic or Post Concept:
                 </label>
                 <input
                   type="text"
                   required
                   value={newTopic}
                   onChange={(e) => setNewTopic(e.target.value)}
-                  placeholder="Ej: Receta de alitas glaseadas con Chipotle Dulce artesanal"
-                  style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  placeholder="e.g. Glazed chicken wings recipe with artisanal Chipotle"
+                  style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                  Objetivo de la Publicación:
+                  Commercial Objective:
                 </label>
                 <input
                   type="text"
                   value={newObjective}
                   onChange={(e) => setNewObjective(e.target.value)}
-                  placeholder="Ej: Tráfico a nikipeppers.com con 15% OFF"
-                  style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  placeholder="e.g. Traffic to nikipeppers.com with 15% promo"
+                  style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                  URL de Imagen o Video (Opcional):
+                  Asset Media URL (Optional):
                 </label>
                 <input
                   type="url"
                   value={newMediaUrl}
                   onChange={(e) => setNewMediaUrl(e.target.value)}
                   placeholder="https://..."
-                  style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-                  Fecha y Hora Programada (Opcional):
+                  Scheduled Date & Time (Optional):
                 </label>
                 <input
                   type="datetime-local"
                   value={newScheduledDate}
                   onChange={(e) => setNewScheduledDate(e.target.value)}
-                  style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)', boxSizing: 'border-box' }}
                 />
               </div>
 
@@ -1790,24 +1653,24 @@ export function MarketingPage() {
                 <button
                   type="button"
                   onClick={() => setShowGenerateModal(false)}
-                  style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: '6px', cursor: 'pointer' }}
+                  style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: '4px', cursor: 'pointer' }}
                 >
-                  Cancelar
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isGenerating}
                   style={{
                     padding: '8px 20px',
-                    background: '#e11d48',
+                    background: '#2563eb',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: '4px',
                     fontWeight: 600,
                     cursor: 'pointer',
                   }}
                 >
-                  {isGenerating ? 'Generando con IA...' : 'Generar Borrador'}
+                  {isGenerating ? 'Generating...' : 'Generate Draft'}
                 </button>
               </div>
             </form>

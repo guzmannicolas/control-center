@@ -26,18 +26,18 @@ export async function dispatchDraftApproval(
   const quickRejectUrl = `${dashboardOrigin}/api/marketing/drafts/public/${draft.approvalToken}/action?decision=REJECTED`;
 
   const messageText =
-    `📢 *NUEVO BORRADOR DE CONTENIDO (${brandName})*\n` +
-    `━━━━━━━━━━━━━━━━━━━━\n` +
-    `📱 *Plataforma:* ${draft.platform} (${draft.postType})\n` +
-    `🗓️ *Programado para:* ${draft.scheduledFor ? new Date(draft.scheduledFor).toLocaleDateString('es-AR') : 'Inmediato post-aprobación'}\n\n` +
-    `📝 *Copy / Texto propuesto:*\n` +
+    `*NEW CONTENT PROPOSAL (${brandName})*\n` +
+    `------------------------------------\n` +
+    `*Platform:* ${draft.platform} (${draft.postType})\n` +
+    `*Scheduled:* ${draft.scheduledFor ? new Date(draft.scheduledFor).toLocaleDateString('en-US') : 'Immediate upon approval'}\n\n` +
+    `*Proposed Copy:*\n` +
     `"${draft.caption.slice(0, 300)}${draft.caption.length > 300 ? '...' : ''}"\n\n` +
-    (draft.mediaUrls.length > 0 ? `🖼️ *Multimedia:* ${draft.mediaUrls[0]}\n\n` : '') +
-    `━━━━━━━━━━━━━━━━━━━━\n` +
-    `👉 *Para revisar y aprobar desde la web:* \n${approvalUrl}\n\n` +
-    `⚡ *Acción Rápida:* \n` +
-    `✅ Aprobar: ${quickApproveUrl}\n` +
-    `❌ Rechazar: ${quickRejectUrl}`;
+    (draft.mediaUrls.length > 0 ? `*Media:* ${draft.mediaUrls[0]}\n\n` : '') +
+    `------------------------------------\n` +
+    `Review & approve in dashboard:\n${approvalUrl}\n\n` +
+    `Quick Action links:\n` +
+    `Approve: ${quickApproveUrl}\n` +
+    `Reject: ${quickRejectUrl}`;
 
   const target = targetPhoneOrWebhook?.trim() || '+5493512345678';
   const waStatus = getWhatsAppStatus();

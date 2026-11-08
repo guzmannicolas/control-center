@@ -20,7 +20,7 @@ describe('Growth & Marketing Engine - Ads & Traffic Guardrails', () => {
 
     const audit = auditAdCampaigns(campaigns);
     expect(audit.isGuardrailBreached).toBe(true);
-    expect(audit.safetyAlerts.some((a) => a.includes('GUARDRAIL EXCEDIDO'))).toBe(true);
+    expect(audit.safetyAlerts.some((a) => a.includes('GUARDRAIL BREACH'))).toBe(true);
   });
 
   it('approves compliant campaigns within safetyGuardrail and detects high ROAS', () => {
@@ -39,7 +39,7 @@ describe('Growth & Marketing Engine - Ads & Traffic Guardrails', () => {
 
     const audit = auditAdCampaigns(campaigns);
     expect(audit.isGuardrailBreached).toBe(false);
-    expect(audit.recommendations.some((r) => r.includes('EXCELENTE ROAS'))).toBe(true);
+    expect(audit.recommendations.some((r) => r.includes('HIGH ROAS'))).toBe(true);
   });
 
   it('detects low CTR and suggests creative refresh to prevent audience fatigue', () => {
@@ -57,7 +57,7 @@ describe('Growth & Marketing Engine - Ads & Traffic Guardrails', () => {
     ];
 
     const audit = auditAdCampaigns(campaigns);
-    expect(audit.recommendations.some((r) => r.includes('BAJO CTR'))).toBe(true);
+    expect(audit.recommendations.some((r) => r.includes('LOW CTR'))).toBe(true);
   });
 });
 
@@ -91,7 +91,7 @@ describe('Growth & Marketing Engine - Human-in-the-Loop Dispatch', () => {
       brandSlug: 'nikipeppers',
       platform: 'INSTAGRAM',
       postType: 'POST',
-      caption: '🔥 Probá nuestra salsa habanero en tu próxima hamburguesa.',
+      caption: 'Artisanal habanero sauce for burgers and tacos.',
       mediaUrls: ['https://nikipeppers.com/img/habanero.jpg'],
       status: 'PENDING_APPROVAL',
       scheduledFor: null,
@@ -112,7 +112,7 @@ describe('Growth & Marketing Engine - Human-in-the-Loop Dispatch', () => {
 
     expect(dispatch.ok).toBe(true);
     expect(dispatch.approvalUrl).toContain('token_secret_123');
-    expect(dispatch.messagePreview).toContain('NUEVO BORRADOR DE CONTENIDO');
+    expect(dispatch.messagePreview).toContain('NEW CONTENT PROPOSAL');
     expect(dispatch.messagePreview).toContain('token_secret_123');
   });
 });

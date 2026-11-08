@@ -186,11 +186,11 @@ export function auditAdCampaigns(campaigns: Array<{
     if (c.dailyBudget > c.safetyGuardrail) {
       isGuardrailBreached = true;
       safetyAlerts.push(
-        `🚨 GUARDRAIL EXCEDIDO: "${c.campaignName}" tiene presupuesto diario ($${c.dailyBudget.toFixed(2)}) superior al límite de seguridad hardcodeado ($${c.safetyGuardrail.toFixed(2)}).`
+        `[GUARDRAIL BREACH] "${c.campaignName}" daily budget ($${c.dailyBudget.toFixed(2)}) exceeds hardcoded safety limit ($${c.safetyGuardrail.toFixed(2)}).`
       );
     } else if (c.dailyBudget >= c.safetyGuardrail * 0.95) {
       safetyAlerts.push(
-        `⚠️ ALERTA DE PREVENCIÓN: "${c.campaignName}" está al ${( (c.dailyBudget / c.safetyGuardrail) * 100 ).toFixed(0)}% del tope de seguridad.`
+        `[WARNING] "${c.campaignName}" is at ${( (c.dailyBudget / c.safetyGuardrail) * 100 ).toFixed(0)}% of the maximum safety limit.`
       );
     }
 
@@ -198,17 +198,17 @@ export function auditAdCampaigns(campaigns: Array<{
     if (c.status === 'ACTIVE') {
       if (c.roas >= 4.0) {
         recommendations.push(
-          `🚀 EXCELENTE ROAS (${c.roas.toFixed(1)}x) en "${c.campaignName}". Recomendado escalar presupuesto un +10% sin sobrepasar el guardrail de $${c.safetyGuardrail}.`
+          `[HIGH ROAS] (${c.roas.toFixed(1)}x) on "${c.campaignName}". Consider scaling budget +10% within guardrail limit of $${c.safetyGuardrail}.`
         );
       } else if (c.roas > 0 && c.roas < 2.0 && c.spendToDate > 50) {
         recommendations.push(
-          `📉 BAJO ROAS (${c.roas.toFixed(1)}x) en "${c.campaignName}". Sugerido renovar creativos o pausar si CPA excede $${c.cpa.toFixed(2)}.`
+          `[LOW ROAS] (${c.roas.toFixed(1)}x) on "${c.campaignName}". Refresh creative assets or pause if CPA exceeds $${c.cpa.toFixed(2)}.`
         );
       }
 
       if (c.ctr < 1.0 && c.spendToDate > 30) {
         recommendations.push(
-          `👁️ BAJO CTR (${c.ctr.toFixed(2)}%) en "${c.campaignName}". La audiencia presenta fatiga publicitaria; activar nuevo borrador del Creative Agent.`
+          `[LOW CTR] (${c.ctr.toFixed(2)}%) on "${c.campaignName}". Audience fatigue detected; activate fresh creative variants.`
         );
       }
     }
