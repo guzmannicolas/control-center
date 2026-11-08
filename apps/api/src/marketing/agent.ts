@@ -8,6 +8,8 @@ export interface BrandPromptContext {
   styleDirectives?: Record<string, unknown> | null;
   targetAudience?: string | null;
   dossierMd?: string | null;
+  instagramHandle?: string | null;
+  scrapedPosts?: Array<{ caption: string; postType?: string; hashtags?: string[] }> | null;
 }
 
 export interface GenerateCreativeParams {
@@ -73,6 +75,7 @@ You are creating authentic, high-converting content for:
 - Style Directives & Pillars: ${JSON.stringify(brand.styleDirectives ?? {})}
 - Target Audience: ${brand.targetAudience || 'Art enthusiasts, tattoo collectors, people seeking meaningful botanical fine line tattoos and ceramics'}
 ${brand.dossierMd ? `\n--- COMPLETE BRAND DOSSIER & HISTORICAL CONTEXT (.md) ---\n${brand.dossierMd}\n---------------------------------------------------------` : ''}
+${brand.scrapedPosts && brand.scrapedPosts.length > 0 ? `\n--- RECENT LIVE INSTAGRAM PUBLICATIONS (MIRROR & REFINE THIS EXACT STYLE) ---\n${brand.scrapedPosts.slice(0, 5).map((p, i) => `[Post ${i + 1}] (${p.postType || 'POST'}):\n${p.caption}`).join('\n\n')}\n--------------------------------------------------------------------------` : ''}
 
 Post Parameters:
 - Platform: ${platform}

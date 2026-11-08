@@ -6,6 +6,10 @@ import {
   UpdateDraftStatusInput,
   DispatchApprovalInput,
   UpdateAdCampaignInput,
+  CreateAdCampaignInput,
+  UpdateDraftInput,
+  UpdateBrandPlatformsInput,
+  SyncInstagramInput,
   type MarketingOverview,
   type SocialDraftView,
   type AdCampaignView,
@@ -14,6 +18,7 @@ import {
 import { generateSocialCreative, auditAdCampaigns } from './agent.js';
 import { dispatchDraftApproval } from './dispatch.js';
 import { ensureMarketingSeed } from './seed-helper.js';
+import { scrapeInstagramProfile } from './instagram-scraper.js';
 
 export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
   // Helper to serialize Prisma Brand to BrandView
@@ -28,6 +33,9 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     whatsappNumber: b.whatsappNumber ?? null,
     telegramChatId: b.telegramChatId ?? null,
     dossierMd: b.dossierMd ?? null,
+    instagramHandle: b.instagramHandle ?? null,
+    activePlatforms: (b.activePlatforms ?? ['INSTAGRAM', 'FACEBOOK']) as any,
+    scrapedPosts: (b.scrapedPosts ?? []) as any,
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
   });
@@ -254,6 +262,8 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         styleDirectives: brand.styleDirectives as Record<string, unknown>,
         targetAudience: brand.targetAudience,
         dossierMd: brand.dossierMd ?? undefined,
+        instagramHandle: (brand as any).instagramHandle ?? undefined,
+        scrapedPosts: (brand as any).scrapedPosts ?? undefined,
       },
       platform,
       postType,
@@ -312,6 +322,44 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     });
 
     return { draft: toDraftView(updated) };
+  });
+
+  // 4b. PATCH /api/marketing/drafts/:id (General draft updates: caption, media, scheduled date)
+  app.patch('/drafts/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = UpdateDraftInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid draft payload' });
+    }
+
+    const existing = await prisma.socialDraft.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ error: 'Draft not found' });
+
+    const updated = await prisma.socialDraft.update({
+      where: { id },
+      data: {
+        ...(parsed.data.caption !== undefined ? { caption: parsed.data.caption } : {}),
+        ...(parsed.data.mediaUrls !== undefined ? { mediaUrls: parsed.data.mediaUrls } : {}),
+        ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
+        ...(parsed.data.feedback !== undefined ? { feedback: parsed.data.feedback } : {}),
+        ...(parsed.data.scheduledFor !== undefined
+          ? { scheduledFor: parsed.data.scheduledFor ? new Date(parsed.data.scheduledFor) : null }
+          : {}),
+      },
+      include: { brand: { select: { name: true, slug: true } } },
+    });
+
+    return { draft: toDraftView(updated) };
+  });
+
+  // 4c. DELETE /api/marketing/drafts/:id
+  app.delete('/drafts/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const existing = await prisma.socialDraft.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ error: 'Draft not found' });
+
+    await prisma.socialDraft.delete({ where: { id } });
+    return { ok: true, id };
   });
 
   // 5. POST /api/marketing/drafts/:id/dispatch-approval
@@ -393,7 +441,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     const effectiveGuardrail = safetyGuardrail ?? campaign.safetyGuardrail;
     if (dailyBudget !== undefined && dailyBudget > effectiveGuardrail) {
       return reply.code(400).send({
-        error: `GUARDRAIL VIOLATION: El presupuesto diario solicitado ($${dailyBudget}) excede el límite máximo de seguridad ($${effectiveGuardrail}). La IA tiene prohibido sobrepasar este techo sin reconfiguración explícita del guardrail.`,
+        error: `GUARDRAIL VIOLATION: Requested daily budget ($${dailyBudget}) exceeds safety guardrail ($${effectiveGuardrail}). Automated engines are blocked from exceeding this threshold.`,
       });
     }
 
@@ -408,6 +456,62 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     });
 
     return { campaign: toCampaignView(updated) };
+  });
+
+  // 7b. POST /api/marketing/ads (Create new Ad Campaign)
+  app.post('/ads', async (req, reply) => {
+    const parsed = CreateAdCampaignInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid campaign data' });
+    }
+    const { brandSlug = 'nikipeppers', brandId, platform, campaignName, objective, dailyBudget, safetyGuardrail } =
+      parsed.data;
+
+    let brand = brandId
+      ? await prisma.brand.findUnique({ where: { id: brandId } })
+      : await prisma.brand.findUnique({ where: { slug: brandSlug } });
+    if (!brand) {
+      await ensureMarketingSeed(prisma);
+      brand = await prisma.brand.findUnique({ where: { slug: 'nikipeppers' } });
+    }
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    if (dailyBudget > safetyGuardrail) {
+      return reply.code(400).send({
+        error: `GUARDRAIL VIOLATION: Requested budget ($${dailyBudget}) exceeds safety guardrail ($${safetyGuardrail}).`,
+      });
+    }
+
+    const campaign = await prisma.adCampaign.create({
+      data: {
+        brandId: brand.id,
+        platform,
+        externalCampaignId: `camp_${randomUUID().slice(0, 8)}`,
+        campaignName,
+        objective,
+        dailyBudget,
+        spendToDate: 0,
+        cpa: 0,
+        ctr: 0,
+        roas: 0,
+        status: 'ACTIVE',
+        safetyGuardrail,
+        insights: { note: 'Campaign created' },
+      },
+      include: { brand: { select: { name: true, slug: true } } },
+    });
+
+    return { campaign: toCampaignView(campaign) };
+  });
+
+  // 7c. DELETE /api/marketing/ads/:id
+  app.delete('/ads/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const existing = await prisma.adCampaign.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ error: 'Campaign not found' });
+
+    await prisma.adCampaign.delete({ where: { id } });
+    return { ok: true, id };
   });
 
   // 8. POST /api/marketing/ads/audit
@@ -439,6 +543,8 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
       whatsappNumber: string;
       telegramChatId: string;
       dossierMd: string;
+      instagramHandle: string;
+      activePlatforms: string[];
     }>;
 
     if (!body.slug || !body.name || !body.website || !body.toneOfVoice) {
@@ -457,6 +563,8 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         whatsappNumber: body.whatsappNumber ?? null,
         telegramChatId: body.telegramChatId ?? null,
         dossierMd: body.dossierMd ?? null,
+        instagramHandle: body.instagramHandle ?? 'nikipepperstattoo',
+        activePlatforms: body.activePlatforms ?? ['INSTAGRAM', 'FACEBOOK'],
       },
       update: {
         name: body.name,
@@ -467,6 +575,8 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         whatsappNumber: body.whatsappNumber ?? null,
         telegramChatId: body.telegramChatId ?? null,
         ...(body.dossierMd !== undefined ? { dossierMd: body.dossierMd } : {}),
+        ...(body.instagramHandle !== undefined ? { instagramHandle: body.instagramHandle } : {}),
+        ...(body.activePlatforms !== undefined ? { activePlatforms: body.activePlatforms } : {}),
       },
     });
 
@@ -497,6 +607,44 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
       select: { id: true, slug: true, name: true, dossierMd: true },
     });
     return { brand: updated };
+  });
+
+  // 13. PUT /api/marketing/brands/:slug/platforms
+  app.put('/brands/:slug/platforms', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const parsed = UpdateBrandPlatformsInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid platforms' });
+    }
+    const updated = await prisma.brand.update({
+      where: { slug },
+      data: { activePlatforms: parsed.data.activePlatforms },
+    });
+    return { brand: toBrandView(updated) };
+  });
+
+  // 14. POST /api/marketing/brands/:slug/sync-instagram
+  app.post('/brands/:slug/sync-instagram', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const body = (req.body ?? {}) as { handle?: string };
+    const brand = await prisma.brand.findUnique({ where: { slug } });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+
+    const handleToUse = body.handle || (brand as any).instagramHandle || 'nikipepperstattoo';
+    const scraped = await scrapeInstagramProfile(handleToUse, slug);
+
+    const updated = await prisma.brand.update({
+      where: { slug },
+      data: {
+        instagramHandle: scraped.handle,
+        scrapedPosts: scraped.posts as any,
+      },
+    });
+
+    return {
+      brand: toBrandView(updated),
+      scraped,
+    };
   });
 
   // 11. Public approval preview endpoint (no auth required, accessed by client via approvalToken)

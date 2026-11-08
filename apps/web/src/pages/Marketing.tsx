@@ -68,6 +68,24 @@ export function MarketingPage() {
   const [loadingDossier, setLoadingDossier] = useState(false);
   const [savingDossier, setSavingDossier] = useState(false);
 
+  // Draft editing & deletion
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [editingDraftCaption, setEditingDraftCaption] = useState<string>('');
+
+  // Ad Campaign creation
+  const [showCreateCampaignModal, setShowCreateCampaignModal] = useState(false);
+  const [newCampName, setNewCampName] = useState('');
+  const [newCampPlatform, setNewCampPlatform] = useState<'META' | 'GOOGLE'>('META');
+  const [newCampObjective, setNewCampObjective] = useState('Consultation Bookings');
+  const [newCampBudget, setNewCampBudget] = useState(20);
+  const [newCampGuardrail, setNewCampGuardrail] = useState(35);
+  const [creatingCamp, setCreatingCamp] = useState(false);
+
+  // Instagram Scraping & Style Intelligence
+  const [showInstagramModal, setShowInstagramModal] = useState(false);
+  const [instagramHandleInput, setInstagramHandleInput] = useState('nikipepperstattoo');
+  const [isSyncingInstagram, setIsSyncingInstagram] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 5000);
@@ -94,6 +112,9 @@ export function MarketingPage() {
         setBrandTone(ovData.brand.toneOfVoice);
         setBrandWhatsapp(ovData.brand.whatsappNumber || '');
         setBrandAudience(ovData.brand.targetAudience || '');
+        if (ovData.brand.instagramHandle) {
+          setInstagramHandleInput(ovData.brand.instagramHandle);
+        }
       }
 
       if (draftsData.drafts.length > 0 && draftsData.drafts[0]) {
@@ -303,6 +324,104 @@ export function MarketingPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDeleteDraft = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this draft?')) return;
+    try {
+      await api.marketingDeleteDraft(id);
+      setDrafts((prev) => prev.filter((d) => d.id !== id));
+      showToast('Draft deleted successfully');
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to delete draft');
+    }
+  };
+
+  const handleSaveDraftCaption = async (id: string) => {
+    try {
+      const res = await api.marketingUpdateDraft(id, { caption: editingDraftCaption });
+      setDrafts((prev) => prev.map((d) => (d.id === id ? res.draft : d)));
+      setEditingDraftId(null);
+      showToast('Draft caption updated successfully');
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to update draft');
+    }
+  };
+
+  const handleTogglePlatform = async (platform: SocialPlatform) => {
+    const current = (overview?.brand?.activePlatforms || ['INSTAGRAM', 'FACEBOOK']) as SocialPlatform[];
+    let next: SocialPlatform[];
+    if (current.includes(platform)) {
+      if (current.length === 1) {
+        alert('At least one social platform must remain active.');
+        return;
+      }
+      next = current.filter((p) => p !== platform);
+    } else {
+      next = [...current, platform];
+    }
+    try {
+      await api.marketingUpdateBrandPlatforms(selectedBrandSlug, next);
+      showToast(`Active channels updated: ${next.join(', ')}`);
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to update platforms');
+    }
+  };
+
+  const handleCreateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCampName.trim()) return;
+    if (newCampBudget > newCampGuardrail) {
+      alert(`SAFETY GUARDRAIL VIOLATION: Daily budget ($${newCampBudget}) cannot exceed safety limit ($${newCampGuardrail}).`);
+      return;
+    }
+
+    setCreatingCamp(true);
+    try {
+      const res = await api.marketingCreateAdCampaign({
+        brandSlug: selectedBrandSlug,
+        platform: newCampPlatform,
+        campaignName: newCampName.trim(),
+        objective: newCampObjective.trim(),
+        dailyBudget: newCampBudget,
+        safetyGuardrail: newCampGuardrail,
+      });
+      setCampaigns((prev) => [res.campaign, ...prev]);
+      setShowCreateCampaignModal(false);
+      setNewCampName('');
+      showToast('Ad campaign created successfully with safety guardrail');
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to create campaign');
+    } finally {
+      setCreatingCamp(false);
+    }
+  };
+
+  const handleDeleteCampaign = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this ad campaign?')) return;
+    try {
+      await api.marketingDeleteAdCampaign(id);
+      setCampaigns((prev) => prev.filter((c) => c.id !== id));
+      showToast('Campaign deleted successfully');
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to delete campaign');
+    }
+  };
+
+  const handleSyncInstagram = async () => {
+    setIsSyncingInstagram(true);
+    try {
+      const res = await api.marketingSyncInstagram(selectedBrandSlug, instagramHandleInput.trim());
+      showToast(`Synced ${res.scraped.posts.length} live publications from @${res.scraped.handle}. Creative Agent now mirrors this exact style.`);
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to sync Instagram profile');
+    } finally {
+      setIsSyncingInstagram(false);
+    }
+  };
+
   const filteredDrafts = drafts.filter((d) => {
     if (filterStatus !== 'all' && d.status !== filterStatus) return false;
     if (filterPlatform !== 'all' && d.platform !== filterPlatform) return false;
@@ -413,6 +532,25 @@ export function MarketingPage() {
               title="Upload, view or edit the Markdown Brand Dossier used by the AI Creative Agent"
             >
               Brand Dossier (.md)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowInstagramModal(true)}
+              style={{
+                background: 'var(--surface)',
+                color: 'var(--ink)',
+                border: '1px solid var(--border)',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              title="Scrape and view live Instagram publications for AI style alignment"
+            >
+              Instagram Style ({overview?.brand?.scrapedPosts?.length || 0})
             </button>
           </div>
 
@@ -701,7 +839,7 @@ export function MarketingPage() {
               ))}
 
               <span style={{ fontSize: '13px', color: 'var(--muted)', marginLeft: '12px' }}>Platform:</span>
-              {(['all', 'INSTAGRAM', 'TIKTOK', 'FACEBOOK'] as const).map((plat) => (
+              {(['all', ...(overview?.brand?.activePlatforms || ['INSTAGRAM', 'FACEBOOK'])]).map((plat) => (
                 <button
                   key={plat}
                   onClick={() => setFilterPlatform(plat)}
@@ -719,6 +857,33 @@ export function MarketingPage() {
                   {plat === 'all' ? 'All' : plat}
                 </button>
               ))}
+
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Channels:</span>
+                {(['INSTAGRAM', 'FACEBOOK', 'TIKTOK'] as const).map((p) => {
+                  const isEnabled = (overview?.brand?.activePlatforms || ['INSTAGRAM', 'FACEBOOK']).includes(p);
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => void handleTogglePlatform(p)}
+                      title={`Click to ${isEnabled ? 'remove' : 'add'} ${p} for this brand`}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: isEnabled ? '1px solid rgba(22, 163, 74, 0.4)' : '1px dashed var(--border)',
+                        background: isEnabled ? 'rgba(22, 163, 74, 0.08)' : 'transparent',
+                        color: isEnabled ? '#16a34a' : 'var(--muted)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {isEnabled ? `${p} [Enabled]` : `+ ${p}`}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
@@ -849,18 +1014,72 @@ export function MarketingPage() {
                   )}
 
                   <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <div
-                      style={{
-                        fontSize: '13.5px',
-                        lineHeight: '1.55',
-                        whiteSpace: 'pre-wrap',
-                        color: 'var(--ink)',
-                        maxHeight: '180px',
-                        overflowY: 'auto',
-                      }}
-                    >
-                      {draft.caption}
-                    </div>
+                    {editingDraftId === draft.id ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <textarea
+                          rows={6}
+                          value={editingDraftCaption}
+                          onChange={(e) => setEditingDraftCaption(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            background: 'var(--page)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            color: 'var(--ink)',
+                            fontSize: '13px',
+                            boxSizing: 'border-box',
+                            fontFamily: 'inherit',
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            onClick={() => setEditingDraftId(null)}
+                            style={{
+                              padding: '5px 10px',
+                              background: 'transparent',
+                              border: '1px solid var(--border)',
+                              color: 'var(--muted)',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveDraftCaption(draft.id)}
+                            style={{
+                              padding: '5px 12px',
+                              background: '#2563eb',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Save Caption
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: '13.5px',
+                          lineHeight: '1.55',
+                          whiteSpace: 'pre-wrap',
+                          color: 'var(--ink)',
+                          maxHeight: '180px',
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {draft.caption}
+                      </div>
+                    )}
 
                     {draft.feedback && (
                       <div
@@ -976,6 +1195,42 @@ export function MarketingPage() {
 
                     <button
                       onClick={() => {
+                        setEditingDraftId(draft.id);
+                        setEditingDraftCaption(draft.caption);
+                      }}
+                      title="Edit draft caption"
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '4px',
+                        background: 'transparent',
+                        color: 'var(--ink)',
+                        border: '1px solid var(--border)',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      onClick={() => void handleDeleteDraft(draft.id)}
+                      title="Delete this draft permanently"
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '4px',
+                        background: 'transparent',
+                        color: '#ef4444',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: 500,
+                      }}
+                    >
+                      Delete
+                    </button>
+
+                    <button
+                      onClick={() => {
                         setClientTestToken(draft.approvalToken);
                         setActiveTab('client_portal');
                       }}
@@ -1003,7 +1258,7 @@ export function MarketingPage() {
                         type="text"
                         value={rejectFeedbackText}
                         onChange={(e) => setRejectFeedbackText(e.target.value)}
-                        placeholder="e.g. Replace photo with Scorpion Habanero jar"
+                        placeholder="e.g. Adjust botanical placement to upper arm instead of forearm"
                         style={{
                           width: '100%',
                           padding: '6px 10px',
@@ -1082,22 +1337,41 @@ export function MarketingPage() {
               </p>
             </div>
 
-            <button
-              disabled={auditingAds}
-              onClick={handleRunAudit}
-              style={{
-                background: '#047857',
-                color: '#ffffff',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {auditingAds ? 'Auditing...' : 'Audit Campaigns with AI'}
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowCreateCampaignModal(true)}
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                + Create Campaign
+              </button>
+
+              <button
+                disabled={auditingAds}
+                onClick={handleRunAudit}
+                style={{
+                  background: '#047857',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {auditingAds ? 'Auditing...' : 'Audit Campaigns with AI'}
+              </button>
+            </div>
           </div>
 
           {auditInfo && (auditInfo.safetyAlerts?.length > 0 || auditInfo.recommendations?.length > 0) && (
@@ -1202,6 +1476,23 @@ export function MarketingPage() {
                         }}
                       >
                         {camp.status === 'ACTIVE' ? 'Pause' : 'Resume'}
+                      </button>
+
+                      <button
+                        onClick={() => void handleDeleteCampaign(camp.id)}
+                        title="Delete this ad campaign"
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '4px',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          background: 'transparent',
+                          color: '#ef4444',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                        }}
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -1590,6 +1881,111 @@ export function MarketingPage() {
               </span>
             </div>
 
+            {/* Active Social Media Channels Management */}
+            <div
+              style={{
+                marginBottom: '20px',
+                padding: '16px',
+                background: 'var(--page)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+              }}
+            >
+              <strong style={{ fontSize: '14px', display: 'block', marginBottom: '4px' }}>
+                Active Social Channels
+              </strong>
+              <p style={{ margin: '0 0 12px', fontSize: '12.5px', color: 'var(--muted)' }}>
+                Enable or remove social platforms for this brand. Unused channels (like TikTok) are excluded from AI drafting and filters.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {(['INSTAGRAM', 'FACEBOOK', 'TIKTOK'] as const).map((plat) => {
+                  const isEnabled = (overview?.brand?.activePlatforms || ['INSTAGRAM', 'FACEBOOK']).includes(plat);
+                  return (
+                    <button
+                      key={plat}
+                      type="button"
+                      onClick={() => void handleTogglePlatform(plat)}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        border: isEnabled ? '1.5px solid #16a34a' : '1px dashed var(--border)',
+                        background: isEnabled ? 'rgba(22, 163, 74, 0.1)' : 'var(--surface)',
+                        color: isEnabled ? '#16a34a' : 'var(--muted)',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      {isEnabled ? `${plat} [Active]` : `+ Add ${plat}`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Instagram Style Intelligence Sync */}
+            <div
+              style={{
+                marginBottom: '20px',
+                padding: '16px',
+                background: 'var(--page)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <strong style={{ fontSize: '14px', display: 'block' }}>
+                  Public Instagram Intelligence (@{overview?.brand?.instagramHandle || 'nikipepperstattoo'})
+                </strong>
+                <span style={{ fontSize: '12.5px', color: 'var(--muted)' }}>
+                  {overview?.brand?.scrapedPosts?.length || 0} live publications scraped. The AI Agent learns directly from her actual post history.
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  disabled={isSyncingInstagram}
+                  onClick={() => void handleSyncInstagram()}
+                  style={{
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 14px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isSyncingInstagram ? 'Syncing...' : 'Sync Instagram Now'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowInstagramModal(true)}
+                  style={{
+                    background: 'var(--surface)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 14px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  View Synced Posts
+                </button>
+              </div>
+            </div>
+
             <div
               style={{
                 marginBottom: '20px',
@@ -1693,9 +2089,11 @@ export function MarketingPage() {
                     onChange={(e) => setNewPlatform(e.target.value as SocialPlatform)}
                     style={{ width: '100%', padding: '8px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)' }}
                   >
-                    <option value="INSTAGRAM">Instagram</option>
-                    <option value="TIKTOK">TikTok</option>
-                    <option value="FACEBOOK">Facebook</option>
+                    {(overview?.brand?.activePlatforms || ['INSTAGRAM', 'FACEBOOK']).map((p) => (
+                      <option key={p} value={p}>
+                        {p === 'INSTAGRAM' ? 'Instagram' : p === 'FACEBOOK' ? 'Facebook' : p === 'TIKTOK' ? 'TikTok' : p}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1961,6 +2359,364 @@ export function MarketingPage() {
                 }}
               >
                 {savingDossier ? 'Saving...' : 'Save Dossier (.md)'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE AD CAMPAIGN MODAL */}
+      {showCreateCampaignModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '520px',
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                Create New Ad Campaign
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateCampaignModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--muted)', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCampaign}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Advertising Network:
+                </label>
+                <select
+                  value={newCampPlatform}
+                  onChange={(e) => setNewCampPlatform(e.target.value as 'META' | 'GOOGLE')}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    background: 'var(--page)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    color: 'var(--ink)',
+                  }}
+                >
+                  <option value="META">Meta Ads (Instagram & Facebook)</option>
+                  <option value="GOOGLE">Google Ads (Search & Discovery)</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Campaign Name:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCampName}
+                  onChange={(e) => setNewCampName(e.target.value)}
+                  placeholder="e.g. Meta Ads - Botanical Flora Consultation Bookings"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    background: 'var(--page)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    color: 'var(--ink)',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Commercial Objective:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCampObjective}
+                  onChange={(e) => setNewCampObjective(e.target.value)}
+                  placeholder="e.g. LEAD_GENERATION / Consultation Bookings"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    background: 'var(--page)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    color: 'var(--ink)',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                    Daily Budget ($/day):
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.5"
+                    required
+                    value={newCampBudget}
+                    onChange={(e) => setNewCampBudget(Number(e.target.value))}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      background: 'var(--page)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      color: 'var(--ink)',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                    Safety Guardrail ($/day max):
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.5"
+                    required
+                    value={newCampGuardrail}
+                    onChange={(e) => setNewCampGuardrail(Number(e.target.value))}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      background: 'var(--page)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      color: 'var(--ink)',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateCampaignModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    color: 'var(--muted)',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingCamp}
+                  style={{
+                    padding: '8px 20px',
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {creatingCamp ? 'Creating...' : 'Create Campaign'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* INSTAGRAM STYLE INTELLIGENCE MODAL */}
+      {showInstagramModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '880px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                  Instagram Style Intelligence
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
+                  Scrapes and indexes live publications from the brand's public profile so the AI agent understands her real style, pacing, and hashtags.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInstagramModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--muted)', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+
+            {/* Sync Bar */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '12px 16px',
+                background: 'var(--page)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                marginBottom: '16px',
+              }}
+            >
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)' }}>@</span>
+              <input
+                type="text"
+                value={instagramHandleInput}
+                onChange={(e) => setInstagramHandleInput(e.target.value)}
+                placeholder="nikipepperstattoo"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '4px',
+                  color: 'var(--ink)',
+                  fontSize: '13px',
+                }}
+              />
+              <button
+                type="button"
+                disabled={isSyncingInstagram}
+                onClick={() => void handleSyncInstagram()}
+                style={{
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 18px',
+                  borderRadius: '4px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {isSyncingInstagram ? 'Syncing Profile...' : 'Scrape & Learn Style'}
+              </button>
+            </div>
+
+            {/* Synced Posts List */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {overview?.brand?.scrapedPosts && overview.brand.scrapedPosts.length > 0 ? (
+                overview.brand.scrapedPosts.map((post, idx) => (
+                  <div
+                    key={post.id || idx}
+                    style={{
+                      display: 'flex',
+                      gap: '14px',
+                      background: 'var(--page)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                    }}
+                  >
+                    {post.mediaUrl && (
+                      <div style={{ width: '80px', height: '80px', borderRadius: '6px', overflow: 'hidden', background: '#111', flexShrink: 0 }}>
+                        <img src={post.mediaUrl} alt="Post asset" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                          {post.postType || 'POST'}
+                        </span>
+                        {post.publishedAt && (
+                          <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                            {new Date(post.publishedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ margin: '0 0 8px', fontSize: '13px', lineHeight: '1.45', whiteSpace: 'pre-wrap' }}>
+                        {post.caption}
+                      </p>
+                      {post.hashtags && post.hashtags.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {post.hashtags.map((h) => (
+                            <span key={h} style={{ fontSize: '11px', color: '#2563eb' }}>
+                              {h}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--muted)' }}>
+                  No Instagram publications synced yet. Click <strong>Scrape & Learn Style</strong> to pull real post copy into the AI engine.
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setShowInstagramModal(false)}
+                style={{
+                  padding: '8px 20px',
+                  background: 'var(--page)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--ink)',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Close
               </button>
             </div>
           </div>

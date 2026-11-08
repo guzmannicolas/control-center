@@ -70,13 +70,17 @@ export async function ensureMarketingSeed(prisma: PrismaClient) {
         whatsappNumber: '+5493512345678',
         telegramChatId: '@nikipeppers_bot',
         dossierMd: NIKI_PEPPERS_DEFAULT_DOSSIER,
+        instagramHandle: 'nikipepperstattoo',
+        activePlatforms: ['INSTAGRAM', 'FACEBOOK'],
       },
     });
-  } else if (!niki.dossierMd) {
+  } else if (!niki.dossierMd || !(niki as any).instagramHandle) {
     niki = await prisma.brand.update({
       where: { id: niki.id },
       data: {
-        dossierMd: NIKI_PEPPERS_DEFAULT_DOSSIER,
+        dossierMd: niki.dossierMd || NIKI_PEPPERS_DEFAULT_DOSSIER,
+        instagramHandle: (niki as any).instagramHandle || 'nikipepperstattoo',
+        activePlatforms: (niki as any).activePlatforms?.length ? (niki as any).activePlatforms : ['INSTAGRAM', 'FACEBOOK'],
         toneOfVoice:
           'Sensitive, warm, authentic, empowering, artistic, professional. Focus on botanical tattoos, ecofeminism, organic anatomy flow, and custom ceramics.',
       },

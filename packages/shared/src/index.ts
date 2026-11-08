@@ -419,6 +419,16 @@ export type AdPlatform = (typeof AD_PLATFORMS)[number];
 export const AD_CAMPAIGN_STATUSES = ['ACTIVE', 'PAUSED', 'NEEDS_ATTENTION'] as const;
 export type AdCampaignStatus = (typeof AD_CAMPAIGN_STATUSES)[number];
 
+export interface InstagramPostReference {
+  id: string;
+  caption: string;
+  hashtags: string[];
+  mediaUrl?: string;
+  permalink?: string;
+  postType?: string;
+  publishedAt?: string;
+}
+
 export interface BrandView {
   id: string;
   slug: string;
@@ -430,6 +440,9 @@ export interface BrandView {
   whatsappNumber: string | null;
   telegramChatId: string | null;
   dossierMd: string | null;
+  instagramHandle: string | null;
+  activePlatforms: SocialPlatform[];
+  scrapedPosts: InstagramPostReference[];
   createdAt: string;
   updatedAt: string;
 }
@@ -543,6 +556,36 @@ export const UpdateAdCampaignInput = z.object({
   safetyGuardrail: z.number().positive().optional(),
 });
 export type UpdateAdCampaignInput = z.infer<typeof UpdateAdCampaignInput>;
+
+export const CreateAdCampaignInput = z.object({
+  brandSlug: z.string().optional(),
+  brandId: z.string().optional(),
+  platform: z.enum(AD_PLATFORMS),
+  campaignName: z.string().min(3, 'Campaign name must be at least 3 characters'),
+  objective: z.string().min(2, 'Objective must be at least 2 characters'),
+  dailyBudget: z.number().positive('Daily budget must be greater than 0'),
+  safetyGuardrail: z.number().positive('Safety guardrail must be greater than 0'),
+});
+export type CreateAdCampaignInput = z.infer<typeof CreateAdCampaignInput>;
+
+export const SyncInstagramInput = z.object({
+  handle: z.string().min(1).optional(),
+});
+export type SyncInstagramInput = z.infer<typeof SyncInstagramInput>;
+
+export const UpdateDraftInput = z.object({
+  caption: z.string().optional(),
+  scheduledFor: z.string().nullable().optional(),
+  mediaUrls: z.array(z.string()).optional(),
+  status: z.enum(SOCIAL_DRAFT_STATUSES).optional(),
+  feedback: z.string().nullable().optional(),
+});
+export type UpdateDraftInput = z.infer<typeof UpdateDraftInput>;
+
+export const UpdateBrandPlatformsInput = z.object({
+  activePlatforms: z.array(z.enum(SOCIAL_PLATFORMS)).min(1, 'At least one social platform must remain active'),
+});
+export type UpdateBrandPlatformsInput = z.infer<typeof UpdateBrandPlatformsInput>;
 
 
 

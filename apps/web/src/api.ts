@@ -25,11 +25,14 @@ import type {
   MarketingOverview,
   SocialDraftView,
   SocialDraftStatus,
+  SocialPlatform,
   AdCampaignView,
   BrandView,
   GenerateDraftInput,
   DispatchApprovalInput,
   UpdateAdCampaignInput,
+  CreateAdCampaignInput,
+  UpdateDraftInput,
 } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
@@ -258,4 +261,28 @@ export const api = {
         body: JSON.stringify({ dossierMd }),
       }
     ),
+  marketingDeleteDraft: (id: string) =>
+    request<{ ok: boolean; id: string }>(`/api/marketing/drafts/${id}`, { method: 'DELETE' }),
+  marketingUpdateDraft: (id: string, payload: UpdateDraftInput) =>
+    request<{ draft: SocialDraftView }>(`/api/marketing/drafts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  marketingCreateAdCampaign: (payload: CreateAdCampaignInput) =>
+    request<{ campaign: AdCampaignView }>('/api/marketing/ads', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  marketingDeleteAdCampaign: (id: string) =>
+    request<{ ok: boolean; id: string }>(`/api/marketing/ads/${id}`, { method: 'DELETE' }),
+  marketingUpdateBrandPlatforms: (slug: string, activePlatforms: SocialPlatform[]) =>
+    request<{ brand: BrandView }>(`/api/marketing/brands/${encodeURIComponent(slug)}/platforms`, {
+      method: 'PUT',
+      body: JSON.stringify({ activePlatforms }),
+    }),
+  marketingSyncInstagram: (slug: string, handle?: string) =>
+    request<{ brand: BrandView; scraped: any }>(`/api/marketing/brands/${encodeURIComponent(slug)}/sync-instagram`, {
+      method: 'POST',
+      body: JSON.stringify({ handle }),
+    }),
 };
