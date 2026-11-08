@@ -62,6 +62,12 @@ export function MarketingPage() {
   const [brandAudience, setBrandAudience] = useState('');
   const [savingBrand, setSavingBrand] = useState(false);
 
+  // Brand Dossier (.md) state
+  const [showDossierModal, setShowDossierModal] = useState(false);
+  const [dossierContent, setDossierContent] = useState('');
+  const [loadingDossier, setLoadingDossier] = useState(false);
+  const [savingDossier, setSavingDossier] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 5000);
@@ -243,6 +249,60 @@ export function MarketingPage() {
     }
   };
 
+  const openDossierModal = async () => {
+    setShowDossierModal(true);
+    setLoadingDossier(true);
+    try {
+      const res = await api.marketingBrandDossier(selectedBrandSlug);
+      setDossierContent(res.brand.dossierMd || '');
+    } catch (err: any) {
+      showToast(err instanceof Error ? err.message : 'Failed to load brand dossier');
+    } finally {
+      setLoadingDossier(false);
+    }
+  };
+
+  const handleSaveDossier = async () => {
+    setSavingDossier(true);
+    try {
+      await api.marketingSaveBrandDossier(selectedBrandSlug, dossierContent);
+      showToast('Brand dossier (.md) saved successfully. Creative Agent will use this specification.');
+      setShowDossierModal(false);
+      void loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to save brand dossier');
+    } finally {
+      setSavingDossier(false);
+    }
+  };
+
+  const handleUploadDossierFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === 'string') {
+        setDossierContent(text);
+        showToast(`Loaded ${file.name} into editor. Click 'Save Dossier' to persist.`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleDownloadDossier = () => {
+    const blob = new Blob([dossierContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${selectedBrandSlug}-brand-dossier.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const filteredDrafts = drafts.filter((d) => {
     if (filterStatus !== 'all' && d.status !== filterStatus) return false;
     if (filterPlatform !== 'all' && d.platform !== filterPlatform) return false;
@@ -335,6 +395,25 @@ export function MarketingPage() {
               ))}
               {brands.length === 0 && <option value="nikipeppers">Niki Peppers (nikipeppers.com)</option>}
             </select>
+
+            <button
+              type="button"
+              onClick={() => void openDossierModal()}
+              style={{
+                background: 'var(--surface)',
+                color: 'var(--ink)',
+                border: '1px solid var(--border)',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              title="Upload, view or edit the Markdown Brand Dossier used by the AI Creative Agent"
+            >
+              Brand Dossier (.md)
+            </button>
           </div>
 
           <button
@@ -1450,7 +1529,7 @@ export function MarketingPage() {
                 rows={3}
                 value={brandTone}
                 onChange={(e) => setBrandTone(e.target.value)}
-                placeholder="e.g. Artisanal, bold, gourmet, focused on culinary excellence..."
+                placeholder="e.g. Sensitive, warm, authentic, empowering, artistic, professional..."
                 style={{
                   width: '100%',
                   padding: '10px',
@@ -1472,7 +1551,7 @@ export function MarketingPage() {
                 type="text"
                 value={brandAudience}
                 onChange={(e) => setBrandAudience(e.target.value)}
-                placeholder="e.g. Foodies, home chefs, craft culinary enthusiasts..."
+                placeholder="e.g. Women and art lovers (20-45) seeking custom fine-line botanical tattoos, ceramics, and bespoke pieces..."
                 style={{
                   width: '100%',
                   padding: '10px',
@@ -1509,6 +1588,44 @@ export function MarketingPage() {
               <span style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px', display: 'block' }}>
                 Destination number for automatic interactive post review dispatches.
               </span>
+            </div>
+
+            <div
+              style={{
+                marginBottom: '20px',
+                padding: '16px',
+                background: 'var(--page)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              <div>
+                <strong style={{ fontSize: '14px', display: 'block' }}>Full Brand Dossier (.md)</strong>
+                <span style={{ fontSize: '12.5px', color: 'var(--muted)' }}>
+                  Complete brand story, style guide, advertising rules, and artist philosophy injected into the AI agent.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void openDossierModal()}
+                style={{
+                  background: 'var(--surface)',
+                  color: 'var(--ink)',
+                  border: '1px solid var(--border)',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Open Brand Dossier (.md)
+              </button>
             </div>
 
             <button
@@ -1606,7 +1723,7 @@ export function MarketingPage() {
                   required
                   value={newTopic}
                   onChange={(e) => setNewTopic(e.target.value)}
-                  placeholder="e.g. Glazed chicken wings recipe with artisanal Chipotle"
+                  placeholder="e.g. Botanical fern fine line tattoo following forearm curves"
                   style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)', boxSizing: 'border-box' }}
                 />
               </div>
@@ -1619,7 +1736,7 @@ export function MarketingPage() {
                   type="text"
                   value={newObjective}
                   onChange={(e) => setNewObjective(e.target.value)}
-                  placeholder="e.g. Traffic to nikipeppers.com with 15% promo"
+                  placeholder="e.g. Consultation bookings at nikipeppers.com for next month guest spot"
                   style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)', boxSizing: 'border-box' }}
                 />
               </div>
@@ -1674,6 +1791,178 @@ export function MarketingPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Brand Dossier Modal */}
+      {showDossierModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '860px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: '90vh',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                  Brand Dossier (.md) - {overview?.brand?.name || selectedBrandSlug}
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
+                  This Markdown document is injected directly into the AI Creative Agent as ground truth for tone, style directives, history, and advertising rules.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDossierModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--muted)', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+
+            {/* Toolbar */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
+                padding: '8px 12px',
+                background: 'var(--page)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                marginBottom: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label
+                  style={{
+                    background: 'var(--surface)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--border)',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  Upload .md File
+                  <input
+                    type="file"
+                    accept=".md,.markdown,text/markdown,text/plain"
+                    onChange={handleUploadDossierFile}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadDossier}
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--border)',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Download .md
+                </button>
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                {dossierContent.length} chars | {dossierContent.trim().split(/\s+/).filter(Boolean).length} words
+              </div>
+            </div>
+
+            {/* Textarea Editor */}
+            {loadingDossier ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--muted)' }}>
+                Loading brand dossier...
+              </div>
+            ) : (
+              <textarea
+                value={dossierContent}
+                onChange={(e) => setDossierContent(e.target.value)}
+                placeholder="Paste or write full brand markdown documentation (history, tone of voice, visual identity, advertising angles, artist statement, etc.)..."
+                style={{
+                  width: '100%',
+                  flex: 1,
+                  minHeight: '380px',
+                  fontFamily: 'monospace',
+                  fontSize: '13px',
+                  lineHeight: '1.5',
+                  padding: '14px',
+                  background: 'var(--page)',
+                  color: 'var(--ink)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                }}
+              />
+            )}
+
+            {/* Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '14px' }}>
+              <button
+                type="button"
+                onClick={() => setShowDossierModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  color: 'var(--muted)',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveDossier()}
+                disabled={savingDossier || loadingDossier}
+                style={{
+                  padding: '8px 20px',
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {savingDossier ? 'Saving...' : 'Save Dossier (.md)'}
+              </button>
+            </div>
           </div>
         </div>
       )}

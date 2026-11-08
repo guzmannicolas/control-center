@@ -7,6 +7,7 @@ export interface BrandPromptContext {
   toneOfVoice: string;
   styleDirectives?: Record<string, unknown> | null;
   targetAudience?: string | null;
+  dossierMd?: string | null;
 }
 
 export interface GenerateCreativeParams {
@@ -27,25 +28,25 @@ export interface GeneratedCreativeResult {
   source: 'ai' | 'fallback_engine';
 }
 
-// Fallback high-impact templates for gourmet food/sauce brands like Niki Peppers
+// Fallback realistic templates for Niki Peppers (Visual & Botanical Tattoo Artist, Ceramics, Murals)
 const NIKI_CREATIVE_TEMPLATES = [
   (topic: string, postType: string, cta: string) => ({
-    hook: `🔥 El secreto que todo fanático del buen comer necesita saber: ${topic}.`,
-    body: `En Niki Peppers creemos que ninguna comida merece ser aburrida. Cada gota está macerada artesanalmente para equilibrar picor real, notas ahumadas y sabor puro sin conservantes.\n\nIdeal para elevar tu próximo asado, una pizza de masa madre o esas hamburguesas caseras del viernes.`,
-    cta: cta || `Descubrí el sabor auténtico en nikipeppers.com con envíos a todo el país 🚚✨`,
-    hashtags: ['#NikiPeppers', '#HotSauceLovers', '#GourmetChili', '#SaborPicante', '#HechoEnArgentina'],
+    hook: `Custom botanical fine line: ${topic}.`,
+    body: `Every tattoo is an intimate dialogue between the human body and the natural world. My botanical pieces are designed to flow with the body's natural curvature, using delicate needlework and organic shading inspired by native flora.\n\nWhether it is your first piece or part of a larger personal journey, the consultation is a calm, collaborative space to explore your idea.`,
+    cta: cta || `Book a free consultation at nikipeppers.com to discuss placement and custom artwork.`,
+    hashtags: ['#NikiPeppers', '#BotanicalTattoo', '#FineLineTattoo', '#CustomTattoo', '#ContemporaryArt'],
   }),
   (topic: string, postType: string, cta: string) => ({
-    hook: `🌶️ ¿Te animás a desafiar tu paladar? Hoy exploramos: ${topic}.`,
-    body: `Hay salsas que solo pican, y salsas que despiertan el alma del plato. Nuestro proceso de fermentación lenta permite que el ají libere todos sus aceites naturales y matices frutales antes del golpe de picor.\n\n¿Cuál es tu nivel de tolerancia? Comentá abajo con tu emoji de fuego favorito del 1 al 5 🔥👇`,
-    cta: cta || `Pedí tu pack degustación hoy mismo en nikipeppers.com y sumate al club del picante.`,
-    hashtags: ['#NikiPeppers', '#EscalaScoville', '#ArtisanalSauce', '#FuegoEnTuMesa', '#FoodieArg'],
+    hook: `Artistic process and symbolic transformation: ${topic}.`,
+    body: `Getting tattooed is rarely just about aesthetics; for many of my clients, it is an act of empowerment, transformation, and re-signifying their relationship with their own skin.\n\nFrom wild botanical studies to fauna and organic abstractions, each piece is hand-drawn specifically for you.`,
+    cta: cta || `Explore recent works and submit your tattoo project at nikipeppers.com`,
+    hashtags: ['#NikiPeppers', '#TattooArt', '#FineLine', '#BotanicalArt', '#TattooArtist'],
   }),
   (topic: string, postType: string, cta: string) => ({
-    hook: `✨ Upgrade gourmet en 10 segundos: ${topic}.`,
-    body: `Guardate este post para tu próxima comida. Basta de condimentos artificiales llenos de sodio. Dos gotas de Niki Peppers transforman cualquier receta simple en una experiencia de restaurante.\n\nCombinación recomendada: queso derretido, carnes braseadas o vegetales asados con nuestro toque ahumado.`,
-    cta: cta || `Conocé todas las variedades en la tienda oficial: nikipeppers.com`,
-    hashtags: ['#NikiPeppers', '#RecetasGourmet', '#MaridajePicante', '#CocinaDeAutor', '#HotSauceAddict'],
+    hook: `New visual art and ceramic exploration: ${topic}.`,
+    body: `Moving between paper, skin, and clay. My ceramic pieces and visual works investigate the fragile connection between humanity, ecofeminism, and our instinctive roots.\n\nHandcrafted one-of-a-kind pieces, shaped by hand without mass production molds.`,
+    cta: cta || `Available for private commission and collector inquiries at nikipeppers.com`,
+    hashtags: ['#NikiPeppers', '#CeramicArt', '#VisualArtist', '#ContemporaryCeramics', '#StudioPractice'],
   }),
 ];
 
@@ -64,34 +65,36 @@ export async function generateSocialCreative(
     try {
       const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
 
-      const prompt = `Actúa como Director Creativo y Copywriter Senior de Marketing Digital para redes sociales.
-Estás creando contenido para la marca:
-- Marca: ${brand.name}
-- Web: ${brand.website}
-- Tono de voz: ${brand.toneOfVoice}
-- Directivas de estilo y valores: ${JSON.stringify(brand.styleDirectives ?? {})}
-- Público objetivo: ${brand.targetAudience || 'Amantes de la gastronomía gourmet, picante y experiencias culinarias artesanales'}
+      const prompt = `Act as Senior Creative Director & Copywriter for social media marketing.
+You are creating authentic, high-converting content for:
+- Brand Name: ${brand.name}
+- Official Website: ${brand.website}
+- Tone of Voice: ${brand.toneOfVoice}
+- Style Directives & Pillars: ${JSON.stringify(brand.styleDirectives ?? {})}
+- Target Audience: ${brand.targetAudience || 'Art enthusiasts, tattoo collectors, people seeking meaningful botanical fine line tattoos and ceramics'}
+${brand.dossierMd ? `\n--- COMPLETE BRAND DOSSIER & HISTORICAL CONTEXT (.md) ---\n${brand.dossierMd}\n---------------------------------------------------------` : ''}
 
-Parámetros del post:
-- Red Social: ${platform}
-- Formato: ${postType} (POST, REEL, CAROUSEL, STORY)
-- Tema principal: ${topic}
-- Objetivo de la publicación: ${objective || 'Engagement y conversión a ventas'}
+Post Parameters:
+- Platform: ${platform}
+- Format: ${postType} (POST, REEL, CAROUSEL, STORY)
+- Main Topic: ${topic}
+- Business Objective: ${objective || 'Drive consultation bookings on nikipeppers.com'}
 
-Instrucciones:
-1. Escribí un copy magnético para ${platform} respetando estrictamente el tono de voz de la marca.
-2. Formato:
-   - Gancho inicial irresistible (Hook) en la primera línea.
-   - Cuerpo de texto estructurado con saltos de línea y emojis sutiles pero vibrantes.
-   - Llamado a la acción (CTA) claro apuntando a ${brand.website}.
-   - Bloque de 4 a 6 hashtags estratégicos al final.
-3. Devolvé la respuesta en formato JSON con la siguiente estructura exacta:
+Directives:
+1. Ground the copy directly in the brand dossier, artist identity, philosophy, and genuine offerings.
+2. STRICT NO-EMOJI POLICY: Do NOT include any emojis anywhere in the caption, hook, or hashtags.
+3. Structure:
+   - Hook in the first line.
+   - Narrative body text with clean line breaks focusing on artistic value, client intimacy, or craft.
+   - Clean call to action pointing to ${brand.website}.
+   - 4 to 6 strategic hashtags.
+4. Output strictly valid JSON matching this schema:
 {
-  "hook": "frase corta de gancho",
-  "caption": "texto completo formateado listo para publicar con hook, cuerpo, CTA y hashtags",
+  "hook": "short compelling hook string",
+  "caption": "complete formatted caption without any emojis",
   "hashtags": ["#tag1", "#tag2", "#tag3"],
-  "callToAction": "frase de CTA",
-  "visualSuggestion": "descripción de imagen/video recomendada para este post"
+  "callToAction": "clear call to action string",
+  "visualSuggestion": "artistic visual direction for this post"
 }`;
 
       const res = await ai.models.generateContent({

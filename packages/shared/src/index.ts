@@ -429,6 +429,7 @@ export interface BrandView {
   targetAudience: string | null;
   whatsappNumber: string | null;
   telegramChatId: string | null;
+  dossierMd: string | null;
   createdAt: string;
   updatedAt: string;
 }

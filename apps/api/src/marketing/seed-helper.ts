@@ -1,7 +1,39 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 
+export const NIKI_PEPPERS_DEFAULT_DOSSIER = `# Niki Peppers — Brand Identity, Artistic Statement & Advertising Dossier
+
+## 1. Brand Overview & Story
+- **Artist:** Nicole Peppers (Niki Peppers)
+- **Role:** Visual Artist, Tattoo Artist, Ceramicist, and Muralist
+- **Official Website:** https://nikipeppers.com
+- **Locations & Workspaces:** Buenos Aires & Cordoba, Argentina. International guest spots.
+- **Story & Philosophy:**
+  My work is born from a desire to reconnect: exploring the deep relationship between the human body, nature, and emotional sensitivity. Heavily influenced by ecofeminism, I investigate how cultural systems shape our perception of the instinctive, the feminine, and the natural world.
+  For many clients, getting a tattoo is a symbolic ritual: an act of personal transformation, healing, celebration, or re-signification. Each piece is an intimate dialogue between my visual universe and the person wearing it.
+
+## 2. Tattoo Styles & Creative Specialties
+- **Botanical Fine Line:** Delicate wild flora, native Argentine plants (ceibo, jacaranda, fern, eucalyptus), organic lines designed to flow naturally with body anatomy.
+- **Fauna & Animals:** Symbolic animal portraits (birds, moths, snakes, felines) rendered with precise micro-lines and subtle shading.
+- **Micro-Realism & Fine Line:** Highly detailed, elegant, timeless black-and-grey work.
+- **Cover Ups & Transformation:** Respectfully transforming older or unwanted tattoos into harmonious new artwork.
+- **Ceramics & Murals:** One-of-a-kind handmade ceramic sculptures and large-scale public and private murals.
+
+## 3. Brand Voice, Tone & Values
+- **Tone:** Sensitive, warm, authentic, empowering, thoughtful, professional.
+- **Key Principles:**
+  - Emphasize emotional safety, clean hygiene standards, and a calm studio environment.
+  - Celebrate diverse, non-hegemonic bodies. Tattoos as freedom, self-expression, and identity.
+  - Never use aggressive, transactional sales copy. Focus on storytelling, artistic intention, and consultation booking.
+  - Highlight the collaborative design process: clients bring a feeling or story, Niki crafts the custom artwork.
+
+## 4. Advertising & Marketing Directives
+- **Primary Call to Action (CTA):** "Book a consultation at nikipeppers.com" / "Let us bring your idea to life."
+- **Target Audience:** Women and creative individuals (20-45) interested in contemporary art, delicate tattoo aesthetics, nature, ceramics, and bespoke design.
+- **Official Hashtags:** #NikiPeppers #BotanicalTattoo #FineLineTattoo #TatuajesBotanicos #ContemporaryTattoo #TattooArtistArgentina #ArteBotanico
+`;
+
 /**
- * Ensures the initial pilot brand (Niki Peppers) and initial drafts and campaigns exist.
+ * Ensures the initial pilot brand (Niki Peppers) and its brand dossier exist.
  */
 export async function ensureMarketingSeed(prisma: PrismaClient) {
   let niki = await prisma.brand.findUnique({
@@ -15,28 +47,38 @@ export async function ensureMarketingSeed(prisma: PrismaClient) {
         name: 'Niki Peppers',
         website: 'https://nikipeppers.com',
         toneOfVoice:
-          'Picante, atrevido, apasionado por la gastronomía artesanal gourmet. Cercano, audaz y canchero, invitando a elevar cada comida cotidiana con picor noble y sin conservantes.',
+          'Sensitive, warm, authentic, empowering, artistic, professional. Focus on botanical tattoos, ecofeminism, organic anatomy flow, and custom ceramics.',
         styleDirectives: {
-          colors: ['#E53E3E', '#DD6B20', '#1A202C', '#F6AD55'],
+          colors: ['#171717', '#404040', '#737373', '#a3a3a3'],
           officialHashtags: [
             '#NikiPeppers',
-            '#HotSauceLovers',
-            '#SaborPicante',
-            '#GourmetChili',
-            '#FuegoEnTuMesa',
+            '#BotanicalTattoo',
+            '#FineLineTattoo',
+            '#TatuajesBotanicos',
+            '#ContemporaryTattoo',
           ],
           guidelines:
-            'Enfocar en ingredientes 100% naturales, proceso de fermentación cuidada y maridajes irresistibles (asado, empanadas, burgers, tacos). Evitar caer en picor destructivo; ponderar siempre el balance de sabor.',
+            'Focus on botanical studies, delicate placement on body curves, ecofeminist artistic statement, one-on-one consultation booking at nikipeppers.com.',
           brandPillars: [
-            'Recetas & Maridajes Gourmet',
-            'Cultura del Picante & Escala Scoville',
-            'Proceso Artesanal & Taller de Fermentación',
-            'Comunidad Niki Lovers',
+            'Botanical & Fauna Fine Line Tattoos',
+            'Ecofeminist Artistic Statement & Visual Art',
+            'Handcrafted Ceramics & Studio Practice',
+            'Client Stories & Transformation Rituals',
           ],
         },
-        targetAudience: 'Foodies, parrilleros, amantes del picante y jóvenes adultos que cocinan rico en casa',
+        targetAudience: 'Women and art lovers (20-45) seeking custom fine-line tattoos, ceramics, and bespoke artistic pieces',
         whatsappNumber: '+5493512345678',
         telegramChatId: '@nikipeppers_bot',
+        dossierMd: NIKI_PEPPERS_DEFAULT_DOSSIER,
+      },
+    });
+  } else if (!niki.dossierMd) {
+    niki = await prisma.brand.update({
+      where: { id: niki.id },
+      data: {
+        dossierMd: NIKI_PEPPERS_DEFAULT_DOSSIER,
+        toneOfVoice:
+          'Sensitive, warm, authentic, empowering, artistic, professional. Focus on botanical tattoos, ecofeminism, organic anatomy flow, and custom ceramics.',
       },
     });
   }
@@ -53,58 +95,37 @@ export async function ensureMarketingSeed(prisma: PrismaClient) {
           brandId: niki.id,
           platform: 'META',
           externalCampaignId: 'meta_camp_niki_001',
-          campaignName: 'Niki Peppers - Pack Degustación 3 Frascos (Conversiones)',
-          objective: 'PURCHASE_CONVERSIONS',
-          dailyBudget: 25.0,
-          spendToDate: 312.5,
-          cpa: 4.8,
-          ctr: 3.42,
-          roas: 4.25,
+          campaignName: 'Meta Ads - Botanical Fine Line Consultation Bookings',
+          objective: 'LEAD_GENERATION',
+          dailyBudget: 20.0,
+          spendToDate: 280.0,
+          cpa: 6.2,
+          ctr: 3.85,
+          roas: 4.1,
           status: 'ACTIVE',
-          safetyGuardrail: 40.0,
+          safetyGuardrail: 35.0,
           insights: {
-            creativeWinner: 'Reel Alitas Glaseadas',
-            bestAgeGroup: '25-44',
-            audience: 'Intereses: BBQ, Gourmet food, Craft beer, Hot sauce',
-            recommendation: 'Mantener activo y considerar escalar +$5/día sin superar guardrail.',
+            creativeWinner: 'Reel Botanical Fern Placement',
+            bestAudience: 'Women 22-42, Contemporary Art, Botany, Sustainable Design',
+            recommendation: 'Maintain active pacing. Scale by 10% within guardrail.',
           },
         },
         {
           brandId: niki.id,
           platform: 'GOOGLE',
           externalCampaignId: 'goog_camp_niki_002',
-          campaignName: 'Google Search - Salsa Picante Gourmet Artesanal',
-          objective: 'HIGH_INTENT_SALES',
+          campaignName: 'Google Search - Custom Botanical Tattoo Artist Argentina',
+          objective: 'HIGH_INTENT_SEARCH',
           dailyBudget: 15.0,
-          spendToDate: 189.2,
-          cpa: 5.1,
-          ctr: 4.85,
-          roas: 3.8,
+          spendToDate: 195.0,
+          cpa: 5.4,
+          ctr: 4.9,
+          roas: 3.9,
           status: 'ACTIVE',
           safetyGuardrail: 25.0,
           insights: {
-            topKeywords: ['comprar salsa picante gourmet', 'habanero artesanal argentina', 'hot sauce online'],
-            qualityScore: 8.5,
-            recommendation: 'Agregar términos negativos de "salsa tabasco barata" para optimizar CPA.',
-          },
-        },
-        {
-          brandId: niki.id,
-          platform: 'META',
-          externalCampaignId: 'meta_camp_niki_003',
-          campaignName: 'Meta Retargeting - Carritos Abandonados Spicy Bundle',
-          objective: 'CATALOG_RETARGETING',
-          dailyBudget: 10.0,
-          spendToDate: 84.6,
-          cpa: 3.2,
-          ctr: 5.2,
-          roas: 6.15,
-          status: 'ACTIVE',
-          safetyGuardrail: 15.0,
-          insights: {
-            frequency: 2.1,
-            discountUsed: 'SPICY10 (10% OFF en carrito)',
-            recommendation: 'Campaña con ROI óptimo. No tocar configuración.',
+            topKeywords: ['tatuajes botanicos buenos aires', 'fine line tattoo artist cordoba', 'niki peppers tattoo'],
+            recommendation: 'Strong intent and conversion rate on consultation page.',
           },
         },
       ],
@@ -124,11 +145,11 @@ export async function ensureMarketingSeed(prisma: PrismaClient) {
           platform: 'INSTAGRAM',
           postType: 'REEL',
           caption:
-            '🔥 ¿Buscando subir de nivel el asado o la picada del finde? Mirá estas alitas glaseadas con nuestra Chipotle Dulce artesanal.\n\nEl secreto está en mezclar 3 cucharadas de Niki Peppers Chipotle con manteca derretida y miel pura. Caramelizalas 5 minutos al fuego directo y sentí ese toque ahumado que explota en boca.\n\n👉 Pedí tu pack con 15% OFF en nikipeppers.com antes del domingo.\n\n#NikiPeppers #HotSauceLovers #SaborPicante #GourmetChili #AlitasPicantes',
-          mediaUrls: ['https://images.unsplash.com/photo-1527477378408-1bc097a904b3?w=800&q=80'],
+            'Delicate botanical fern following the arm curvature.\n\nEvery piece is hand-drawn directly onto the skin during consultation to ensure the stems and leaves honor your body motion. Inspired by Argentine native flora.\n\nAppointments open for next month. Book your consultation at nikipeppers.com.\n\n#NikiPeppers #BotanicalTattoo #FineLineTattoo #TatuajesBotanicos #CustomTattoo',
+          mediaUrls: ['https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?w=800&q=80'],
           status: 'PENDING_APPROVAL',
-          approvalToken: 'token-niki-wings-001',
-          scheduledFor: new Date(Date.now() + 86400000), // Mañana
+          approvalToken: 'token-niki-botanical-001',
+          scheduledFor: new Date(Date.now() + 86400000),
           feedback: null,
           metrics: {},
         },
@@ -137,40 +158,16 @@ export async function ensureMarketingSeed(prisma: PrismaClient) {
           platform: 'INSTAGRAM',
           postType: 'CAROUSEL',
           caption:
-            '🌶️ Del suave ahumado al infierno placentero. Deslizá para conocer la escala Scoville de nuestras salsas:\n\n1️⃣ Suave Jalapeño Lima (3.000 SHU) - Para ensaladas y tacos frescos.\n2️⃣ Medio Chipotle Ahumado (15.000 SHU) - El rey de las hamburguesas.\n3️⃣ Extremo Habanero Scorpion (75.000 SHU) - Solo para valientes.\n\n¿En cuál te plantás vos? Dejanos tu número en comentarios 👇\n\n#NikiPeppers #EscalaScoville #HotSauce #PicanteGourmet',
+            'From preliminary sketch to final needlework on skin.\n\nTattooing as a ritual of personal transformation and self-reconnection. Swipe through to see the initial reference dialogue and the healed result after six weeks.\n\nLet us build your custom piece together at nikipeppers.com.\n\n#NikiPeppers #TattooProcess #BotanicalArt #FineLine #ContemporaryTattoo',
           mediaUrls: [
-            'https://images.unsplash.com/photo-1596797038530-2c107229654b?w=800&q=80',
-            'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=800&q=80',
+            'https://images.unsplash.com/photo-1590246814883-57c612c6c39a?w=800&q=80',
+            'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?w=800&q=80',
           ],
           status: 'APPROVED',
-          approvalToken: 'token-niki-scoville-002',
+          approvalToken: 'token-niki-process-002',
           scheduledFor: new Date(Date.now() + 86400000 * 2),
-          feedback: 'Aprobado directamente por el cliente con ajuste de foto 2.',
+          feedback: 'Approved by artist for Thursday release.',
           metrics: {},
-        },
-        {
-          brandId: niki.id,
-          platform: 'TIKTOK',
-          postType: 'REEL',
-          caption:
-            'POV: Entrás a nuestro taller de fermentación en Córdoba. Meses de paciencia para lograr esa acidez perfecta y picor redondo sin conservantes químicos.\n\n¿Sabías que una buena salsa picante se añeja como un buen vino? 🍷🌶️\n\n#DetrasDeEscena #Artesanal #HechoEnArgentina #NikiPeppers',
-          mediaUrls: ['https://images.unsplash.com/photo-1509358271058-acd22cc93898?w=800&q=80'],
-          status: 'DRAFT',
-          approvalToken: 'token-niki-ferment-003',
-          feedback: null,
-          metrics: {},
-        },
-        {
-          brandId: niki.id,
-          platform: 'INSTAGRAM',
-          postType: 'POST',
-          caption:
-            'La grieta se termina acá: empanada de carne a cuchillo se come con un par de gotas de Niki Pepper Original. Punto. 🥟🇦🇷\n\nConseguila en tiendas gourmet seleccionadas y en nikipeppers.com con envío a todo el país.\n\n#NikiPeppers #EmpanadasArgentinas #MaridajeGourmet',
-          mediaUrls: ['https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=800&q=80'],
-          status: 'PUBLISHED',
-          approvalToken: 'token-niki-empanadas-004',
-          publishedAt: new Date(Date.now() - 86400000 * 3),
-          metrics: { reach: 4320, likes: 382, saves: 94 },
         },
       ],
     });

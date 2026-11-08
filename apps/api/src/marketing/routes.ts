@@ -27,6 +27,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     targetAudience: b.targetAudience ?? null,
     whatsappNumber: b.whatsappNumber ?? null,
     telegramChatId: b.telegramChatId ?? null,
+    dossierMd: b.dossierMd ?? null,
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
   });
@@ -252,6 +253,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         toneOfVoice: brand.toneOfVoice,
         styleDirectives: brand.styleDirectives as Record<string, unknown>,
         targetAudience: brand.targetAudience,
+        dossierMd: brand.dossierMd ?? undefined,
       },
       platform,
       postType,
@@ -436,6 +438,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
       targetAudience: string;
       whatsappNumber: string;
       telegramChatId: string;
+      dossierMd: string;
     }>;
 
     if (!body.slug || !body.name || !body.website || !body.toneOfVoice) {
@@ -453,6 +456,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         targetAudience: body.targetAudience ?? null,
         whatsappNumber: body.whatsappNumber ?? null,
         telegramChatId: body.telegramChatId ?? null,
+        dossierMd: body.dossierMd ?? null,
       },
       update: {
         name: body.name,
@@ -462,10 +466,37 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         targetAudience: body.targetAudience ?? null,
         whatsappNumber: body.whatsappNumber ?? null,
         telegramChatId: body.telegramChatId ?? null,
+        ...(body.dossierMd !== undefined ? { dossierMd: body.dossierMd } : {}),
       },
     });
 
     return { brand: toBrandView(brand) };
+  });
+
+  // 11. GET /api/marketing/brands/:slug/dossier
+  app.get('/brands/:slug/dossier', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const brand = await prisma.brand.findUnique({
+      where: { slug },
+      select: { id: true, slug: true, name: true, dossierMd: true },
+    });
+    if (!brand) return reply.code(404).send({ error: 'Brand not found' });
+    return { brand };
+  });
+
+  // 12. PUT /api/marketing/brands/:slug/dossier
+  app.put('/brands/:slug/dossier', async (req, reply) => {
+    const { slug } = req.params as { slug: string };
+    const body = req.body as { dossierMd?: string };
+    if (typeof body.dossierMd !== 'string') {
+      return reply.code(400).send({ error: 'dossierMd string is required' });
+    }
+    const updated = await prisma.brand.update({
+      where: { slug },
+      data: { dossierMd: body.dossierMd },
+      select: { id: true, slug: true, name: true, dossierMd: true },
+    });
+    return { brand: updated };
   });
 
   // 11. Public approval preview endpoint (no auth required, accessed by client via approvalToken)
@@ -500,7 +531,8 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
     if (!draft) return reply.code(404).send({ error: 'Invalid or expired approval token' });
 
     const newStatus = decision.toUpperCase() as 'APPROVED' | 'REJECTED';
-    const feedback = body.feedback || (newStatus === 'APPROVED' ? 'Aprobado vía enlace rápido' : 'Rechazado vía enlace rápido');
+    const feedback =
+      body.feedback || (newStatus === 'APPROVED' ? 'Approved via one-click link' : 'Rejected via one-click link');
 
     const updated = await prisma.socialDraft.update({
       where: { id: draft.id },
@@ -516,7 +548,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
       <html>
         <head>
           <meta charset="utf-8">
-          <title>${newStatus === 'APPROVED' ? 'Borrador Aprobado' : 'Borrador Rechazado'} | Control Center</title>
+          <title>${newStatus === 'APPROVED' ? 'Draft Approved' : 'Draft Rejected'} | Control Center</title>
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <style>
             body { font-family: -apple-system, system-ui, sans-serif; background: #0b0b0b; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
@@ -529,11 +561,11 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         </head>
         <body>
           <div class="card">
-            <span class="badge">${newStatus === 'APPROVED' ? '✓ APROBADO' : '✗ RECHAZADO'}</span>
-            <h1>¡Gracias, ${draft.brand.name}!</h1>
-            <p>La publicación ha sido marcada como <strong>${newStatus === 'APPROVED' ? 'Aprobada para publicación' : 'Rechazada para revisión'}</strong>.</p>
+            <span class="badge">${newStatus === 'APPROVED' ? 'APPROVED' : 'REJECTED'}</span>
+            <h1>Thank you, ${draft.brand.name}</h1>
+            <p>The post draft has been marked as <strong>${newStatus === 'APPROVED' ? 'Approved for publishing' : 'Rejected for revision'}</strong>.</p>
             <div class="preview">${draft.caption}</div>
-            <p style="font-size: 12px; color: #71717a;">Control Center Marketing Engine · Gestión autónoma asistida por IA</p>
+            <p style="font-size: 12px; color: #71717a;">Control Center Marketing Engine - Autonomous AI Marketing Agent</p>
           </div>
         </body>
       </html>

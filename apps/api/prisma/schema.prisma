@@ -250,6 +250,7 @@ model Brand {
   targetAudience  String?       @map("target_audience")
   whatsappNumber  String?       @map("whatsapp_number")
   telegramChatId  String?       @map("telegram_chat_id")
+  dossierMd       String?       @db.Text @map("dossier_md")
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
   drafts          SocialDraft[]

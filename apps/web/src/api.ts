@@ -246,4 +246,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ decision, feedback }),
     }),
+  marketingBrandDossier: (slug: string) =>
+    request<{ brand: { id: string; slug: string; name: string; dossierMd: string | null } }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/dossier`
+    ),
+  marketingSaveBrandDossier: (slug: string, dossierMd: string) =>
+    request<{ brand: { id: string; slug: string; name: string; dossierMd: string | null } }>(
+      `/api/marketing/brands/${encodeURIComponent(slug)}/dossier`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ dossierMd }),
+      }
+    ),
 };
