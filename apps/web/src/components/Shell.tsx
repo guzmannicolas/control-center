@@ -31,11 +31,11 @@ const SECTION_GROUPS: { title: string; paths: string[] }[] = [
   },
   {
     title: 'Infrastructure & Cloud',
-    paths: ['/vps', '/deploys', '/vercel', '/cloudflare', '/backups', '/domains', '/databases'],
+    paths: ['/vps', '/files', '/vault', '/deploys', '/vercel', '/cloudflare', '/backups', '/domains', '/databases'],
   },
   {
     title: 'Dev & AI Tools',
-    paths: ['/agents', '/terminal'],
+    paths: ['/agents', '/terminal', '/knowledge'],
   },
   {
     title: 'Tracking & Learning',
@@ -221,27 +221,42 @@ export function Shell({ user }: { user: User }) {
           <span className="font-semibold">Control Center</span>
         </div>
 
-        <ul className="flex flex-col gap-1 overflow-y-auto px-3 flex-1 pb-4">
-          {SECTIONS.map(({ path: to, label, Icon }) => {
-            const active = to === current?.path;
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-4">
+          {SECTION_GROUPS.map((group) => {
+            const groupSections = group.paths
+              .map((p) => SECTIONS.find((s) => s.path === p))
+              .filter((s): s is Section => Boolean(s));
+
             return (
-              <li key={to}>
-                <Link
-                  to={to}
-                  aria-current={active ? 'page' : undefined}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition ${
-                    active
-                      ? 'bg-surface font-medium text-ink shadow-sm ring-1 ring-line'
-                      : 'text-ink-2 hover:bg-grid/50 hover:text-ink'
-                  }`}
-                >
-                  <Icon />
-                  {label}
-                </Link>
-              </li>
+              <div key={group.title}>
+                <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted">
+                  {group.title}
+                </div>
+                <ul className="space-y-0.5">
+                  {groupSections.map(({ path: to, label, Icon }) => {
+                    const active = to === current?.path;
+                    return (
+                      <li key={to}>
+                        <Link
+                          to={to}
+                          aria-current={active ? 'page' : undefined}
+                          className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs whitespace-nowrap transition ${
+                            active
+                              ? 'bg-surface font-semibold text-ink shadow-sm ring-1 ring-line'
+                              : 'text-ink-2 hover:bg-grid/50 hover:text-ink font-medium'
+                          }`}
+                        >
+                          <Icon />
+                          {label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             );
           })}
-        </ul>
+        </div>
 
         <div className="mt-auto border-t border-line px-5 py-4 text-sm">
           <div className="truncate text-ink-2" title={user.email}>

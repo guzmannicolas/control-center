@@ -274,3 +274,48 @@ export interface CloudflareOverview {
   dnsRecords: CloudflareDnsItem[];
   securityLevel: string;
 }
+
+// --- VPS File Manager ----------------------------------------------------------------------------
+
+export interface FileItem {
+  name: string;
+  path: string; // Relative path from root
+  isDirectory: boolean;
+  size: number;
+  sizeHuman: string;
+  modifiedAt: string;
+  extension: string;
+  isEditable: boolean;
+}
+
+export interface DirectoryListing {
+  currentPath: string;
+  parentPath: string | null;
+  baseDir: string;
+  items: FileItem[];
+}
+
+export interface FileContent {
+  path: string;
+  name: string;
+  content: string;
+  size: number;
+}
+
+// --- Env Vault & Secrets Manager -----------------------------------------------------------------
+
+export interface VaultItem {
+  id: string;
+  key: string;
+  value: string;
+  project: string;
+  description: string;
+  isSecret: boolean;
+  updatedAt: string;
+}
+
+export interface VaultOverview {
+  projects: string[];
+  items: VaultItem[];
+}
+

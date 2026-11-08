@@ -4,7 +4,9 @@ import type {
   DeploymentOverview,
   DeploymentRecord,
   DatabaseView,
+  DirectoryListing,
   DomainView,
+  FileContent,
   ImprovementInput,
   ImprovementView,
   IncidentView,
@@ -12,6 +14,8 @@ import type {
   Overview,
   ResultPoint,
   User,
+  VaultItem,
+  VaultOverview,
 } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
@@ -96,4 +100,48 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ zoneId, level }),
     }),
+
+  // VPS File Manager
+  filesList: (path = '') =>
+    request<DirectoryListing>(`/api/files/list${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  filesRead: (path: string) =>
+    request<FileContent>(`/api/files/read?path=${encodeURIComponent(path)}`),
+  filesWrite: (path: string, content: string) =>
+    request<{ success: boolean; path: string }>('/api/files/write', {
+      method: 'POST',
+      body: JSON.stringify({ path, content }),
+    }),
+  filesCreate: (payload: { path?: string; name: string; type: 'file' | 'directory' }) =>
+    request<{ success: boolean; path: string }>('/api/files/create', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  filesDelete: (path: string) =>
+    request<{ success: boolean; path: string }>('/api/files/delete', {
+      method: 'DELETE',
+      body: JSON.stringify({ path }),
+    }),
+
+  // Env Vault & Secrets
+  vaultOverview: () => request<VaultOverview>('/api/vault'),
+  vaultUpsert: (payload: {
+    id?: string;
+    key: string;
+    value: string;
+    project: string;
+    description?: string;
+    isSecret?: boolean;
+  }) =>
+    request<VaultItem>('/api/vault', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  vaultDelete: (id: string) => request<{ ok: true }>(`/api/vault/${id}`, { method: 'DELETE' }),
+  vaultImport: (project: string, envText: string) =>
+    request<{ importedCount: number; items: VaultItem[] }>('/api/vault/import', {
+      method: 'POST',
+      body: JSON.stringify({ project, envText }),
+    }),
+  vaultExport: (project: string) =>
+    request<{ project: string; envText: string }>(`/api/vault/export?project=${encodeURIComponent(project)}`),
 };

@@ -7,12 +7,15 @@ import {
   DeployIcon,
   DomainIcon,
   ImprovementIcon,
+  KnowledgeIcon,
   LearningIcon,
   LeadsIcon,
   OverviewIcon,
   TerminalIcon,
+  VaultIcon,
   VercelIcon,
   VpsIcon,
+  FilesIcon,
 } from './components/Icons.tsx';
 import { DatabasesPage } from './pages/Databases.tsx';
 import { DomainsPage } from './pages/Domains.tsx';
@@ -27,6 +30,9 @@ import { VpsPage } from './pages/Vps.tsx';
 import { LeadsPage } from './pages/Leads.tsx';
 import { DeploysPage } from './pages/Deploys.tsx';
 import { CloudflarePage } from './pages/Cloudflare.tsx';
+import { KnowledgePage } from './pages/Knowledge.tsx';
+import { FilesPage } from './pages/Files.tsx';
+import { VaultPage } from './pages/Vault.tsx';
 
 export interface Section {
   path: string;
@@ -40,6 +46,8 @@ export const SECTIONS: Section[] = [
   { path: '/', label: 'Overview', Icon: OverviewIcon, Page: OverviewPage },
   { path: '/leads', label: 'Sales', Icon: LeadsIcon, Page: LeadsPage },
   { path: '/vps', label: 'VPS', Icon: VpsIcon, Page: VpsPage },
+  { path: '/files', label: 'Files', Icon: FilesIcon, Page: FilesPage },
+  { path: '/vault', label: 'Vault', Icon: VaultIcon, Page: VaultPage },
   { path: '/deploys', label: 'Deploys', Icon: DeployIcon, Page: DeploysPage },
   { path: '/vercel', label: 'Vercel', Icon: VercelIcon, Page: VercelPage },
   { path: '/cloudflare', label: 'Cloudflare', Icon: CloudflareIcon, Page: CloudflarePage },
@@ -48,6 +56,7 @@ export const SECTIONS: Section[] = [
   { path: '/databases', label: 'Databases', Icon: DatabaseIcon, Page: DatabasesPage },
   { path: '/agents', label: 'Agents', Icon: AgentIcon, Page: AgentsPage },
   { path: '/terminal', label: 'Terminal', Icon: TerminalIcon, Page: TerminalPage },
+  { path: '/knowledge', label: 'Knowledge Base', Icon: KnowledgeIcon, Page: KnowledgePage },
   { path: '/improvements', label: 'Improvements', Icon: ImprovementIcon, Page: ImprovementsPage },
   { path: '/learning', label: 'Learning', Icon: LearningIcon, Page: LearningPage },
 ];
