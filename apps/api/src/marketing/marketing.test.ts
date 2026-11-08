@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { auditAdCampaigns, generateSocialCreative } from './agent.js';
 import { dispatchDraftApproval } from './dispatch.js';
+import { scrapeInstagramProfile } from './instagram-scraper.js';
 import type { SocialDraftView } from '@cc/shared';
 
 describe('Growth & Marketing Engine - Ads & Traffic Guardrails', () => {
@@ -114,5 +115,16 @@ describe('Growth & Marketing Engine - Human-in-the-Loop Dispatch', () => {
     expect(dispatch.approvalUrl).toContain('token_secret_123');
     expect(dispatch.messagePreview).toContain('NEW CONTENT PROPOSAL');
     expect(dispatch.messagePreview).toContain('token_secret_123');
+  });
+});
+
+describe('Growth & Marketing Engine - Instagram Style Scraper', () => {
+  it('extracts public post references and synthesizes style analysis', async () => {
+    const scraped = await scrapeInstagramProfile('nikipepperstattoo', 'nikipeppers');
+    expect(scraped.handle).toBe('nikipepperstattoo');
+    expect(scraped.posts.length).toBeGreaterThan(0);
+    expect(scraped.posts[0]?.caption).toBeDefined();
+    expect(scraped.styleAnalysis.dominantHashtags.length).toBeGreaterThan(0);
+    expect(scraped.styleAnalysis.voiceSummary).toBeDefined();
   });
 });
