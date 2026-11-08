@@ -14,7 +14,12 @@ import {
   type ResultPoint, type TargetView, type CloudflareOverview, type CloudflareDnsItem,
   type DirectoryListing, type FileContent, type VaultOverview, type VaultItem,
   type VaultProjectConfig, type VaultAuditSummary, type VaultDiffResult, type DiscoveredEnvFile,
+  type PromotionsOverview,
 } from '@cc/shared';
+import {
+  getPromotionsOverview,
+  scrapeLiveArgentinePromotions,
+} from '../promociones/engine.js';
 import {
   listDirectory,
   readFileContent,
@@ -1237,5 +1242,18 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
         error: { code: -32000, message: msg },
       });
     }
+  });
+
+  // --- Promociones de Argentina (Scraping & Deals) --------------------------------------------------
+
+  app.get('/promociones', async (req): Promise<PromotionsOverview> => {
+    const query = req.query as { refresh?: string };
+    const forceFresh = query.refresh === 'true' || query.refresh === '1';
+    return getPromotionsOverview(forceFresh);
+  });
+
+  app.post('/promociones/scrape', async (): Promise<PromotionsOverview> => {
+    // Triggers a live fresh scraping pass across Argentine sources
+    return getPromotionsOverview(true);
   });
 };

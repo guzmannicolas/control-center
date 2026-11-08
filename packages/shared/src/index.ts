@@ -587,6 +587,64 @@ export const UpdateBrandPlatformsInput = z.object({
 });
 export type UpdateBrandPlatformsInput = z.infer<typeof UpdateBrandPlatformsInput>;
 
+// --- Argentine Promotions Engine -------------------------------------------------------------------
+
+export const PROMO_CATEGORIES = [
+  'supermarkets',
+  'fuel',
+  'gastronomy',
+  'pharmacy',
+  'clothing',
+  'technology',
+  'entertainment',
+  'services',
+  'other',
+] as const;
+export type ArgentinePromoCategory = (typeof PROMO_CATEGORIES)[number];
+
+export const PAYMENT_METHODS = ['qr', 'credit', 'debit', 'wallet_balance', 'any'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export interface ArgentinePromo {
+  id: string;
+  title: string;
+  entity: string; // e.g. "Cuenta DNI", "MODO", "Mercado Pago", "Banco Galicia", "Santander", "YPF App"
+  entityType: 'bank' | 'wallet' | 'store' | 'loyalty';
+  category: ArgentinePromoCategory;
+  discount: string; // e.g. "30%", "20%", "40%"
+  discountPercent: number; // numeric e.g. 30
+  cashbackCap: string | null; // e.g. "$6.000 por semana", "$12.000 por mes"
+  daysOfWeek: number[]; // 0 = Sun, 1 = Mon, ..., 6 = Sat. If empty, all days.
+  applicableBusinesses: string[]; // e.g. ["Coto", "Carrefour", "Jumbo"]
+  paymentMethod: PaymentMethod;
+  validUntil: string | null;
+  description: string;
+  termsUrl?: string;
+  isTodayActive: boolean;
+  highlight?: string;
+  sourceUrl?: string;
+  scrapedAt: string;
+}
+
+export interface PromotionsOverview {
+  todayDayName: string; // e.g. "Domingo", "Lunes"
+  todayDayIndex: number; // 0 - 6
+  todayDateFormatted: string; // e.g. "8 de Noviembre de 2026"
+  totalPromos: number;
+  activeTodayCount: number;
+  lastScrapedAt: string | null;
+  promotions: ArgentinePromo[];
+  topEntities: { name: string; count: number }[];
+  categories: { id: ArgentinePromoCategory; label: string; count: number }[];
+}
+
+export const ScrapePromosInput = z.object({
+  forceFresh: z.boolean().default(false),
+  category: z.enum(PROMO_CATEGORIES).optional(),
+});
+export type ScrapePromosInput = z.infer<typeof ScrapePromosInput>;
+
+
 
 
 

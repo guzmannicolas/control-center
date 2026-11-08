@@ -33,6 +33,7 @@ import type {
   UpdateAdCampaignInput,
   CreateAdCampaignInput,
   UpdateDraftInput,
+  PromotionsOverview,
 } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
@@ -285,4 +286,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ handle }),
     }),
+
+  // Promociones de Argentina
+  promotions: (refresh?: boolean) =>
+    request<PromotionsOverview>(`/api/promociones${refresh ? '?refresh=true' : ''}`),
+  scrapePromotions: () =>
+    request<PromotionsOverview>('/api/promociones/scrape', { method: 'POST' }),
 };

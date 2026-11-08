@@ -133,3 +133,10 @@ export const MarketingIcon = () => (
     <path d="M12 12l4-4" />
   </Icon>
 );
+
+export const PromoIcon = () => (
+  <Icon>
+    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1 0-2.83L12 2H2v10l8.59 8.59a2 2 0 0 0 2.82 0z" />
+    <circle cx="7" cy="7" r="1.5" />
+  </Icon>
+);
