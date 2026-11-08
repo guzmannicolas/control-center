@@ -402,5 +402,147 @@ export interface KnowledgeDocDetail {
   meta: KnowledgeDocMeta;
 }
 
+// --- Growth & Marketing Engine ---------------------------------------------------------------------
+
+export const SOCIAL_PLATFORMS = ['INSTAGRAM', 'FACEBOOK', 'TIKTOK'] as const;
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
+
+export const SOCIAL_POST_TYPES = ['POST', 'REEL', 'CAROUSEL', 'STORY'] as const;
+export type SocialPostType = (typeof SOCIAL_POST_TYPES)[number];
+
+export const SOCIAL_DRAFT_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'PUBLISHED', 'FAILED'] as const;
+export type SocialDraftStatus = (typeof SOCIAL_DRAFT_STATUSES)[number];
+
+export const AD_PLATFORMS = ['META', 'GOOGLE'] as const;
+export type AdPlatform = (typeof AD_PLATFORMS)[number];
+
+export const AD_CAMPAIGN_STATUSES = ['ACTIVE', 'PAUSED', 'NEEDS_ATTENTION'] as const;
+export type AdCampaignStatus = (typeof AD_CAMPAIGN_STATUSES)[number];
+
+export interface BrandView {
+  id: string;
+  slug: string;
+  name: string;
+  website: string;
+  toneOfVoice: string;
+  styleDirectives: Record<string, unknown>;
+  targetAudience: string | null;
+  whatsappNumber: string | null;
+  telegramChatId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SocialDraftView {
+  id: string;
+  brandId: string;
+  brandName?: string;
+  brandSlug?: string;
+  platform: SocialPlatform;
+  postType: SocialPostType;
+  caption: string;
+  mediaUrls: string[];
+  status: SocialDraftStatus;
+  scheduledFor: string | null;
+  approvalToken: string;
+  feedback: string | null;
+  metrics: Record<string, unknown>;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdCampaignView {
+  id: string;
+  brandId: string;
+  brandName?: string;
+  brandSlug?: string;
+  platform: AdPlatform;
+  externalCampaignId: string;
+  campaignName: string;
+  objective: string;
+  dailyBudget: number;
+  spendToDate: number;
+  cpa: number;
+  ctr: number;
+  roas: number;
+  status: AdCampaignStatus;
+  safetyGuardrail: number;
+  insights: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MarketingOverview {
+  brand: BrandView | null;
+  allBrands: { id: string; slug: string; name: string }[];
+  ads: {
+    totalDailyBudget: number;
+    totalSpendToDate: number;
+    avgCpa: number;
+    avgCtr: number;
+    avgRoas: number;
+    activeCampaignsCount: number;
+    safetyGuardrailTotal: number;
+    guardrailBreachedCount: number;
+  };
+  social: {
+    pendingApprovalsCount: number;
+    approvedScheduledCount: number;
+    publishedCount: number;
+    draftsCount: number;
+    recentPendingDrafts: SocialDraftView[];
+  };
+  agents: {
+    trafficAgent: {
+      name: string;
+      status: 'ACTIVE' | 'IDLE' | 'WARNING';
+      lastAuditAt: string;
+      optimizationsToday: number;
+      guardrailEnforced: boolean;
+      activeRules: string[];
+    };
+    creativeAgent: {
+      name: string;
+      status: 'READY' | 'GENERATING' | 'PAUSED';
+      models: string[];
+      lastGeneratedAt: string | null;
+      brandGuidelinesLoaded: boolean;
+    };
+  };
+}
+
+export const GenerateDraftInput = z.object({
+  brandSlug: z.string().optional(),
+  brandId: z.string().optional(),
+  platform: z.enum(SOCIAL_PLATFORMS).default('INSTAGRAM'),
+  postType: z.enum(SOCIAL_POST_TYPES).default('POST'),
+  topic: z.string().min(3, 'Topic must be at least 3 characters'),
+  objective: z.string().optional(),
+  mediaUrls: z.array(z.string()).optional(),
+  scheduledFor: z.string().optional(),
+});
+export type GenerateDraftInput = z.infer<typeof GenerateDraftInput>;
+
+export const UpdateDraftStatusInput = z.object({
+  status: z.enum(SOCIAL_DRAFT_STATUSES),
+  feedback: z.string().optional(),
+});
+export type UpdateDraftStatusInput = z.infer<typeof UpdateDraftStatusInput>;
+
+export const DispatchApprovalInput = z.object({
+  channel: z.enum(['whatsapp', 'telegram', 'webhook']).default('whatsapp'),
+  target: z.string().optional(),
+});
+export type DispatchApprovalInput = z.infer<typeof DispatchApprovalInput>;
+
+export const UpdateAdCampaignInput = z.object({
+  status: z.enum(AD_CAMPAIGN_STATUSES).optional(),
+  dailyBudget: z.number().positive().optional(),
+  safetyGuardrail: z.number().positive().optional(),
+});
+export type UpdateAdCampaignInput = z.infer<typeof UpdateAdCampaignInput>;
+
+
 
 

@@ -204,3 +204,100 @@ model Lead {
   @@index([hasWebsite])
   @@map("leads")
 }
+
+// --- Growth & Marketing Engine ---------------------------------------------------------------------
+
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
+  TIKTOK
+}
+
+enum SocialPostType {
+  POST
+  REEL
+  CAROUSEL
+  STORY
+}
+
+enum SocialDraftStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  PUBLISHED
+  FAILED
+}
+
+enum AdPlatform {
+  META
+  GOOGLE
+}
+
+enum AdCampaignStatus {
+  ACTIVE
+  PAUSED
+  NEEDS_ATTENTION
+}
+
+model Brand {
+  id              String        @id @default(uuid()) @db.Uuid
+  slug            String        @unique
+  name            String
+  website         String
+  toneOfVoice     String        @map("tone_of_voice")
+  styleDirectives Json          @default("{}") @map("style_directives")
+  targetAudience  String?       @map("target_audience")
+  whatsappNumber  String?       @map("whatsapp_number")
+  telegramChatId  String?       @map("telegram_chat_id")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  drafts          SocialDraft[]
+  campaigns       AdCampaign[]
+
+  @@map("brands")
+}
+
+model SocialDraft {
+  id            String            @id @default(uuid()) @db.Uuid
+  brandId       String            @map("brand_id") @db.Uuid
+  brand         Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  platform      SocialPlatform
+  postType      SocialPostType    @map("post_type")
+  caption       String            @db.Text
+  mediaUrls     String[]          @default([]) @map("media_urls")
+  status        SocialDraftStatus @default(DRAFT)
+  scheduledFor  DateTime?         @map("scheduled_for") @db.Timestamptz(3)
+  approvalToken String            @unique @map("approval_token")
+  feedback      String?           @db.Text
+  metrics       Json              @default("{}")
+  publishedAt   DateTime?         @map("published_at") @db.Timestamptz(3)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([brandId, status])
+  @@map("social_drafts")
+}
+
+model AdCampaign {
+  id                 String           @id @default(uuid()) @db.Uuid
+  brandId            String           @map("brand_id") @db.Uuid
+  brand              Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  platform           AdPlatform
+  externalCampaignId String           @map("external_campaign_id")
+  campaignName       String           @map("campaign_name")
+  objective          String
+  dailyBudget        Float            @map("daily_budget")
+  spendToDate        Float            @default(0) @map("spend_to_date")
+  cpa                Float            @default(0)
+  ctr                Float            @default(0)
+  roas               Float            @default(0)
+  status             AdCampaignStatus @default(ACTIVE)
+  safetyGuardrail    Float            @map("safety_guardrail")
+  insights           Json             @default("{}")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([brandId, status])
+  @@map("ad_campaigns")
+}
