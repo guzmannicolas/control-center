@@ -3,8 +3,9 @@
 Context specification guide for AI assistants and development agents working on the `control-center` repository.
 
 ## 0. Mandatory Project Policies
+- **LEVEL 1 MANDATORY DIRECTIVE (KNOWLEDGE BASE FIRST)**: Any AI agent (Antigravity, Cursor, Claude Code, Roo Code, etc.) operating on this repository MUST first read `knowledge/index.md` or access the MCP resource `knowledge://index` before planning or executing any changes to architecture, database models, background queues, or business logic.
+- **Strict No-Emoji Policy**: Emojis are STRICTLY PROHIBITED across all user interface elements, commit messages, code files, and agent communication. Use clean SVG icons, monochrome indicators, or text labels only.
 - **Language Policy**: ALL user interface (UI) copy, labels, placeholders, titles, status badges, buttons, tooltips, and documentation in Control Center MUST be in English.
-- **Emoji Policy**: Indicative emojis are permitted sparingly for clarity and status indication, but MUST strictly remain monochrome / black-and-white to preserve a sober, professional aesthetic. Never use colorful or playful emojis; clean SVG icons, dots, and monochrome glyphs should still be preferred.
 
 ## 1. Project Overview
 Self-hosted monitoring and control hub for Nicolás Guzmán's online infrastructure: domains, websites, Vercel deployments, databases, B2B sales leads, and VPS servers. Performs scheduled background checks, logs incidents when failures occur, and provides a unified dashboard.
