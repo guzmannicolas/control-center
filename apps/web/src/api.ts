@@ -16,6 +16,10 @@ import type {
   User,
   VaultItem,
   VaultOverview,
+  VaultProjectConfig,
+  VaultAuditSummary,
+  VaultDiffResult,
+  DiscoveredEnvFile,
 } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
@@ -144,4 +148,18 @@ export const api = {
     }),
   vaultExport: (project: string) =>
     request<{ project: string; envText: string }>(`/api/vault/export?project=${encodeURIComponent(project)}`),
+  vaultAudit: () => request<VaultAuditSummary>('/api/vault/audit', { method: 'POST' }),
+  vaultUpdateProjectConfig: (config: VaultProjectConfig) =>
+    request<VaultProjectConfig>('/api/vault/project-config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+  vaultDiff: (project: string) =>
+    request<VaultDiffResult>(`/api/vault/diff?project=${encodeURIComponent(project)}`),
+  vaultDeploy: (project: string) =>
+    request<{ success: boolean; filePath: string; backupPath: string | null }>('/api/vault/deploy', {
+      method: 'POST',
+      body: JSON.stringify({ project }),
+    }),
+  vaultDiscover: () => request<DiscoveredEnvFile[]>('/api/vault/discover'),
 };

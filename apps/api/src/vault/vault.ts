@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID, scryptSync } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { VaultItem, VaultOverview } from '@cc/shared';
+import type { VaultAuditSummary, VaultItem, VaultOverview, VaultProjectConfig } from '@cc/shared';
 
 const STORAGE_PATH = process.env.VAULT_STORAGE_FILE || join(process.cwd(), 'data', 'vault.json');
 
@@ -9,7 +9,7 @@ const MASTER_SECRET = process.env.VAULT_SECRET || process.env.SESSION_SECRET || 
 const ALGORITHM = 'aes-256-gcm';
 const KEY = scryptSync(MASTER_SECRET, 'cc-vault-salt-unique', 32);
 
-interface StoredVaultRecord {
+export interface StoredVaultRecord {
   id: string;
   key: string;
   encryptedValue: string; // iv:tag:ciphertext (hex)
@@ -18,6 +18,54 @@ interface StoredVaultRecord {
   isSecret: boolean;
   updatedAt: string;
 }
+
+interface StoredVaultFile {
+  items: StoredVaultRecord[];
+  projectConfigs?: Record<string, VaultProjectConfig>;
+}
+
+export const DEFAULT_PROJECT_CONFIGS: Record<string, VaultProjectConfig> = {
+  'control-center': {
+    projectName: 'control-center',
+    filePath: '/home/adminnico/repositories/control-center/.env',
+    dockerService: 'control-center-api,control-center-web',
+    environment: 'production',
+    criticality: 'CRITICAL',
+    lastSyncedAt: null,
+  },
+  'minijuegos': {
+    projectName: 'minijuegos',
+    filePath: '/home/adminnico/repositories/minijuegos/.env',
+    dockerService: 'minijuegos-app',
+    environment: 'production',
+    criticality: 'HIGH',
+    lastSyncedAt: null,
+  },
+  'susterart': {
+    projectName: 'susterart',
+    filePath: '/home/adminnico/repositories/susterart/.env',
+    dockerService: 'susterart-web',
+    environment: 'production',
+    criticality: 'MEDIUM',
+    lastSyncedAt: null,
+  },
+  'nikipepperstattoo': {
+    projectName: 'nikipepperstattoo',
+    filePath: '/home/adminnico/repositories/nikipepperstattoo/.env',
+    dockerService: 'tattoos-web',
+    environment: 'production',
+    criticality: 'MEDIUM',
+    lastSyncedAt: null,
+  },
+  'resume.nicoguzmandev': {
+    projectName: 'resume.nicoguzmandev',
+    filePath: '/home/adminnico/repositories/resume.nicoguzmandev/.env',
+    dockerService: 'resume-web',
+    environment: 'production',
+    criticality: 'LOW',
+    lastSyncedAt: null,
+  },
+};
 
 function encrypt(text: string): string {
   const iv = randomBytes(12);
@@ -32,7 +80,6 @@ function decrypt(encryptedText: string): string {
   try {
     const parts = encryptedText.split(':');
     if (parts.length !== 3) {
-      // If legacy plain text was stored
       return encryptedText;
     }
     const ivHex = parts[0];
@@ -53,27 +100,40 @@ function decrypt(encryptedText: string): string {
   }
 }
 
-function loadStoredRecords(): StoredVaultRecord[] {
+export function loadStoredData(): {
+  items: StoredVaultRecord[];
+  projectConfigs: Record<string, VaultProjectConfig>;
+} {
   try {
-    if (!existsSync(STORAGE_PATH)) return [];
+    if (!existsSync(STORAGE_PATH)) {
+      return { items: [], projectConfigs: { ...DEFAULT_PROJECT_CONFIGS } };
+    }
     const raw = readFileSync(STORAGE_PATH, 'utf-8');
-    const data = JSON.parse(raw) as { items: StoredVaultRecord[] };
-    return Array.isArray(data.items) ? data.items : [];
+    const data = JSON.parse(raw) as StoredVaultFile;
+    const items = Array.isArray(data.items) ? data.items : [];
+    const projectConfigs = {
+      ...DEFAULT_PROJECT_CONFIGS,
+      ...(data.projectConfigs || {}),
+    };
+    return { items, projectConfigs };
   } catch {
-    return [];
+    return { items: [], projectConfigs: { ...DEFAULT_PROJECT_CONFIGS } };
   }
 }
 
-function saveStoredRecords(items: StoredVaultRecord[]): void {
+export function saveStoredData(data: {
+  items: StoredVaultRecord[];
+  projectConfigs: Record<string, VaultProjectConfig>;
+}): void {
   const dir = join(STORAGE_PATH, '..');
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  writeFileSync(STORAGE_PATH, JSON.stringify({ items }, null, 2), 'utf-8');
+  writeFileSync(STORAGE_PATH, JSON.stringify(data, null, 2), 'utf-8');
 }
 
-export function getVaultOverview(): VaultOverview {
-  const stored = loadStoredRecords();
+export function getVaultOverview(customAudit?: VaultAuditSummary): VaultOverview {
+  const { items: stored, projectConfigs } = loadStoredData();
   const items: VaultItem[] = stored.map((r) => ({
     id: r.id,
     key: r.key,
@@ -85,6 +145,9 @@ export function getVaultOverview(): VaultOverview {
   }));
 
   const projectSet = new Set<string>();
+  for (const p of Object.keys(projectConfigs)) {
+    projectSet.add(p);
+  }
   for (const item of items) {
     if (item.project) projectSet.add(item.project);
   }
@@ -93,13 +156,52 @@ export function getVaultOverview(): VaultOverview {
     projects.unshift('global');
   }
 
+  // Ensure default config exists for any project in items
+  for (const p of projects) {
+    if (!projectConfigs[p]) {
+      projectConfigs[p] = {
+        projectName: p,
+        filePath: `/home/adminnico/repositories/${p}/.env`,
+        environment: 'production',
+        criticality: 'MEDIUM',
+        lastSyncedAt: null,
+      };
+    }
+  }
+
   // Sort items: by project, then by key
   items.sort((a, b) => {
     if (a.project !== b.project) return a.project.localeCompare(b.project);
     return a.key.localeCompare(b.key);
   });
 
-  return { projects, items };
+  const defaultAuditSummary: VaultAuditSummary = customAudit ?? {
+    totalVariables: items.length,
+    totalProjects: projects.length,
+    globalRiskLevel: 'SAFE',
+    criticalExposureCount: 0,
+    driftCount: 0,
+    insecurePermissionsCount: 0,
+    audits: [],
+  };
+
+  return { projects, projectConfigs, items, auditSummary: defaultAuditSummary };
+}
+
+export function upsertProjectConfig(config: VaultProjectConfig): VaultProjectConfig {
+  const data = loadStoredData();
+  data.projectConfigs[config.projectName] = config;
+  saveStoredData(data);
+  return config;
+}
+
+export function updateProjectLastSynced(projectName: string): void {
+  const data = loadStoredData();
+  const cfg = data.projectConfigs[projectName];
+  if (cfg) {
+    cfg.lastSyncedAt = new Date().toISOString();
+    saveStoredData(data);
+  }
 }
 
 export function upsertVaultItem(input: {
@@ -110,7 +212,7 @@ export function upsertVaultItem(input: {
   description?: string;
   isSecret?: boolean;
 }): VaultItem {
-  const stored = loadStoredRecords();
+  const data = loadStoredData();
   const id = input.id || randomUUID();
   const project = (input.project || 'global').trim();
   const key = input.key.trim();
@@ -119,7 +221,7 @@ export function upsertVaultItem(input: {
   const updatedAt = new Date().toISOString();
   const encryptedValue = encrypt(input.value);
 
-  const existingIdx = stored.findIndex((r) => r.id === id);
+  const existingIdx = data.items.findIndex((r) => r.id === id);
   const newRecord: StoredVaultRecord = {
     id,
     key,
@@ -131,18 +233,19 @@ export function upsertVaultItem(input: {
   };
 
   if (existingIdx >= 0) {
-    stored[existingIdx] = newRecord;
+    data.items[existingIdx] = newRecord;
   } else {
-    // Also check if same key already exists in same project
-    const duplicateKeyIdx = stored.findIndex((r) => r.project.toLowerCase() === project.toLowerCase() && r.key === key);
+    const duplicateKeyIdx = data.items.findIndex(
+      (r) => r.project.toLowerCase() === project.toLowerCase() && r.key === key,
+    );
     if (duplicateKeyIdx >= 0) {
-      stored[duplicateKeyIdx] = newRecord;
+      data.items[duplicateKeyIdx] = newRecord;
     } else {
-      stored.push(newRecord);
+      data.items.push(newRecord);
     }
   }
 
-  saveStoredRecords(stored);
+  saveStoredData(data);
 
   return {
     id,
@@ -156,10 +259,11 @@ export function upsertVaultItem(input: {
 }
 
 export function deleteVaultItem(id: string): boolean {
-  const stored = loadStoredRecords();
-  const filtered = stored.filter((r) => r.id !== id);
-  if (filtered.length !== stored.length) {
-    saveStoredRecords(filtered);
+  const data = loadStoredData();
+  const filtered = data.items.filter((r) => r.id !== id);
+  if (filtered.length !== data.items.length) {
+    data.items = filtered;
+    saveStoredData(data);
     return true;
   }
   return false;
@@ -176,7 +280,6 @@ export function importEnvText(
     line = line.trim();
     if (!line || line.startsWith('#')) continue;
 
-    // Handle optional 'export '
     if (line.startsWith('export ')) {
       line = line.substring(7).trim();
     }
@@ -187,7 +290,6 @@ export function importEnvText(
     const key = line.substring(0, eqIdx).trim();
     let val = line.substring(eqIdx + 1).trim();
 
-    // Strip wrapping quotes
     if (
       (val.startsWith('"') && val.endsWith('"')) ||
       (val.startsWith("'") && val.endsWith("'"))
@@ -231,7 +333,6 @@ export function exportEnvText(project: string): string {
     if (item.description) {
       output += `# ${item.description}\n`;
     }
-    // Quote value if it contains spaces or quotes
     const needsQuotes = item.value.includes(' ') || item.value.includes('"') || item.value.includes('\n');
     const val = needsQuotes ? `"${item.value.replace(/"/g, '\\"')}"` : item.value;
     output += `${item.key}=${val}\n`;

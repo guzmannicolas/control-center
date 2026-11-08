@@ -6,6 +6,7 @@ import {
   type CheckSnapshot, type CheckStatus, type DatabaseView, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview,
   type ResultPoint, type TargetView, type CloudflareOverview, type CloudflareDnsItem,
   type DirectoryListing, type FileContent, type VaultOverview, type VaultItem,
+  type VaultProjectConfig, type VaultAuditSummary, type VaultDiffResult, type DiscoveredEnvFile,
 } from '@cc/shared';
 import {
   listDirectory,
@@ -20,7 +21,14 @@ import {
   deleteVaultItem,
   importEnvText,
   exportEnvText,
+  upsertProjectConfig,
 } from '../vault/vault.js';
+import {
+  runSecurityAudit,
+  computeVaultDiff,
+  deployVaultToDisk,
+  discoverVpsEnvFiles,
+} from '../vault/audit.js';
 import { SESSION_COOKIE, findSessionUser } from '../auth/sessions.js';
 import { subdomainsOf } from '../subdomains.js';
 import {
@@ -1019,7 +1027,62 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   // --- Env Vault & Secrets Manager ---------------------------------------------------------------
 
   app.get('/vault', async (): Promise<VaultOverview> => {
-    return getVaultOverview();
+    try {
+      const auditSummary = await runSecurityAudit();
+      return getVaultOverview(auditSummary);
+    } catch {
+      return getVaultOverview();
+    }
+  });
+
+  app.post('/vault/audit', async (): Promise<VaultAuditSummary> => {
+    return runSecurityAudit();
+  });
+
+  app.post('/vault/project-config', async (req, reply): Promise<VaultProjectConfig | void> => {
+    const ProjectConfigInput = z.object({
+      projectName: z.string().min(1),
+      filePath: z.string().min(1),
+      dockerService: z.string().optional(),
+      environment: z.enum(['production', 'staging', 'development']).default('production'),
+      criticality: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']).default('MEDIUM'),
+      lastSyncedAt: z.string().nullable().default(null),
+    });
+    const parsed = ProjectConfigInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid project config payload' });
+
+    const updated = upsertProjectConfig(parsed.data);
+    return updated;
+  });
+
+  app.get('/vault/diff', async (req, reply): Promise<VaultDiffResult | void> => {
+    const query = req.query as { project?: string };
+    if (!query.project) return reply.code(400).send({ error: 'project parameter is required' });
+    try {
+      const diff = await computeVaultDiff(query.project);
+      return diff;
+    } catch (err: any) {
+      return reply.code(400).send({ error: err.message || 'Failed to compute diff' });
+    }
+  });
+
+  app.post('/vault/deploy', async (req, reply) => {
+    const DeployInput = z.object({
+      project: z.string().min(1),
+    });
+    const parsed = DeployInput.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Invalid deploy payload' });
+
+    try {
+      const res = await deployVaultToDisk(parsed.data.project);
+      return res;
+    } catch (err: any) {
+      return reply.code(400).send({ error: err.message || 'Failed to deploy secrets to disk' });
+    }
+  });
+
+  app.get('/vault/discover', async (): Promise<DiscoveredEnvFile[]> => {
+    return discoverVpsEnvFiles();
   });
 
   app.post('/vault', async (req, reply): Promise<VaultItem | void> => {

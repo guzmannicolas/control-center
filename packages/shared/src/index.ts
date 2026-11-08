@@ -304,6 +304,72 @@ export interface FileContent {
 
 // --- Env Vault & Secrets Manager -----------------------------------------------------------------
 
+export type VaultEnvironment = 'production' | 'staging' | 'development';
+export type VaultCriticality = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+export type VaultSyncStatus = 'in_sync' | 'drift_detected' | 'untracked_on_disk' | 'missing_on_disk';
+
+export interface VaultProjectConfig {
+  projectName: string;
+  filePath: string;
+  dockerService?: string;
+  environment: VaultEnvironment;
+  criticality: VaultCriticality;
+  lastSyncedAt: string | null;
+}
+
+export interface SecurityIssue {
+  severity: 'CRITICAL' | 'WARNING' | 'INFO';
+  title: string;
+  description: string;
+  recommendation?: string;
+}
+
+export interface VaultFileAudit {
+  projectName: string;
+  filePath: string;
+  existsOnDisk: boolean;
+  permissionsOctal: string;
+  isPermissionsSecure: boolean;
+  isGitTracked: boolean;
+  isGitIgnored: boolean;
+  syncStatus: VaultSyncStatus;
+  diskItemCount: number;
+  vaultItemCount: number;
+  issues: SecurityIssue[];
+}
+
+export interface VaultAuditSummary {
+  totalVariables: number;
+  totalProjects: number;
+  globalRiskLevel: 'SAFE' | 'WARNING' | 'CRITICAL';
+  criticalExposureCount: number;
+  driftCount: number;
+  insecurePermissionsCount: number;
+  audits: VaultFileAudit[];
+}
+
+export interface VaultDiffItem {
+  key: string;
+  vaultValue: string | null;
+  diskValue: string | null;
+  status: 'only_in_vault' | 'only_on_disk' | 'modified' | 'identical';
+}
+
+export interface VaultDiffResult {
+  projectName: string;
+  filePath: string;
+  vaultContent: string;
+  diskContent: string;
+  differences: VaultDiffItem[];
+}
+
+export interface DiscoveredEnvFile {
+  path: string;
+  projectName: string;
+  variableCount: number;
+  alreadyConfigured: boolean;
+}
+
 export interface VaultItem {
   id: string;
   key: string;
@@ -316,6 +382,9 @@ export interface VaultItem {
 
 export interface VaultOverview {
   projects: string[];
+  projectConfigs: Record<string, VaultProjectConfig>;
   items: VaultItem[];
+  auditSummary: VaultAuditSummary;
 }
+
 
