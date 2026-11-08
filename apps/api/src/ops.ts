@@ -410,7 +410,7 @@ export async function runManualBackup(): Promise<{ ok: boolean; output: string }
     }
 
     const { stdout, stderr } = await execAsync(
-      `HOME="${HOME_DIR}" bash "${CMS_BACKUP_SCRIPT}" >> "${CMS_BACKUPS_DIR}/backup.log" 2>&1 && tail -n 8 "${CMS_BACKUPS_DIR}/backup.log"`,
+      `unset COMPOSE_FILE COMPOSE_PROJECT_NAME; HOME="${HOME_DIR}" bash "${CMS_BACKUP_SCRIPT}" >> "${CMS_BACKUPS_DIR}/backup.log" 2>&1 && tail -n 8 "${CMS_BACKUPS_DIR}/backup.log"`,
       {
         cwd: '/home/adminnico/cms',
         timeout: 120_000,
