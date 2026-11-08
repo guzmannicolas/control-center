@@ -3,4 +3,8 @@ dist/
 coverage/
 .cache/
 .env
+.env.*
+!.env.example
+data/
+**/data/
 apps/api/src/generated/
