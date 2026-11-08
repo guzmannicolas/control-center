@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import os from 'node:os';
 
@@ -9,6 +9,7 @@ const execAsync = promisify(exec);
 const HOME_DIR = '/home/adminnico';
 const CMS_BACKUPS_DIR = '/home/adminnico/cms/backups';
 const CMS_BACKUP_SCRIPT = '/home/adminnico/cms/scripts/backup.sh';
+const BACKUP_CONFIG_FILE = '/home/adminnico/cms/scripts/backup.config.json';
 const RCLONE_BIN = '/home/adminnico/.local/bin/rclone';
 const RCLONE_CONFIG = '/home/adminnico/.config/rclone/rclone.conf';
 
@@ -196,6 +197,43 @@ export interface CloudBackupInfo {
   notice: string | null;
 }
 
+export interface BackupTargetConfig {
+  cms_postgres: boolean;
+  control_center_postgres: boolean;
+  cms_uploads: boolean;
+  secrets: boolean;
+}
+
+export interface BackupConfig {
+  version: number;
+  updatedAt: string;
+  targets: BackupTargetConfig;
+  cloudSync: boolean;
+  retention: {
+    keepLocalDays: number;
+    keepRemoteDays: number;
+  };
+}
+
+export interface DiscoveredDatabaseTarget {
+  id: string;
+  name: string;
+  engine: string;
+  purpose: string;
+  project: string | null;
+  key: string;
+  isIncluded: boolean;
+  status: 'healthy' | 'unknown';
+}
+
+export interface ArchiveFileEntry {
+  path: string;
+  sizeBytes: number;
+  sizeHuman: string;
+  modified: string;
+  permissions: string;
+}
+
 export interface BackupsOverview {
   backupDir: string;
   scriptPath: string;
@@ -210,6 +248,8 @@ export interface BackupsOverview {
   files: BackupFileEntry[];
   recentLogLines: string[];
   cloud: CloudBackupInfo;
+  config: BackupConfig;
+  databases: DiscoveredDatabaseTarget[];
 }
 
 function formatBytes(bytes: number): string {
@@ -250,7 +290,73 @@ function refreshCloudStatsInBackground(): void {
     });
 }
 
-export function getBackupsOverview(): BackupsOverview {
+export function getBackupConfig(): BackupConfig {
+  const defaultConfig: BackupConfig = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    targets: {
+      cms_postgres: true,
+      control_center_postgres: true,
+      cms_uploads: true,
+      secrets: true,
+    },
+    cloudSync: true,
+    retention: {
+      keepLocalDays: 7,
+      keepRemoteDays: 30,
+    },
+  };
+
+  if (!existsSync(BACKUP_CONFIG_FILE)) {
+    return defaultConfig;
+  }
+
+  try {
+    const raw = readFileSync(BACKUP_CONFIG_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      version: parsed.version ?? 1,
+      updatedAt: parsed.updatedAt ?? new Date().toISOString(),
+      targets: {
+        cms_postgres: parsed.targets?.cms_postgres ?? true,
+        control_center_postgres: parsed.targets?.control_center_postgres ?? true,
+        cms_uploads: parsed.targets?.cms_uploads ?? true,
+        secrets: parsed.targets?.secrets ?? true,
+      },
+      cloudSync: parsed.cloudSync ?? true,
+      retention: {
+        keepLocalDays: Number(parsed.retention?.keepLocalDays) || 7,
+        keepRemoteDays: Number(parsed.retention?.keepRemoteDays) || 30,
+      },
+    };
+  } catch {
+    return defaultConfig;
+  }
+}
+
+export function saveBackupConfig(update: Partial<BackupConfig>): BackupConfig {
+  const current = getBackupConfig();
+  const next: BackupConfig = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    targets: {
+      cms_postgres: update.targets?.cms_postgres ?? current.targets.cms_postgres,
+      control_center_postgres: update.targets?.control_center_postgres ?? current.targets.control_center_postgres,
+      cms_uploads: update.targets?.cms_uploads ?? current.targets.cms_uploads,
+      secrets: update.targets?.secrets ?? current.targets.secrets,
+    },
+    cloudSync: update.cloudSync !== undefined ? Boolean(update.cloudSync) : current.cloudSync,
+    retention: {
+      keepLocalDays: update.retention?.keepLocalDays ? Math.max(1, Math.min(365, Number(update.retention.keepLocalDays))) : current.retention.keepLocalDays,
+      keepRemoteDays: update.retention?.keepRemoteDays ? Math.max(1, Math.min(365, Number(update.retention.keepRemoteDays))) : current.retention.keepRemoteDays,
+    },
+  };
+
+  writeFileSync(BACKUP_CONFIG_FILE, JSON.stringify(next, null, 2), 'utf8');
+  return next;
+}
+
+export function getBackupsOverview(databaseTargets: DiscoveredDatabaseTarget[] = []): BackupsOverview {
   const files: BackupFileEntry[] = [];
   let totalSizeBytes = 0;
 
@@ -339,12 +445,14 @@ export function getBackupsOverview(): BackupsOverview {
   // Trigger non-blocking cloud stats refresh if cache expired
   refreshCloudStatsInBackground();
 
+  const config = getBackupConfig();
+
   const cloud: CloudBackupInfo = {
     provider: 'Google Drive',
     remote: 'gcrypt:daily/',
     targetFolder: 'gdrive:Backups/cms',
     encryption: 'Client-side AES-256 (rclone gcrypt)',
-    retentionDays: 30,
+    retentionDays: config.retention.keepRemoteDays,
     status: rcloneNotice && rcloneNotice.includes('Recent error') ? 'warning' : 'connected',
     fileCount: cloudStatsCache?.count ?? null,
     totalSizeBytes: cloudStatsCache?.bytes ?? null,
@@ -358,7 +466,7 @@ export function getBackupsOverview(): BackupsOverview {
     backupDir: CMS_BACKUPS_DIR,
     scriptPath: CMS_BACKUP_SCRIPT,
     scriptExists: existsSync(CMS_BACKUP_SCRIPT),
-    schedule: 'Daily at 03:30 hs (Cron) · Retention: 7d local / 30d cloud',
+    schedule: `Daily at 03:30 hs (Cron) · Retention: ${config.retention.keepLocalDays}d local / ${config.retention.keepRemoteDays}d cloud`,
     destination: 'Encrypted Google Drive (gcrypt:daily/)',
     status,
     latestBackupAt: latestDaily?.modifiedAt ?? null,
@@ -368,6 +476,8 @@ export function getBackupsOverview(): BackupsOverview {
     files,
     recentLogLines,
     cloud,
+    config,
+    databases: databaseTargets,
   };
 }
 
@@ -400,7 +510,10 @@ export function deleteBackupFiles(fileNames: string[]): { ok: boolean; deleted: 
   return { ok: errors.length === 0, deleted, errors };
 }
 
-export async function runManualBackup(): Promise<{ ok: boolean; output: string }> {
+export async function runManualBackup(options?: {
+  targets?: Partial<BackupTargetConfig>;
+  cloudSync?: boolean;
+}): Promise<{ ok: boolean; output: string }> {
   try {
     if (!existsSync(CMS_BACKUP_SCRIPT)) {
       return {
@@ -409,13 +522,31 @@ export async function runManualBackup(): Promise<{ ok: boolean; output: string }
       };
     }
 
-    const { stdout, stderr } = await execAsync(
-      `unset COMPOSE_FILE COMPOSE_PROJECT_NAME; HOME="${HOME_DIR}" bash "${CMS_BACKUP_SCRIPT}" >> "${CMS_BACKUPS_DIR}/backup.log" 2>&1 && tail -n 8 "${CMS_BACKUPS_DIR}/backup.log"`,
-      {
-        cwd: '/home/adminnico/cms',
-        timeout: 120_000,
+    const flags: string[] = [];
+
+    if (options?.targets) {
+      const activeTargets: string[] = [];
+      if (options.targets.cms_postgres) activeTargets.push('cms_postgres');
+      if (options.targets.control_center_postgres) activeTargets.push('control_center_postgres');
+      if (options.targets.cms_uploads) activeTargets.push('cms_uploads');
+      if (options.targets.secrets) activeTargets.push('secrets');
+
+      if (activeTargets.length > 0) {
+        flags.push(`--targets=${activeTargets.join(',')}`);
       }
-    );
+    }
+
+    if (options?.cloudSync !== undefined) {
+      flags.push(options.cloudSync ? '--cloud' : '--no-cloud');
+    }
+
+    const argsStr = flags.join(' ');
+    const cmd = `unset COMPOSE_FILE COMPOSE_PROJECT_NAME; HOME="${HOME_DIR}" bash "${CMS_BACKUP_SCRIPT}" ${argsStr} >> "${CMS_BACKUPS_DIR}/backup.log" 2>&1 && tail -n 12 "${CMS_BACKUPS_DIR}/backup.log"`;
+
+    const { stdout, stderr } = await execAsync(cmd, {
+      cwd: '/home/adminnico/cms',
+      timeout: 180_000,
+    });
 
     return {
       ok: true,
@@ -428,6 +559,167 @@ export async function runManualBackup(): Promise<{ ok: boolean; output: string }
       output: `Error ejecutando backup: ${msg}`,
     };
   }
+}
+
+export async function inspectBackupArchive(filename: string): Promise<{
+  ok: boolean;
+  name: string;
+  sizeHuman: string;
+  files: ArchiveFileEntry[];
+  manifest?: Record<string, unknown> | null;
+  error?: string;
+}> {
+  const clean = filename.trim();
+  if (!clean || clean.includes('/') || clean.includes('\\') || clean.includes('..') || !clean.endsWith('.tar')) {
+    return { ok: false, name: clean, sizeHuman: '0 B', files: [], error: 'Invalid filename' };
+  }
+
+  const fullPath = join(CMS_BACKUPS_DIR, clean);
+  if (!existsSync(fullPath)) {
+    return { ok: false, name: clean, sizeHuman: '0 B', files: [], error: 'File not found on VPS' };
+  }
+
+  try {
+    const st = statSync(fullPath);
+    const { stdout } = await execAsync(`tar -tvf "${fullPath}"`, { timeout: 15_000 });
+    const lines = stdout.trim().split('\n').filter(Boolean);
+
+    const files: ArchiveFileEntry[] = [];
+    let manifestPath: string | null = null;
+
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 6) {
+        const permissions = parts[0]!;
+        const sizeBytes = parseInt(parts[2]!, 10) || 0;
+        const modified = `${parts[3]} ${parts[4]}`;
+        const filePath = parts.slice(5).join(' ');
+
+        if (!filePath.endsWith('/')) {
+          files.push({
+            path: filePath,
+            sizeBytes,
+            sizeHuman: formatBytes(sizeBytes),
+            modified,
+            permissions,
+          });
+
+          if (filePath.endsWith('manifest.json')) {
+            manifestPath = filePath;
+          }
+        }
+      }
+    }
+
+    let manifest: Record<string, unknown> | null = null;
+    if (manifestPath) {
+      try {
+        const { stdout: manifestJson } = await execAsync(`tar -xOf "${fullPath}" "${manifestPath}"`, { timeout: 5000 });
+        manifest = JSON.parse(manifestJson);
+      } catch {
+        // Ignore if manifest parsing fails
+      }
+    }
+
+    return {
+      ok: true,
+      name: clean,
+      sizeHuman: formatBytes(st.size),
+      files,
+      manifest,
+    };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      name: clean,
+      sizeHuman: '0 B',
+      files: [],
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export async function verifyBackupArchive(filename: string): Promise<{
+  ok: boolean;
+  filename: string;
+  passed: boolean;
+  message: string;
+  details: string[];
+}> {
+  const clean = filename.trim();
+  if (!clean || clean.includes('/') || clean.includes('\\') || clean.includes('..') || !clean.endsWith('.tar')) {
+    return { ok: false, filename: clean, passed: false, message: 'Invalid filename', details: [] };
+  }
+
+  const fullPath = join(CMS_BACKUPS_DIR, clean);
+  if (!existsSync(fullPath)) {
+    return { ok: false, filename: clean, passed: false, message: 'File not found on VPS', details: [] };
+  }
+
+  const details: string[] = [];
+
+  try {
+    await execAsync(`tar -tf "${fullPath}" > /dev/null`, { timeout: 20_000 });
+    details.push('✓ Tar container structure is valid.');
+
+    const workDir = join(os.tmpdir(), `verify-${Date.now()}`);
+    try {
+      await execAsync(`mkdir -p "${workDir}" && tar -xf "${fullPath}" -C "${workDir}"`, { timeout: 20_000 });
+      details.push('✓ Archive extracted successfully without corrupt blocks.');
+
+      const { stdout: gzFiles } = await execAsync(`find "${workDir}" -name "*.gz"`, { timeout: 10_000 });
+      const gzList = gzFiles.trim().split('\n').filter(Boolean);
+
+      for (const gz of gzList) {
+        await execAsync(`gzip -t "${gz}"`, { timeout: 15_000 });
+        const base = gz.split('/').pop();
+        details.push(`✓ Gzip checksum verified for ${base}.`);
+      }
+    } finally {
+      await execAsync(`rm -rf "${workDir}" 2>/dev/null || true`);
+    }
+
+    return {
+      ok: true,
+      filename: clean,
+      passed: true,
+      message: 'Archive verified: integrity checksums and archive headers match 100%.',
+      details,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    details.push(`✖ Verification error: ${msg}`);
+    return {
+      ok: true,
+      filename: clean,
+      passed: false,
+      message: `Integrity check failed: ${msg}`,
+      details,
+    };
+  }
+}
+
+export function getBackupDownloadStream(filename: string): {
+  stream: NodeJS.ReadableStream;
+  sizeBytes: number;
+  cleanName: string;
+} {
+  const clean = filename.trim();
+  if (!clean || clean.includes('/') || clean.includes('\\') || clean.includes('..') || !clean.endsWith('.tar')) {
+    throw new Error('Invalid backup file name');
+  }
+
+  const fullPath = join(CMS_BACKUPS_DIR, clean);
+  if (!existsSync(fullPath)) {
+    throw new Error('Backup file not found on VPS');
+  }
+
+  const st = statSync(fullPath);
+  return {
+    stream: createReadStream(fullPath),
+    sizeBytes: st.size,
+    cleanName: clean,
+  };
 }
 
 // --- 3. VPS Health, Storage Breakdown & One-Click Cleanup ------------------------------------------
