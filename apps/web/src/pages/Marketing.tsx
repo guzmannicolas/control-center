@@ -4,6 +4,7 @@ import {
   isNetworkError,
   isUnauthorized,
 } from '../api.ts';
+import { useSearch, navigate } from '../router.tsx';
 import type {
   MarketingOverview,
   SocialDraftView,
@@ -27,7 +28,18 @@ export function MarketingPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'creative' | 'ads' | 'chat' | 'integrations' | 'client_portal' | 'brand'>('creative');
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
+  const tabFromUrl = searchParams.get('tab') as 'creative' | 'ads' | 'chat' | 'integrations' | 'client_portal' | 'brand' | null;
+
+  const activeTab: 'creative' | 'ads' | 'chat' | 'integrations' | 'client_portal' | 'brand' =
+    tabFromUrl && ['creative', 'ads', 'chat', 'integrations', 'client_portal', 'brand'].includes(tabFromUrl)
+      ? tabFromUrl
+      : 'creative';
+
+  const setActiveTab = (tab: 'creative' | 'ads' | 'chat' | 'integrations' | 'client_portal' | 'brand') => {
+    navigate(`/marketing?tab=${tab}`);
+  };
 
   // Integrations state
   const [integrationsForm, setIntegrationsForm] = useState<BrandIntegrations>({});

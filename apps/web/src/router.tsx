@@ -7,9 +7,11 @@ const subscribe = (onChange: () => void) => {
 };
 
 export const usePath = () => useSyncExternalStore(subscribe, () => window.location.pathname);
+export const useSearch = () => useSyncExternalStore(subscribe, () => window.location.search);
 
 export function navigate(to: string) {
-  if (to === window.location.pathname) return;
+  const current = window.location.pathname + window.location.search;
+  if (to === current) return;
   window.history.pushState(null, '', to);
   window.dispatchEvent(new PopStateEvent('popstate'));
   window.scrollTo(0, 0);
