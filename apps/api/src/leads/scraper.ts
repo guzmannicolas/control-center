@@ -9,6 +9,8 @@ export interface ScrapedPlace {
   reviewsCount: number;
   hasWebsite: boolean;
   website: string | null;
+  instagram?: string | null;
+  facebook?: string | null;
   sourceUrl: string;
   category: string;
 }
@@ -118,6 +120,29 @@ export async function fetchLiveGoogleMaps(category: string, city: string, limit 
 
     const address = item[39] || item[18] || (Array.isArray(item[2]) ? item[2].join(', ') : `${city}, Argentina`);
     const websiteRaw = item[7] && item[7][0] ? String(item[7][0]) : null;
+
+    let instagram: string | null = null;
+    let facebook: string | null = null;
+
+    // Extract social media links if present in website field or arrays
+    if (websiteRaw) {
+      if (/instagram\.com/i.test(websiteRaw)) {
+        instagram = websiteRaw;
+      } else if (/facebook\.com/i.test(websiteRaw)) {
+        facebook = websiteRaw;
+      }
+    }
+    if (Array.isArray(item[7])) {
+      for (const link of item[7]) {
+        const linkStr = String(link);
+        if (/instagram\.com/i.test(linkStr) && !instagram) {
+          instagram = linkStr;
+        } else if (/facebook\.com/i.test(linkStr) && !facebook) {
+          facebook = linkStr;
+        }
+      }
+    }
+
     const isSocialOnly = websiteRaw ? /instagram\.com|facebook\.com|wa\.me|whatsapp\.com|linktr\.ee|tiktok\.com/i.test(websiteRaw) : false;
     const hasWebsite = Boolean(websiteRaw && !isSocialOnly);
 
@@ -144,6 +169,8 @@ export async function fetchLiveGoogleMaps(category: string, city: string, limit 
       reviewsCount,
       hasWebsite,
       website: hasWebsite ? websiteRaw : null,
+      instagram,
+      facebook,
       sourceUrl,
       category,
     });
@@ -194,10 +221,12 @@ Task: Find ${limit} REAL, CURRENT, and VERIFIABLE local businesses for: "${categ
 STRICT FACTUAL REQUIREMENTS:
 1. Every business MUST exist in reality in ${city} and have an identifiable profile on Google Maps.
 2. Provide the exact business name and full street address.
-3. Accurate website audit:
+3. Accurate website & social audit:
    - Check if the business has an official custom website domain (e.g. .com, .com.ar, .org).
    - If it has its own official website, set "hasWebsite": true and "website": "https://..."
    - If it does NOT have its own website (it only uses Instagram, Facebook, WhatsApp, or just its Google Maps pin), set "hasWebsite": false and "website": null.
+   - If you can identify their official public Instagram link or username, set "instagram": "https://www.instagram.com/..."
+   - If you can identify their public Facebook page, set "facebook": "https://www.facebook.com/..."
 4. Direct source URL:
    - Provide a direct Google Maps search link: "https://www.google.com/maps/search/?api=1&query=ENCODED_NAME_AND_ADDRESS"
 5. Real local phone number with area code.
@@ -210,6 +239,8 @@ Return ONLY a valid JSON array:
     "phone": "+54 11 4000-0000",
     "hasWebsite": false,
     "website": null,
+    "instagram": "https://www.instagram.com/nombre",
+    "facebook": null,
     "sourceUrl": "https://www.google.com/maps/search/?api=1&query=...",
     "rating": 4.8,
     "reviewsCount": 65
@@ -239,6 +270,8 @@ Return ONLY a valid JSON array:
         phone?: string | null;
         hasWebsite?: boolean;
         website?: string | null;
+        instagram?: string | null;
+        facebook?: string | null;
         sourceUrl?: string;
         rating?: number | null;
         reviewsCount?: number | null;
@@ -262,6 +295,8 @@ Return ONLY a valid JSON array:
           reviewsCount: typeof it.reviewsCount === 'number' ? it.reviewsCount : 40,
           hasWebsite: hasWeb,
           website: hasWeb ? it.website ?? null : null,
+          instagram: it.instagram ?? null,
+          facebook: it.facebook ?? null,
           sourceUrl,
           category,
         };

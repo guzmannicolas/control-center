@@ -47,7 +47,7 @@ export const PRESET_AREAS = [
 ];
 
 const DEFAULT_PITCH_TEMPLATE =
-  'Hola {name}! Vi sus excelentes calificaciones en Google ({rating}★) en {city}. Noté que aún no tienen sitio web propio y les armé una propuesta interactiva de cómo quedaría su página web moderna para {category}: {demo} ¿Les gustaría que les comparta más detalles?';
+  'Buenas! Che te escribo por acá porque vi su negocio en {city} y me gustó mucho lo que hacen. Yo me dedico al desarrollo de páginas web y vi que todavía no tienen una propia. Les armé una maqueta de muestra para que vean cómo quedaría: {demo} El costo es mínimo, alrededor de 45 o 50 mil pesos al año nada más de mantenimiento y hosting para tenerla activa. Mírenla tranquilos y si les sirve o quieren adaptarla con sus fotos y servicios me avisan, cero compromiso!';
 
 export function LeadsPage() {
   const [leads, setLeads] = useState<LeadView[]>([]);
@@ -551,7 +551,7 @@ export function LeadsPage() {
 
     // Copy personalized pitch to clipboard
     navigator.clipboard.writeText(pitch).then(() => {
-      setCopiedToast(`📋 ¡Mensaje copiado! Pegalo en el chat de ${lead.name}`);
+      setCopiedToast(`Mensaje copiado. Pegalo en el chat de ${lead.name}`);
       setTimeout(() => setCopiedToast(null), 4000);
     }).catch(() => {});
 

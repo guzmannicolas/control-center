@@ -745,6 +745,22 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
     const saved = [];
     for (const p of places) {
+      let leadInstagram = p.instagram ?? null;
+      let leadFacebook = p.facebook ?? null;
+      let leadEmail: string | null = null;
+
+      // Automatically search socials/Instagram if not directly extracted from Google Maps
+      if (!leadInstagram) {
+        try {
+          const social = await enrichLeadSocials(p.name, city);
+          if (social.instagram) leadInstagram = social.instagram;
+          if (social.facebook && !leadFacebook) leadFacebook = social.facebook;
+          if (social.email) leadEmail = social.email;
+        } catch {
+          // ignore enrichment error during scraping
+        }
+      }
+
       const demo = guessSuggestedDemo(p.category, category);
       const lead = await prisma.lead.create({
         data: {
@@ -759,8 +775,11 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
           phoneFormatted: p.phoneFormatted,
           website: p.website,
           hasWebsite: p.hasWebsite,
+          instagram: leadInstagram,
+          facebook: leadFacebook,
+          email: leadEmail,
           suggestedDemo: demo,
-          status: 'discovered',
+          status: leadInstagram || leadEmail || p.phone ? 'enriched' : 'discovered',
           metadata: {
             sourceUrl: p.sourceUrl,
           },
