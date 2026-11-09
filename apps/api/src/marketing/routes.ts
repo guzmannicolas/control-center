@@ -1149,8 +1149,8 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         instagramHandle: brand.instagramHandle ?? undefined,
       },
       incomingMessage: parsed.data.message,
-      customerName: conversation.customerName,
-      customerHandle: conversation.customerHandle,
+      customerName: conversation.customerName ?? undefined,
+      customerHandle: conversation.customerHandle ?? undefined,
       history,
     });
 

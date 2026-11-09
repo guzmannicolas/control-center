@@ -37,6 +37,8 @@ import type {
   TestChatMessageInput,
   BrandConversationView,
   PromotionsOverview,
+  PriceGlitchOverview,
+  PriceGlitchItem,
 } from '@cc/shared';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
@@ -369,4 +371,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  priceGlitches: (refresh?: boolean) =>
+    request<PriceGlitchOverview>(`/api/promociones/glitches${refresh ? '?refresh=true' : ''}`),
+  refreshPriceGlitches: () =>
+    request<PriceGlitchOverview>('/api/promociones/glitches/refresh', { method: 'POST' }),
+  verifyPriceGlitch: (id: string) =>
+    request<PriceGlitchItem>(`/api/promociones/glitches/${id}/verify`, { method: 'POST' }),
 };

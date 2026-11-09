@@ -26,7 +26,7 @@ export async function publishDraftToSocialPlatforms(
     id: string;
     name: string;
     instagramHandle?: string | null;
-    integrations?: Record<string, unknown> | null;
+    integrations?: any;
   }
 ): Promise<PublishResult> {
   const integrations = (brand.integrations ?? {}) as Record<string, string | undefined>;

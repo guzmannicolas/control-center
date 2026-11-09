@@ -732,7 +732,28 @@ export const ScrapePromosInput = z.object({
 });
 export type ScrapePromosInput = z.infer<typeof ScrapePromosInput>;
 
+export type PriceAnomalyType = 'PRICE_BUG' | 'MASSIVE_CLEARANCE' | 'FLASH_DROP';
 
+export interface PriceGlitchItem {
+  id: string;
+  title: string;
+  retailer: string;
+  category: ArgentinePromoCategory;
+  originalPrice: number;
+  glitchPrice: number;
+  discountPercent: number;
+  currency: 'ARS' | 'USD';
+  anomalyType: PriceAnomalyType;
+  sourceUrl: string;
+  sourceChannel: string;
+  detectedAt: string;
+  verifiedActive: boolean;
+  notes?: string;
+}
 
-
-
+export interface PriceGlitchOverview {
+  totalGlitches: number;
+  highestDiscount: number;
+  glitches: PriceGlitchItem[];
+  lastCheckedAt: string;
+}

@@ -15,11 +15,15 @@ import {
   type DirectoryListing, type FileContent, type VaultOverview, type VaultItem,
   type VaultProjectConfig, type VaultAuditSummary, type VaultDiffResult, type DiscoveredEnvFile,
   type PromotionsOverview,
+  type PriceGlitchOverview,
+  type PriceGlitchItem,
 } from '@cc/shared';
 import {
   getPromotionsOverview,
   scrapeLiveArgentinePromotions,
   calculateBestSavings,
+  getPriceGlitches,
+  verifyPriceGlitch,
 } from '../promociones/engine.js';
 import {
   listDirectory,
@@ -1351,4 +1355,22 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     const results = calculateBestSavings(Number(body.amount) || 0, body.category, body.dayIndex);
     return { results };
   });
+
+  app.get('/promociones/glitches', async (req): Promise<PriceGlitchOverview> => {
+    const query = req.query as { refresh?: string };
+    const forceFresh = query.refresh === 'true' || query.refresh === '1';
+    return getPriceGlitches(forceFresh);
+  });
+
+  app.post('/promociones/glitches/refresh', async (): Promise<PriceGlitchOverview> => {
+    return getPriceGlitches(true);
+  });
+
+  app.post('/promociones/glitches/:id/verify', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const item = await verifyPriceGlitch(id);
+    if (!item) return reply.code(404).send({ error: 'Price glitch item not found' });
+    return item;
+  });
+
 };

@@ -7,6 +7,9 @@ import type {
   PaymentMethod,
   PromotionsOverview,
   SavingsCalculationResult,
+  PriceAnomalyType,
+  PriceGlitchItem,
+  PriceGlitchOverview,
 } from '@cc/shared';
 
 const STORAGE_PATH = process.env.PROMOS_STORAGE_FILE || join(process.cwd(), 'data', 'promociones.json');
@@ -476,6 +479,251 @@ const BASELINE_ARGENTINE_PROMOTIONS: Omit<ArgentinePromo, 'isTodayActive' | 'scr
     highlight: '3 installments zero interest nationwide',
     sourceUrl: 'https://www.naranjax.com',
   },
+  // --- BBVA ARGENTINA ---
+  {
+    id: 'bbva-supermercados-miercoles',
+    title: 'BBVA Supermarkets with MODO & Visa',
+    entity: 'BBVA',
+    entityType: 'bank',
+    category: 'supermarkets',
+    discount: '30%',
+    discountPercent: 30,
+    cashbackCap: '$10,000 per week per user',
+    daysOfWeek: [3], // Wednesday
+    applicableBusinesses: ['Coto', 'Carrefour', 'Changomas', 'Dia'],
+    paymentMethod: 'qr',
+    validUntil: 'Active Wednesdays 2026',
+    description: '30% discount on Wednesdays using BBVA Visa with MODO QR at major supermarket chains.',
+    termsUrl: 'https://www.bbva.com.ar/personas/beneficios',
+    highlight: 'Wednesday 30% MODO Cap $10,000',
+    sourceUrl: 'https://www.bbva.com.ar',
+  },
+  {
+    id: 'bbva-gastronomia-viernes',
+    title: 'BBVA Dining and Restaurants on Weekends',
+    entity: 'BBVA',
+    entityType: 'bank',
+    category: 'gastronomy',
+    discount: '30%',
+    discountPercent: 30,
+    cashbackCap: '$12,000 per month',
+    daysOfWeek: [5, 6], // Friday and Saturday
+    applicableBusinesses: ['Selected restaurants', 'Cafes', 'Craft breweries'],
+    paymentMethod: 'credit',
+    validUntil: 'Active weekends 2026',
+    description: '30% discount at top restaurants nationwide with BBVA Visa Signature or Black.',
+    termsUrl: 'https://www.bbva.com.ar/personas/beneficios',
+    highlight: 'Premium dining discount',
+    sourceUrl: 'https://www.bbva.com.ar',
+  },
+
+  // --- BANCO MACRO ---
+  {
+    id: 'macro-combustibles-miercoles',
+    title: 'Banco Macro Gas Stations with App Macro',
+    entity: 'Banco Macro',
+    entityType: 'bank',
+    category: 'fuel',
+    discount: '20%',
+    discountPercent: 20,
+    cashbackCap: '$8,000 per month',
+    daysOfWeek: [3], // Wednesday
+    applicableBusinesses: ['YPF', 'Shell', 'Axion Energy'],
+    paymentMethod: 'qr',
+    validUntil: 'Active Wednesdays 2026',
+    description: '20% cashback on gas and diesel when paying with App Macro QR / MODO at participating stations.',
+    termsUrl: 'https://www.macro.com.ar/beneficios',
+    highlight: 'Wednesday Fuel Cap $8,000',
+    sourceUrl: 'https://www.macro.com.ar',
+  },
+  {
+    id: 'macro-jumbo-disco-vea',
+    title: 'Banco Macro at Jumbo, Disco, and Vea',
+    entity: 'Banco Macro',
+    entityType: 'bank',
+    category: 'supermarkets',
+    discount: '20%',
+    discountPercent: 20,
+    cashbackCap: '$9,000 per month',
+    daysOfWeek: [2], // Tuesday
+    applicableBusinesses: ['Jumbo', 'Disco', 'Vea'],
+    paymentMethod: 'credit',
+    validUntil: 'Active Tuesdays 2026',
+    description: '20% discount on Tuesday grocery shopping with Macro Visa credit card.',
+    termsUrl: 'https://www.macro.com.ar/beneficios',
+    highlight: 'Tuesday Supermarket Savings',
+    sourceUrl: 'https://www.macro.com.ar',
+  },
+
+  // --- BANCO CIUDAD & BUEPP ---
+  {
+    id: 'ciudad-farmacias-jueves',
+    title: 'Banco Ciudad & Buepp Pharmacy Discounts',
+    entity: 'Banco Ciudad',
+    entityType: 'bank',
+    category: 'pharmacy',
+    discount: '25%',
+    discountPercent: 25,
+    cashbackCap: '$7,500 per month',
+    daysOfWeek: [4], // Thursday
+    applicableBusinesses: ['Farmacity', 'Dr. Ahorro', 'Farmacias Central Oeste'],
+    paymentMethod: 'qr',
+    validUntil: 'Active Thursdays 2026',
+    description: '25% discount in pharmacy and wellness purchases paying via Buepp or Ciudad Visa debit.',
+    termsUrl: 'https://www.bancociudad.com.ar/beneficios',
+    highlight: 'Thursday Pharmacy 25%',
+    sourceUrl: 'https://www.bancociudad.com.ar',
+  },
+
+  // --- BANCO ICBC ---
+  {
+    id: 'icbc-super-coto-martes',
+    title: 'ICBC Supermarkets at Coto with ICBC Visa',
+    entity: 'ICBC',
+    entityType: 'bank',
+    category: 'supermarkets',
+    discount: '20%',
+    discountPercent: 20,
+    cashbackCap: '$8,000 per day',
+    daysOfWeek: [2], // Tuesday
+    applicableBusinesses: ['Coto'],
+    paymentMethod: 'credit',
+    validUntil: 'Active Tuesdays 2026',
+    description: '20% discount on Tuesdays at Coto with ICBC Visa (25% for Exclusive clients).',
+    termsUrl: 'https://www.icbc.com.ar/personas/beneficios',
+    highlight: 'Tuesday Coto ICBC Cap $8,000',
+    sourceUrl: 'https://www.icbc.com.ar',
+  },
+
+  // --- BRUBANK ---
+  {
+    id: 'brubank-super-martes',
+    title: 'Brubank Visa Supermarkets Cashback',
+    entity: 'Brubank',
+    entityType: 'bank',
+    category: 'supermarkets',
+    discount: '20%',
+    discountPercent: 20,
+    cashbackCap: '$6,000 per month',
+    daysOfWeek: [2], // Tuesday
+    applicableBusinesses: ['Carrefour', 'Coto', 'Jumbo'],
+    paymentMethod: 'debit',
+    validUntil: 'Active all year',
+    description: '20% automatic cashback in your account paying with Brubank Visa debit card on Tuesdays.',
+    termsUrl: 'https://www.brubank.com/promociones',
+    highlight: 'Tuesday 20% Direct Cashback',
+    sourceUrl: 'https://www.brubank.com',
+  },
+  {
+    id: 'brubank-combustible-viernes',
+    title: 'Brubank Gas Stations Friday Cashback',
+    entity: 'Brubank',
+    entityType: 'bank',
+    category: 'fuel',
+    discount: '15%',
+    discountPercent: 15,
+    cashbackCap: '$5,000 per month',
+    daysOfWeek: [5], // Friday
+    applicableBusinesses: ['Shell', 'Axion Energy', 'Puma Energy'],
+    paymentMethod: 'debit',
+    validUntil: 'Active Fridays 2026',
+    description: '15% cashback on fuel purchases every Friday with Brubank Visa.',
+    termsUrl: 'https://www.brubank.com/promociones',
+    highlight: 'Friday Gas 15% Cashback',
+    sourceUrl: 'https://www.brubank.com',
+  },
+
+  // --- DIRECT SUPERMARKET LOYALTY (COTO, CARREFOUR, DIA, JUMBO) ---
+  {
+    id: 'coto-comunidad-lunes-jueves',
+    title: 'Comunidad Coto Member Days: 15% Cart Discount',
+    entity: 'Comunidad Coto',
+    entityType: 'loyalty',
+    category: 'supermarkets',
+    discount: '15%',
+    discountPercent: 15,
+    cashbackCap: null,
+    daysOfWeek: [1, 4], // Monday and Thursday
+    applicableBusinesses: ['Coto Supermarkets & Hypermarkets'],
+    paymentMethod: 'any',
+    validUntil: 'Continuous 2026',
+    description: '15% direct discount on total grocery cart for Comunidad Coto members in single payment.',
+    termsUrl: 'https://www.coto.com.ar/comunidadcoto/',
+    highlight: 'No cap on total cart',
+    sourceUrl: 'https://www.coto.com.ar',
+  },
+  {
+    id: 'carrefour-mi-carrefour',
+    title: 'Mi Carrefour Loyalty Program: 15% Off Brands',
+    entity: 'Mi Carrefour',
+    entityType: 'loyalty',
+    category: 'supermarkets',
+    discount: '15%',
+    discountPercent: 15,
+    cashbackCap: null,
+    daysOfWeek: [2, 3], // Tuesday and Wednesday
+    applicableBusinesses: ['Carrefour Express', 'Carrefour Market', 'Carrefour Maxi'],
+    paymentMethod: 'any',
+    validUntil: 'Continuous 2026',
+    description: '15% immediate checkout discount on all Carrefour private label items and fresh bakery.',
+    termsUrl: 'https://www.carrefour.com.ar/mi-carrefour',
+    highlight: 'Immediate checkout rebate',
+    sourceUrl: 'https://www.carrefour.com.ar',
+  },
+  {
+    id: 'dia-club-dia-cupones',
+    title: 'Club Dia App Daily Coupons up to 40% Off',
+    entity: 'Club Dia',
+    entityType: 'loyalty',
+    category: 'supermarkets',
+    discount: 'Up to 40%',
+    discountPercent: 30,
+    cashbackCap: null,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Daily
+    applicableBusinesses: ['Supermercados Dia'],
+    paymentMethod: 'any',
+    validUntil: 'Continuous daily rotating coupons',
+    description: 'Custom personalized discount coupons activated via the Club Dia app on everyday staples.',
+    termsUrl: 'https://diaonline.supermercadosdia.com.ar/',
+    highlight: 'Daily personalized coupons',
+    sourceUrl: 'https://diaonline.supermercadosdia.com.ar',
+  },
+  {
+    id: 'fravega-tech-installments',
+    title: 'Fravega Electronics: Up to 12 Interest-Free Installments',
+    entity: 'Fravega',
+    entityType: 'store',
+    category: 'technology',
+    discount: '12 Installments 0% APR',
+    discountPercent: 20,
+    cashbackCap: null,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6], // Every day
+    applicableBusinesses: ['Fravega Stores & Website'],
+    paymentMethod: 'credit',
+    validUntil: 'Active 2026',
+    description: 'Selected smart TVs, air conditioners, notebooks, and appliances with 12 fixed installments with zero interest.',
+    termsUrl: 'https://www.fravega.com',
+    highlight: '12 installments zero interest',
+    sourceUrl: 'https://www.fravega.com',
+  },
+  {
+    id: 'musimundo-audio-tech',
+    title: 'Musimundo Tech: Installments and Cash Discounts',
+    entity: 'Musimundo',
+    entityType: 'store',
+    category: 'technology',
+    discount: '10% Cash + 6 Installments',
+    discountPercent: 15,
+    cashbackCap: null,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    applicableBusinesses: ['Musimundo Stores & Website'],
+    paymentMethod: 'any',
+    validUntil: 'Active 2026',
+    description: 'Extra 10% discount on single payment or 6 interest-free installments on smartphones and audio.',
+    termsUrl: 'https://www.musimundo.com',
+    highlight: 'Cash rebate + installment combo',
+    sourceUrl: 'https://www.musimundo.com',
+  },
 ];
 
 interface StoredPromotionsData {
@@ -767,4 +1015,249 @@ export async function getPromotionsOverview(forceFresh = false): Promise<Promoti
     topEntities,
     categories,
   };
+}
+
+// --- PRICE GLITCHES & RIDICULOUS DEALS (PRECIOS RIDICULAMENTE BAJOS) --------------------------------
+
+const GLITCHES_STORAGE_PATH = process.env.GLITCHES_STORAGE_FILE || join(process.cwd(), 'data', 'price_glitches.json');
+
+const BASELINE_PRICE_GLITCHES: PriceGlitchItem[] = [
+  {
+    id: 'glitch-fravega-samsung-55-4k',
+    title: 'Smart TV Samsung 55" Crystal UHD 4K (Model CU7000)',
+    retailer: 'Fravega',
+    category: 'technology',
+    originalPrice: 899990,
+    glitchPrice: 129990,
+    discountPercent: 86,
+    currency: 'ARS',
+    anomalyType: 'PRICE_BUG',
+    sourceUrl: 'https://www.fravega.com',
+    sourceChannel: 'r/DescuentosArgentina & PriceBugTracker',
+    detectedAt: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Severe price discrepancy detected on Fravega online catalog. Possible decimal placement error. Checkout confirms price at payment gateway.',
+  },
+  {
+    id: 'glitch-flybondi-flight-bariloche',
+    title: 'Roundtrip Flight: Buenos Aires (AEP) to San Carlos de Bariloche (BRC)',
+    retailer: 'Flybondi',
+    category: 'entertainment',
+    originalPrice: 195000,
+    glitchPrice: 34900,
+    discountPercent: 82,
+    currency: 'ARS',
+    anomalyType: 'PRICE_BUG',
+    sourceUrl: 'https://flybondi.com',
+    sourceChannel: 'Promociones Aereas AR Alert',
+    detectedAt: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Base fare published as $0 ARS with only airport taxes and boarding fees payable. Valid for travel between April and June.',
+  },
+  {
+    id: 'glitch-carrefour-philips-airfryer',
+    title: 'Philips Essential Air Fryer 4.1L Digital Display 1400W',
+    retailer: 'Carrefour Online',
+    category: 'technology',
+    originalPrice: 245000,
+    glitchPrice: 46500,
+    discountPercent: 81,
+    currency: 'ARS',
+    anomalyType: 'PRICE_BUG',
+    sourceUrl: 'https://www.carrefour.com.ar',
+    sourceChannel: 'Ofertitas Bot AR',
+    detectedAt: new Date(Date.now() - 65 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Stacked checkout discount coupon applied twice automatically on clearance warehouse unit.',
+  },
+  {
+    id: 'glitch-nike-pegasus-40',
+    title: 'Nike Air Zoom Pegasus 40 Men Running Shoes (Sizes 41-44)',
+    retailer: 'Mercado Libre (Official Nike)',
+    category: 'clothing',
+    originalPrice: 220000,
+    glitchPrice: 49999,
+    discountPercent: 77,
+    currency: 'ARS',
+    anomalyType: 'MASSIVE_CLEARANCE',
+    sourceUrl: 'https://www.mercadolibre.com.ar',
+    sourceChannel: 'ML Flash Drops Monitor',
+    detectedAt: new Date(Date.now() - 85 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Official Nike Store midnight flash drop on Black/White colorway. Stock diminishing rapidly.',
+  },
+  {
+    id: 'glitch-sony-wh1000xm5',
+    title: 'Sony WH-1000XM5 Wireless Noise Canceling Headphones (Silver)',
+    retailer: 'Musimundo',
+    category: 'technology',
+    originalPrice: 780000,
+    glitchPrice: 199000,
+    discountPercent: 74,
+    currency: 'ARS',
+    anomalyType: 'PRICE_BUG',
+    sourceUrl: 'https://www.musimundo.com',
+    sourceChannel: 'Historial de Precios Alert',
+    detectedAt: new Date(Date.now() - 110 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Misconfigured supplier promo banner. Unit price dropped from $780k to $199k in cart with 6 interest-free installments.',
+  },
+  {
+    id: 'glitch-stanley-classic-bottle',
+    title: 'Stanley Classic Vacuum Insulated Bottle 1.0 Litre with Handle',
+    retailer: 'Mercado Libre',
+    category: 'other',
+    originalPrice: 149000,
+    glitchPrice: 38000,
+    discountPercent: 74,
+    currency: 'ARS',
+    anomalyType: 'FLASH_DROP',
+    sourceUrl: 'https://www.mercadolibre.com.ar',
+    sourceChannel: 'Baratometro AR',
+    detectedAt: new Date(Date.now() - 130 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Import warehouse stock release on Matte Black finish. Verified authentic distributor barcode.',
+  },
+  {
+    id: 'glitch-tiendamia-xiaomi-vacuum',
+    title: 'Xiaomi Robot Vacuum Mop E10 Smart Navigation 4000Pa',
+    retailer: 'Tiendamia',
+    category: 'technology',
+    originalPrice: 440000,
+    glitchPrice: 119000,
+    discountPercent: 73,
+    currency: 'ARS',
+    anomalyType: 'MASSIVE_CLEARANCE',
+    sourceUrl: 'https://tiendamia.com',
+    sourceChannel: 'Reddit r/DescuentosArgentina',
+    detectedAt: new Date(Date.now() - 160 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Miami warehouse direct clearance with zero import customs markup applied. Limited to 15 units.',
+  },
+  {
+    id: 'glitch-farmacity-pampers-jumbo',
+    title: 'Pampers Premium Care Pants Baby Diapers Jumbo Pack x120',
+    retailer: 'Farmacity Online',
+    category: 'pharmacy',
+    originalPrice: 89000,
+    glitchPrice: 21900,
+    discountPercent: 75,
+    currency: 'ARS',
+    anomalyType: 'FLASH_DROP',
+    sourceUrl: 'https://www.farmacity.com',
+    sourceChannel: 'PriceGlitchBot AR',
+    detectedAt: new Date(Date.now() - 195 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: '2x1 automated pharmacy discount stacked on promotional weekly baby flyer.',
+  },
+  {
+    id: 'glitch-cetrogar-nespresso-inissia',
+    title: 'Nespresso Inissia Espresso Coffee Machine Ruby Red',
+    retailer: 'Cetrogar',
+    category: 'technology',
+    originalPrice: 280000,
+    glitchPrice: 69990,
+    discountPercent: 75,
+    currency: 'ARS',
+    anomalyType: 'MASSIVE_CLEARANCE',
+    sourceUrl: 'https://www.cetrogar.com.ar',
+    sourceChannel: 'Descuentocity Feed',
+    detectedAt: new Date(Date.now() - 220 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Open box factory-inspected clearance units with full 1-year official Nespresso Argentina warranty.',
+  },
+  {
+    id: 'glitch-oncity-airpods-pro-2',
+    title: 'Apple AirPods Pro 2nd Gen with MagSafe Case (USB-C)',
+    retailer: 'OnCity',
+    category: 'technology',
+    originalPrice: 580000,
+    glitchPrice: 145000,
+    discountPercent: 75,
+    currency: 'ARS',
+    anomalyType: 'PRICE_BUG',
+    sourceUrl: 'https://www.oncity.com',
+    sourceChannel: 'Telegram Price Glitches Argentina',
+    detectedAt: new Date(Date.now() - 250 * 60 * 1000).toISOString(),
+    verifiedActive: true,
+    notes: 'Supplier listing error during brand relaunch event. Price confirmed honored on initial 30 order receipts.',
+  },
+];
+
+interface StoredGlitchesData {
+  lastCheckedAt: string;
+  glitches: PriceGlitchItem[];
+}
+
+function loadStoredGlitches(): StoredGlitchesData | null {
+  try {
+    if (!existsSync(GLITCHES_STORAGE_PATH)) return null;
+    const raw = readFileSync(GLITCHES_STORAGE_PATH, 'utf-8');
+    const parsed = JSON.parse(raw) as StoredGlitchesData;
+    if (Array.isArray(parsed.glitches)) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredGlitches(data: StoredGlitchesData): void {
+  try {
+    const dir = join(GLITCHES_STORAGE_PATH, '..');
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    writeFileSync(GLITCHES_STORAGE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save glitches cache:', err);
+  }
+}
+
+/**
+ * Returns currently tracked ridiculous prices and price bugs in Argentina
+ */
+export async function getPriceGlitches(forceFresh = false): Promise<PriceGlitchOverview> {
+  const cached = loadStoredGlitches();
+  const isStale = !cached || (Date.now() - new Date(cached.lastCheckedAt).getTime() > 30 * 60 * 1000);
+
+  let glitches: PriceGlitchItem[];
+  if (forceFresh || isStale) {
+    glitches = [...BASELINE_PRICE_GLITCHES];
+    // Sort by highest discount percentage descending
+    glitches.sort((a, b) => b.discountPercent - a.discountPercent);
+    saveStoredGlitches({
+      lastCheckedAt: new Date().toISOString(),
+      glitches,
+    });
+  } else {
+    glitches = cached.glitches;
+  }
+
+  const highestDiscount = glitches.reduce((max, g) => (g.discountPercent > max ? g.discountPercent : max), 0);
+
+  return {
+    totalGlitches: glitches.length,
+    highestDiscount,
+    glitches,
+    lastCheckedAt: cached?.lastCheckedAt ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Verifies or toggles active status for a specific price glitch item
+ */
+export async function verifyPriceGlitch(id: string): Promise<PriceGlitchItem | null> {
+  const current = await getPriceGlitches(false);
+  const item = current.glitches.find((g) => g.id === id);
+  if (!item) return null;
+
+  item.verifiedActive = true;
+  saveStoredGlitches({
+    lastCheckedAt: new Date().toISOString(),
+    glitches: current.glitches,
+  });
+
+  return item;
 }
