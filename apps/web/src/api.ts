@@ -37,6 +37,7 @@ import type {
   TestChatMessageInput,
   BrandConversationView,
   PromotionsOverview,
+  ArgentinePromo,
   PriceGlitchOverview,
   PriceGlitchItem,
 } from '@cc/shared';
@@ -375,6 +376,8 @@ export const api = {
     request<PriceGlitchOverview>(`/api/promociones/glitches${refresh ? '?refresh=true' : ''}`),
   refreshPriceGlitches: () =>
     request<PriceGlitchOverview>('/api/promociones/glitches/refresh', { method: 'POST' }),
+  verifyPromotionUrl: (id: string) =>
+    request<ArgentinePromo>(`/api/promociones/${id}/verify-url`, { method: 'POST' }),
   verifyPriceGlitch: (id: string) =>
     request<PriceGlitchItem>(`/api/promociones/glitches/${id}/verify`, { method: 'POST' }),
 };

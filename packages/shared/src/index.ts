@@ -724,6 +724,10 @@ export interface ArgentinePromo {
   highlight?: string;
   sourceUrl?: string;
   scrapedAt: string;
+  httpStatus?: number;
+  httpResponseTimeMs?: number;
+  httpVerifiedAt?: string;
+  isVerifiedLive?: boolean;
 }
 
 export interface PromotionsOverview {

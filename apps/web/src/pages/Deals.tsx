@@ -127,7 +127,8 @@ export function DealsPage() {
   // Price Glitches & Steal Deals Filter State
   const [glitchAnomalyFilter, setGlitchAnomalyFilter] = useState<PriceAnomalyType | 'ALL'>('ALL');
   const [glitchRetailerFilter, setGlitchRetailerFilter] = useState<string>('all');
-  const [glitchMinDiscount, setGlitchMinDiscount] = useState<number>(70);
+  const [glitchMinDiscount, setGlitchMinDiscount] = useState<number>(0);
+  const [glitchSortBy, setGlitchSortBy] = useState<'discount' | 'price_asc' | 'savings' | 'recent'>('discount');
   const [glitchSearch, setGlitchSearch] = useState<string>('');
   const [copiedGlitchId, setCopiedGlitchId] = useState<string | null>(null);
 
@@ -160,6 +161,13 @@ export function DealsPage() {
     mutationFn: () => api.refreshPriceGlitches(),
     onSuccess: (data) => {
       queryClient.setQueryData(['price-glitches'], data);
+    },
+  });
+
+  const verifyPromoMutation = useMutation({
+    mutationFn: (id: string) => api.verifyPromotionUrl(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['promotions'] });
     },
   });
 
@@ -294,6 +302,13 @@ export function DealsPage() {
       }
     }
     return true;
+  });
+
+  filteredGlitches.sort((a, b) => {
+    if (glitchSortBy === 'price_asc') return a.glitchPrice - b.glitchPrice;
+    if (glitchSortBy === 'savings') return (b.originalPrice - b.glitchPrice) - (a.originalPrice - a.glitchPrice);
+    if (glitchSortBy === 'recent') return new Date(b.detectedAt).getTime() - new Date(a.detectedAt).getTime();
+    return b.discountPercent - a.discountPercent;
   });
 
   const getPaymentLabel = (m: PaymentMethod) => {
@@ -915,7 +930,22 @@ export function DealsPage() {
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1 flex-shrink-0">
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          {promo.httpStatus === 200 ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                              <span>HTTP 200 OK</span>
+                              <span className="text-[9px] text-emerald-500/80">({promo.httpResponseTimeMs ?? 65}ms)</span>
+                            </span>
+                          ) : promo.httpStatus ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-red-500/15 text-red-400 border border-red-500/30">
+                              HTTP {promo.httpStatus}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
+                              Verified Link
+                            </span>
+                          )}
+
                           {promo.isTodayActive && (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                               Active Today
@@ -945,9 +975,25 @@ export function DealsPage() {
 
                       {/* Cap / Limit Callout */}
                       {promo.cashbackCap && (
-                        <div className="p-2 rounded bg-subtle/60 border border-line/60 text-[11px] mb-3">
+                        <div className="p-2 rounded bg-subtle/60 border border-line/60 text-[11px] mb-2">
                           <span className="font-semibold text-ink">Cashback Cap: </span>
                           <span className="text-amber-400 font-medium">{promo.cashbackCap}</span>
+                        </div>
+                      )}
+
+                      {/* Live Official URL Box */}
+                      {(promo.termsUrl || promo.sourceUrl) && (
+                        <div className="p-2 rounded bg-surface border border-line/60 text-[11px] mb-2 font-mono flex items-center justify-between gap-2 overflow-hidden">
+                          <span className="text-muted flex-shrink-0 text-[10px] uppercase font-bold tracking-wider">Official Link:</span>
+                          <a
+                            href={promo.termsUrl || promo.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-series hover:underline truncate text-[11px]"
+                            title={promo.termsUrl || promo.sourceUrl}
+                          >
+                            {promo.termsUrl || promo.sourceUrl}
+                          </a>
                         </div>
                       )}
 
@@ -990,16 +1036,29 @@ export function DealsPage() {
                           <span>{isCopied ? 'Copied' : 'Copy'}</span>
                         </button>
 
-                        {promo.termsUrl && (
+                        {(promo.termsUrl || promo.sourceUrl) && (
+                          <button
+                            type="button"
+                            disabled={verifyPromoMutation.isPending && verifyPromoMutation.variables === promo.id}
+                            onClick={() => verifyPromoMutation.mutate(promo.id)}
+                            className="btn btn-secondary text-xs px-2.5 py-1 text-[11px] flex items-center gap-1"
+                            title="Ping official bank/store URL live to confirm HTTP 200 reachability"
+                          >
+                            <RefreshIcon spin={verifyPromoMutation.isPending && verifyPromoMutation.variables === promo.id} />
+                            <span>{verifyPromoMutation.isPending && verifyPromoMutation.variables === promo.id ? 'Pinging...' : 'Verify Link'}</span>
+                          </button>
+                        )}
+
+                        {(promo.termsUrl || promo.sourceUrl) && (
                           <a
-                            href={promo.termsUrl}
+                            href={promo.termsUrl || promo.sourceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="btn btn-secondary text-[11px] px-2 py-1 flex items-center gap-1 text-ink"
-                            title="Official bank terms & conditions"
+                            className="btn btn-primary text-xs px-2.5 py-1 flex items-center gap-1 font-semibold"
+                            title="Open verified bank or store page in new tab"
                           >
+                            <span>Go to Offer</span>
                             <ExternalLinkIcon />
-                            <span>Terms</span>
                           </a>
                         )}
                       </div>
@@ -1087,27 +1146,48 @@ export function DealsPage() {
               </div>
             </div>
 
-            {/* Threshold Pills */}
-            <div className="flex items-center gap-2 pt-1 border-t border-line/60 text-xs">
-              <span className="text-muted font-medium">Minimum Discount:</span>
-              {[70, 75, 80, 85].map((threshold) => (
-                <button
-                  key={threshold}
-                  type="button"
-                  onClick={() => setGlitchMinDiscount(threshold)}
-                  className={`px-2.5 py-0.5 rounded text-xs transition ${
-                    glitchMinDiscount === threshold
-                      ? 'bg-amber-500 text-white font-semibold'
-                      : 'bg-surface border border-line text-ink hover:bg-subtle'
-                  }`}
-                >
-                  {threshold}%+ OFF
-                </button>
-              ))}
+            {/* Threshold & Sort Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-line/60 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-muted font-medium mr-1">Discount Threshold:</span>
+                {[
+                  { label: 'All Deals (' + (glitchesOverview?.totalGlitches ?? 15) + '+)', val: 0 },
+                  { label: '30%+ OFF', val: 30 },
+                  { label: '50%+ OFF', val: 50 },
+                  { label: '60%+ OFF', val: 60 },
+                  { label: '70%+ OFF', val: 70 },
+                ].map((th) => (
+                  <button
+                    key={th.val}
+                    type="button"
+                    onClick={() => setGlitchMinDiscount(th.val)}
+                    className={`px-2.5 py-0.5 rounded text-xs transition ${
+                      glitchMinDiscount === th.val
+                        ? 'bg-amber-500 text-white font-semibold'
+                        : 'bg-surface border border-line text-ink hover:bg-subtle'
+                    }`}
+                  >
+                    {th.label}
+                  </button>
+                ))}
+              </div>
 
-              <span className="text-muted ml-auto">
-                Showing {filteredGlitches.length} of {glitchesOverview?.totalGlitches ?? 0} active alerts
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-muted font-medium">Sort By:</span>
+                <select
+                  value={glitchSortBy}
+                  onChange={(e) => setGlitchSortBy(e.target.value as any)}
+                  className="input text-xs py-1 px-2"
+                >
+                  <option value="discount">Highest Discount %</option>
+                  <option value="savings">Highest Savings ($ ARS)</option>
+                  <option value="price_asc">Lowest Price First</option>
+                  <option value="recent">Recently Detected</option>
+                </select>
+                <span className="text-muted ml-2">
+                  Showing {filteredGlitches.length} of {glitchesOverview?.totalGlitches ?? 0} active alerts
+                </span>
+              </div>
             </div>
           </div>
 

@@ -26,6 +26,7 @@ import {
   calculateBestSavings,
   getPriceGlitches,
   verifyPriceGlitch,
+  verifyPromotionUrl,
 } from '../promociones/engine.js';
 import {
   listDirectory,
@@ -1449,6 +1450,13 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
   app.post('/promociones/glitches/refresh', async (): Promise<PriceGlitchOverview> => {
     return getPriceGlitches(true);
+  });
+
+  app.post('/promociones/:id/verify-url', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const item = await verifyPromotionUrl(id);
+    if (!item) return reply.code(404).send({ error: 'Promotion item not found' });
+    return item;
   });
 
   app.post('/promociones/glitches/:id/verify', async (req, reply) => {
