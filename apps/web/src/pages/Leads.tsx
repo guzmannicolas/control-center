@@ -47,7 +47,7 @@ export const PRESET_AREAS = [
 ];
 
 const DEFAULT_PITCH_TEMPLATE =
-  'Buenas! Che te escribo por acá porque vi su negocio en {city} y me gustó mucho lo que hacen. Yo me dedico al desarrollo de páginas web y vi que todavía no tienen una propia. Les armé una maqueta de muestra para que vean cómo quedaría: {demo} El costo es mínimo, alrededor de 45 o 50 mil pesos al año nada más de mantenimiento y hosting para tenerla activa. Mírenla tranquilos y si les sirve o quieren adaptarla con sus fotos y servicios me avisan, cero compromiso!';
+  'Buenas! Che te escribo por acá porque vi su negocio y me gustó mucho lo que hacen. Te cuento: soy desarrollador y esto lo hago como un plus mientras tanto para darle una mano a negocios y que tengan más exposición en Google. Vi que todavía no tienen página web propia, así que les armé una demo de muestra para su rubro: {demo} Como la idea es ayudarlos el costo es mínimo: unos 45 o 50 mil pesos al año nada más para cubrir el hosting y mantenerla activa. Mírenla tranquilos y si les sirve o quieren adaptarla con sus fotos y servicios me avisan, cero compromiso!';
 
 export function LeadsPage() {
   const [leads, setLeads] = useState<LeadView[]>([]);

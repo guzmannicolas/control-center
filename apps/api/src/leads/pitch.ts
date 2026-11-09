@@ -19,32 +19,36 @@ export interface GeneratedPitch {
 // Sincere, human pitch templates tailored for direct Instagram DMs from a personal profile
 export const COLD_PITCH_VARIANTS = [
   (ctx: PitchVariableContext) =>
-    `Buenas! Che te escribo por acá porque vi su negocio en ${ctx.city} y me gustó mucho lo que hacen. ` +
-    `Yo me dedico a hacer páginas web y vi que todavía no tienen una propia. Les armé una maqueta de muestra para que vean cómo quedaría: ` +
+    `Buenas! Che te escribo por acá porque vi su negocio y me gustó mucho lo que hacen. ` +
+    `Te cuento: soy desarrollador y esto lo hago como un plus mientras tanto para darle una mano a negocios y que tengan más exposición en Google. ` +
+    `Vi que todavía no tienen página web propia, así que les armé una demo de muestra para su rubro: ` +
     `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
-    `El costo es mínimo, alrededor de 45 o 50 mil pesos al año nada más de mantenimiento y hosting para tenerla activa. ` +
+    `Como la idea es ayudarlos el costo es mínimo: unos 45 o 50 mil pesos al año nada más para cubrir el hosting y mantenerla activa. ` +
     `Mírenla tranquilos y si les sirve o quieren adaptarla con sus fotos y servicios me avisan, cero compromiso!`,
 
   (ctx: PitchVariableContext) =>
-    `Hola gente de ${ctx.name}! ¿Cómo andan? Les escribo desde mi cuenta personal porque me dedico a armar páginas web y buscando en ${ctx.city} di con su local. ` +
-    `Noté que no tienen sitio web propio y les armé una demo rápida para su rubro: ` +
+    `Buenas! Qué tal? Vi lo que hacen en ${ctx.name} y me pareció muy bueno. ` +
+    `Te cuento: trabajo como desarrollador y en mis tiempos libres aprovecho para darles una mano a comercios de acá para que tengan presencia en Google. ` +
+    `Vi que no tienen web oficial y les armé una maqueta interactiva de muestra: ` +
     `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
-    `La idea es darles una mano para que tengan más exposición y clientes directos. Cobro algo súper accesible (unos 40/50k al año por el mantenimiento y hosting anual). ` +
-    `Si les copa la idea avísenme y lo charlamos!`,
+    `Hago esto como un plus y el costo es ínfimo (alrededor de 45 o 50 mil pesos al año nada más por el hosting). ` +
+    `Mírenla sin compromiso y si les interesa me avisan!`,
 
   (ctx: PitchVariableContext) =>
-    `Buenas! Todo bien? Les mando un mensajito porque trabajo de diseñar sitios web y suelo armarle páginas a comercios locales. ` +
-    `Vi que tienen muy buenas opiniones pero no tienen web oficial, así que les preparé esta propuesta de muestra: ` +
+    `Hola gente de ${ctx.name}! ¿Cómo andan? Les escribo desde mi cuenta personal. ` +
+    `Soy desarrollador y me gusta ayudar a comercios y locales a ganar exposición online con una web propia. ` +
+    `Les preparé esta demo de ejemplo rápida para su rubro: ` +
     `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
-    `No busco cobrar locuras, con algo de 45 o 50 mil pesos al año para cubrir el hosting y mantenerla activa alcanza. ` +
-    `Si les interesa sumar visibilidad me avisan y la ajustamos con lo que necesiten!`,
+    `Es un plus que hago para dar una mano, por eso solo cobro lo básico del hosting anual (unos 40/50k al año). ` +
+    `Si les copa avísenme y la adaptamos con lo que necesiten!`,
 
   (ctx: PitchVariableContext) =>
-    `Hola! Qué tal? Vi lo que hacen en ${ctx.name} y me pareció buenísimo. ` +
-    `Como trabajo haciendo páginas web, me tomé el atrevimiento de armarles una demo interactiva de ejemplo para ver cómo se vería su sitio: ` +
+    `Buenas! Todo bien? Les escribo porque vi su negocio y me pareció genial lo que hacen. ` +
+    `Trabajo de programador y esto lo hago como un plus mientras tanto para ayudar a comercios a sumar clientes desde Google. ` +
+    `Les armé una demo interactiva de cómo quedaría su página: ` +
     `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
-    `El costo de mantenimiento es ínfimo (alrededor de 40 a 50k al año nada más). ` +
-    `Si tienen ganas de ver cómo quedaría con su información avísenme, ninguna presión!`,
+    `El costo es solo para mantenerla online (unos 45/50k anuales). ` +
+    `Chusméenla tranquilos y si les sirve me escriben, ninguna presión!`,
 ];
 
 // Follow-up pitch variants (for leads contacted 3+ days ago without reply)
@@ -81,7 +85,7 @@ Datos:
 - Demo: ${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'}
 
 Objetivo: Preguntar cordialmente si pudieron chusmear la demo sin presionar. Tono de persona real (voseo argentino natural: pudiste, avisame, etc.). CERO emojis, cero tono bot, cero corporativo.`
-        : `Redactá un mensaje de prospección sincero, conciso y cercano (máximo 55 palabras) para enviar por mensaje directo de Instagram desde un perfil personal (no una empresa o agencia).
+        : `Redactá un mensaje de prospección sincero, conciso y cercano (máximo 60 palabras) para enviar por mensaje directo de Instagram desde un perfil personal.
 Datos:
 - Negocio: ${ctx.name}
 - Rubro: ${ctx.category}
@@ -89,12 +93,12 @@ Datos:
 - Demo preparada: ${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'}
 
 Puntos clave:
-1. Saludo natural y cercano.
-2. Contar con total transparencia que te dedicás a hacer páginas web y viste que en Google Maps no tienen sitio oficial.
-3. Decirles que les armaste una maqueta de muestra para su rubro y dejar el link: ${ctx.suggestedDemo ?? ''}
-4. Mencionar que el costo es ínfimo (alrededor de 45 o 50 mil pesos al año nada más de mantenimiento y hosting anual).
-5. Despedida abierta y sin compromiso (que la miren tranquilos y si les sirve te avisan).
-Tono: 100% humano argentino, voseo natural. CERO emojis. Prohibido sonar a IA o a vendedor corporativo.`;
+1. Saludo natural de persona a negocio local.
+2. Contar con total transparencia que sos desarrollador y que esto lo hacés como un plus mientras tanto para ayudar y darle una mano a negocios locales a tener más exposición en Google.
+3. Mencionar que viste que no tienen web propia y les armaste una maqueta interactiva de muestra: ${ctx.suggestedDemo ?? ''}
+4. Dejar claro que como la idea es ayudarlos, el costo es mínimo: unos 45 o 50 mil pesos al año nada más para cubrir el hosting y mantenerla activa.
+5. Cierre sin presión (que la miren tranquilos y si les sirve o quieren adaptarla con sus fotos te avisan).
+Tono: 100% humano argentino, voseo natural (che, te armé, avísame). CERO emojis. Prohibido sonar a IA o a vendedor corporativo.`;
 
       const res = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
