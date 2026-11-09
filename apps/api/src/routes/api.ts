@@ -87,6 +87,7 @@ import {
   getBackupDownloadStream,
   getVpsStatus,
   runVpsCleanup,
+  getVpsSecurityAudit,
   type BackupConfig,
   type DiscoveredDatabaseTarget,
 } from '../ops.js';
@@ -674,6 +675,10 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   // --- VPS Health & Cleanup ------------------------------------------------------------------------
   app.get('/vps/status', async () => {
     return getVpsStatus();
+  });
+
+  app.get('/vps/security', async () => {
+    return getVpsSecurityAudit();
   });
 
   const CleanupBody = z.object({

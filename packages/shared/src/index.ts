@@ -782,6 +782,9 @@ export interface PriceGlitchItem {
   sourceChannel: string;
   detectedAt: string;
   verifiedActive: boolean;
+  httpStatus?: number;
+  httpVerifiedAt?: string;
+  httpResponseTimeMs?: number;
   notes?: string;
 }
 
@@ -791,3 +794,38 @@ export interface PriceGlitchOverview {
   glitches: PriceGlitchItem[];
   lastCheckedAt: string;
 }
+
+// --- VPS Security Audit & Hardening -------------------------------------------------------------
+
+export type SecuritySeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+export type SecurityCheckStatus = 'pass' | 'warn' | 'fail';
+
+export interface SecurityCheckItem {
+  id: string;
+  category: 'ssh' | 'firewall' | 'network' | 'docker' | 'system' | 'auth';
+  title: string;
+  status: SecurityCheckStatus;
+  severity: SecuritySeverity;
+  summary: string;
+  details: string;
+  remediation?: string;
+}
+
+export interface VpsSecurityAudit {
+  score: number;
+  evaluatedAt: string;
+  hostname: string;
+  osInfo: {
+    distro: string;
+    kernel: string;
+    arch: string;
+  };
+  summary: {
+    total: number;
+    passed: number;
+    warned: number;
+    failed: number;
+  };
+  checks: SecurityCheckItem[];
+}
+

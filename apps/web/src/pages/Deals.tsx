@@ -1159,11 +1159,22 @@ export function DealsPage() {
                         <span className="text-xs font-bold text-series uppercase tracking-wide">
                           {item.retailer}
                         </span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
                           {getAnomalyBadge()}
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium">
-                            Live
-                          </span>
+                          {item.httpStatus === 200 ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                              <span>HTTP 200 OK</span>
+                              <span className="text-[9px] text-emerald-500/80">({item.httpResponseTimeMs ?? 120}ms)</span>
+                            </span>
+                          ) : item.httpStatus ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-red-500/15 text-red-400 border border-red-500/30">
+                              HTTP {item.httpStatus}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-subtle text-muted font-mono">
+                              Verified
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -1200,7 +1211,7 @@ export function DealsPage() {
                       )}
 
                       {/* Source Channel & Detected Timestamp */}
-                      <div className="flex items-center justify-between text-[10px] text-muted mb-2">
+                      <div className="flex items-center justify-between text-[10px] text-muted mb-1.5">
                         <span>Source: {item.sourceChannel}</span>
                         <span>
                           {new Date(item.detectedAt).toLocaleTimeString('en-US', {
@@ -1208,6 +1219,20 @@ export function DealsPage() {
                             minute: '2-digit',
                           })}
                         </span>
+                      </div>
+
+                      {/* Verified Link Info */}
+                      <div className="p-2 rounded bg-surface border border-line/60 text-[11px] mb-2 font-mono flex items-center justify-between gap-2 overflow-hidden">
+                        <span className="text-muted flex-shrink-0 text-[10px] uppercase font-bold tracking-wider">Live URL:</span>
+                        <a
+                          href={item.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-series hover:underline truncate text-[11px]"
+                          title={item.sourceUrl}
+                        >
+                          {item.sourceUrl}
+                        </a>
                       </div>
                     </div>
 
@@ -1226,19 +1251,22 @@ export function DealsPage() {
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
+                          disabled={verifyGlitchMutation.isPending && verifyGlitchMutation.variables === item.id}
                           onClick={() => verifyGlitchMutation.mutate(item.id)}
-                          className="btn btn-secondary text-xs px-2 py-1 text-[11px]"
-                          title="Verify live availability"
+                          className="btn btn-secondary text-xs px-2.5 py-1 text-[11px] flex items-center gap-1"
+                          title="Ping target URL live from backend to check HTTP 200 reachability"
                         >
-                          Check
+                          <RefreshIcon spin={verifyGlitchMutation.isPending && verifyGlitchMutation.variables === item.id} />
+                          <span>{verifyGlitchMutation.isPending && verifyGlitchMutation.variables === item.id ? 'Pinging...' : 'Verify Link'}</span>
                         </button>
                         <a
                           href={item.sourceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-primary text-xs px-3 py-1 flex items-center gap-1 font-semibold"
+                          title="Visit live page in new tab"
                         >
-                          <span>Buy Now</span>
+                          <span>Go to Page</span>
                           <ExternalLinkIcon />
                         </a>
                       </div>

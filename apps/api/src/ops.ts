@@ -1010,3 +1010,6 @@ export async function runVpsCleanup(target: 'docker' | 'vscode' | 'caches' | 'al
     };
   }
 }
+
+export { getVpsSecurityAudit } from './vps/security.js';
+
