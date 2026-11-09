@@ -999,10 +999,10 @@ export function MarketingPage() {
         </div>
       )}
 
-      {/* Navigation Sub-Tabs */}
+      {/* Navigation Sub-Tabs (Mobile view, desktop uses left submenu) */}
       <div
+        className="flex md:hidden overflow-x-auto border-b border-line gap-2 mb-6"
         style={{
-          display: 'flex',
           borderBottom: '1px solid var(--border)',
           gap: '8px',
           marginBottom: '24px',

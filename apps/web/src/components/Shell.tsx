@@ -278,68 +278,157 @@ export function Shell({ user }: { user: User }) {
       {/* =========================================================================
           DESKTOP SIDEBAR NAVIGATION (md+)
           ========================================================================= */}
-      <nav
-        aria-label="Sections"
-        className="sticky top-0 z-20 hidden border-line bg-page/95 backdrop-blur md:flex md:h-dvh md:w-56 md:shrink-0 md:flex-col md:border-r"
-      >
-        <div className="flex items-center gap-2 px-5 pt-6 pb-4">
-          <span
-            aria-hidden
-            className="size-2.5 rounded-full bg-good shadow-[0_0_8px_rgba(12,163,12,0.6)]"
-          />
-          <span className="font-semibold">Control Center</span>
-        </div>
+      {(() => {
+        const isMarketing = path.startsWith('/marketing');
+        const search = useSearch();
+        const searchParams = new URLSearchParams(search);
+        const activeTab = searchParams.get('tab') || 'creative';
 
-        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-4">
-          {SECTION_GROUPS.map((group) => {
-            const groupSections = group.paths
-              .map((p) => SECTIONS.find((s) => s.path === p))
-              .filter((s): s is Section => Boolean(s));
+        return (
+          <>
+            {/* Primary Rail: Compact icon-only when in Marketing, full width otherwise */}
+            <nav
+              aria-label="Sections"
+              className={`sticky top-0 z-20 hidden border-line bg-page/95 backdrop-blur md:flex md:h-dvh md:shrink-0 md:flex-col md:border-r transition-all duration-200 ${
+                isMarketing ? 'md:w-16 items-center' : 'md:w-56'
+              }`}
+            >
+              <div className={`flex items-center gap-2 pt-6 pb-4 w-full ${isMarketing ? 'justify-center px-0' : 'px-5'}`}>
+                <span
+                  aria-hidden
+                  className="size-2.5 rounded-full bg-good shadow-[0_0_8px_rgba(12,163,12,0.6)]"
+                />
+                {!isMarketing && <span className="font-semibold text-sm">Control Center</span>}
+              </div>
 
-            return (
-              <div key={group.title}>
-                <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted">
-                  {group.title}
+              <div className={`flex-1 overflow-y-auto w-full ${isMarketing ? 'px-2 space-y-2' : 'px-3 py-2 space-y-4'}`}>
+                {SECTION_GROUPS.map((group) => {
+                  const groupSections = group.paths
+                    .map((p) => SECTIONS.find((s) => s.path === p))
+                    .filter((s): s is Section => Boolean(s));
+
+                  return (
+                    <div key={group.title}>
+                      {!isMarketing && (
+                        <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted">
+                          {group.title}
+                        </div>
+                      )}
+                      <ul className="space-y-0.5">
+                        {groupSections.map(({ path: to, label, Icon }) => {
+                          const active = to === current?.path;
+                          return (
+                            <li key={to}>
+                              <Link
+                                to={to}
+                                title={label}
+                                aria-current={active ? 'page' : undefined}
+                                className={`flex items-center rounded-lg text-xs transition ${
+                                  isMarketing
+                                    ? `size-10 justify-center mx-auto ${
+                                        active
+                                          ? 'bg-surface font-semibold text-series ring-1 ring-series shadow-sm'
+                                          : 'text-ink-2 hover:bg-surface hover:text-ink'
+                                      }`
+                                    : `gap-2.5 px-3 py-1.5 whitespace-nowrap ${
+                                        active
+                                          ? 'bg-surface font-semibold text-ink shadow-sm ring-1 ring-line'
+                                          : 'text-ink-2 hover:bg-grid/50 hover:text-ink font-medium'
+                                      }`
+                                }`}
+                              >
+                                <Icon />
+                                {!isMarketing && <span>{label}</span>}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className={`mt-auto border-t border-line text-sm w-full ${isMarketing ? 'py-4 flex flex-col items-center' : 'px-5 py-4'}`}>
+                {!isMarketing ? (
+                  <>
+                    <div className="truncate text-ink-2 text-xs" title={user.email}>
+                      {user.email}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => logout.mutate()}
+                      className="mt-1 text-ink-2 hover:text-ink hover:underline text-xs"
+                    >
+                      Sign out
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    title={`Signed in as ${user.email} - Click to sign out`}
+                    onClick={() => logout.mutate()}
+                    className="size-8 flex items-center justify-center rounded-lg text-muted hover:text-critical hover:bg-surface text-xs"
+                  >
+                    <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </nav>
+
+            {/* Dedicated Marketing Submenu Sidebar (shown on desktop when in /marketing) */}
+            {isMarketing && (
+              <aside
+                aria-label="Marketing Submenu"
+                className="sticky top-0 z-19 hidden md:flex md:h-dvh md:w-60 md:shrink-0 md:flex-col border-r border-line bg-surface/30 backdrop-blur"
+              >
+                <div className="px-4 pt-6 pb-4 border-b border-line">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs tracking-wider uppercase text-ink">Marketing Hub</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-series/15 text-series font-mono font-bold">nikipeppers</span>
+                  </div>
+                  <div className="text-[11px] text-muted mt-0.5">Growth & Ads Engine</div>
                 </div>
-                <ul className="space-y-0.5">
-                  {groupSections.map(({ path: to, label, Icon }) => {
-                    const active = to === current?.path;
+
+                <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
+                  {MARKETING_SUBMENU.map((item) => {
+                    const isSelected = activeTab === item.tab;
                     return (
-                      <li key={to}>
-                        <Link
-                          to={to}
-                          aria-current={active ? 'page' : undefined}
-                          className={`flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs whitespace-nowrap transition ${
-                            active
-                              ? 'bg-surface font-semibold text-ink shadow-sm ring-1 ring-line'
-                              : 'text-ink-2 hover:bg-grid/50 hover:text-ink font-medium'
-                          }`}
-                        >
-                          <Icon />
-                          {label}
-                        </Link>
-                      </li>
+                      <button
+                        key={item.tab}
+                        type="button"
+                        onClick={() => navigate(`/marketing?tab=${item.tab}`)}
+                        className={`w-full text-left flex items-start gap-3 rounded-lg px-3 py-2.5 transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-surface font-semibold text-ink shadow-sm ring-1 ring-line'
+                            : 'text-ink-2 hover:bg-surface/60 hover:text-ink'
+                        }`}
+                      >
+                        <span className={`mt-0.5 ${isSelected ? 'text-series' : 'text-muted'}`}>
+                          {item.icon}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-medium leading-tight flex items-center justify-between">
+                            <span>{item.label}</span>
+                            {isSelected && <span className="size-1.5 rounded-full bg-series" />}
+                          </div>
+                          <div className="text-[10.5px] text-muted mt-0.5 leading-tight truncate">
+                            {item.desc}
+                          </div>
+                        </div>
+                      </button>
                     );
                   })}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-auto border-t border-line px-5 py-4 text-sm">
-          <div className="truncate text-ink-2" title={user.email}>
-            {user.email}
-          </div>
-          <button
-            type="button"
-            onClick={() => logout.mutate()}
-            className="mt-1 text-ink-2 hover:text-ink hover:underline text-xs"
-          >
-            Sign out
-          </button>
-        </div>
-      </nav>
+                </div>
+              </aside>
+            )}
+          </>
+        );
+      })()}
 
       {/* =========================================================================
           MAIN CONTENT AREA
