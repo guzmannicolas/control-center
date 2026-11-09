@@ -114,6 +114,21 @@ export function MarketingPage() {
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [editingDraftCaption, setEditingDraftCaption] = useState<string>('');
 
+  // Collapsible overview cards
+  const [overviewCardsOpen, setOverviewCardsOpen] = useState(false);
+
+  // Add Brand Account state
+  const [showAddBrandModal, setShowAddBrandModal] = useState(false);
+  const [newBrandName, setNewBrandName] = useState('');
+  const [newBrandSlug, setNewBrandSlug] = useState('');
+  const [newBrandWebsite, setNewBrandWebsite] = useState('');
+  const [newBrandTone, setNewBrandTone] = useState('Professional, approachable, and authentic');
+  const [newBrandInstagram, setNewBrandInstagram] = useState('');
+  const [newBrandWhatsapp, setNewBrandWhatsapp] = useState('');
+  const [newBrandAudience, setNewBrandAudience] = useState('');
+  const [newBrandDossier, setNewBrandDossier] = useState('');
+  const [creatingBrand, setCreatingBrand] = useState(false);
+
   // Ad Campaign creation
   const [showCreateCampaignModal, setShowCreateCampaignModal] = useState(false);
   const [newCampName, setNewCampName] = useState('');
@@ -417,6 +432,49 @@ export function MarketingPage() {
       alert(err.message || 'Failed to audit campaigns');
     } finally {
       setAuditingAds(false);
+    }
+  };
+
+  const handleCreateBrand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBrandName.trim() || !newBrandWebsite.trim()) {
+      showToast('Brand name and website are required');
+      return;
+    }
+    const slug = (newBrandSlug.trim() || newBrandName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')).trim();
+    if (!slug) {
+      showToast('A valid slug is required');
+      return;
+    }
+    setCreatingBrand(true);
+    try {
+      const res = await api.marketingUpsertBrand({
+        name: newBrandName.trim(),
+        slug,
+        website: newBrandWebsite.trim(),
+        toneOfVoice: newBrandTone.trim() || 'Authentic and professional',
+        instagramHandle: newBrandInstagram.trim().replace(/^@/, '') || undefined,
+        whatsappNumber: newBrandWhatsapp.trim() || undefined,
+        targetAudience: newBrandAudience.trim() || undefined,
+        dossierMd: newBrandDossier.trim() || undefined,
+      });
+      showToast(`Brand ${res.brand.name} created successfully`);
+      setShowAddBrandModal(false);
+      setNewBrandName('');
+      setNewBrandSlug('');
+      setNewBrandWebsite('');
+      setNewBrandInstagram('');
+      setNewBrandWhatsapp('');
+      setNewBrandAudience('');
+      setNewBrandDossier('');
+      const brandsData = await api.marketingBrands();
+      setBrands(brandsData.brands);
+      setSelectedBrandSlug(res.brand.slug);
+      await loadData(res.brand.slug);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to create brand');
+    } finally {
+      setCreatingBrand(false);
     }
   };
 
@@ -803,6 +861,25 @@ export function MarketingPage() {
 
             <button
               type="button"
+              onClick={() => setShowAddBrandModal(true)}
+              style={{
+                background: '#16a34a',
+                color: '#ffffff',
+                border: 'none',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+              title="Add a new brand account"
+            >
+              + Add Account
+            </button>
+
+            <button
+              type="button"
               onClick={() => void openDossierModal()}
               style={{
                 background: 'var(--surface)',
@@ -866,16 +943,49 @@ export function MarketingPage() {
         </div>
       </div>
 
-      {/* Overview Cards & Safety Guardrails Strip */}
-      {overview && (
-        <div
+      {/* Overview Metrics Bar (Collapsible/Desplegable) */}
+      <div style={{ marginBottom: '20px' }}>
+        <button
+          type="button"
+          onClick={() => setOverviewCardsOpen(!overviewCardsOpen)}
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '16px',
-            marginBottom: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            color: 'var(--ink)',
+            cursor: 'pointer',
+            fontSize: '13px',
           }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Metrics & Guardrails Summary
+            </span>
+            {overview && (
+              <span style={{ fontSize: '12.5px', color: 'var(--ink-2)' }}>
+                Daily Budget: <strong style={{ color: 'var(--ink)' }}>${overview.ads.totalDailyBudget.toFixed(2)}</strong> / max ${overview.ads.safetyGuardrailTotal.toFixed(2)} · ROAS: <strong style={{ color: '#2563eb' }}>${overview.ads.avgRoas.toFixed(2)}x</strong> · Pending Approvals: <strong style={{ color: overview.social.pendingApprovalsCount > 0 ? '#f59e0b' : 'var(--ink)' }}>${overview.social.pendingApprovalsCount}</strong>
+              </span>
+            )}
+          </div>
+          <span style={{ fontSize: '12px', fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap', marginLeft: '12px' }}>
+            {overviewCardsOpen ? 'Hide Metrics ▲' : 'Show Metrics ▼'}
+          </span>
+        </button>
+
+        {overviewCardsOpen && overview && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '16px',
+              marginTop: '12px',
+            }}
+          >
           <div
             style={{
               background: 'var(--surface)',
@@ -997,7 +1107,8 @@ export function MarketingPage() {
             </div>
           </div>
         </div>
-      )}
+        )}
+      </div>
 
       {/* Navigation Sub-Tabs (Mobile view, desktop uses left submenu) */}
       <div
@@ -2453,6 +2564,847 @@ export function MarketingPage() {
         </div>
       )}
 
+      {/* TAB 5: INBOX & AUTONOMOUS CHAT ASSISTANT */}
+      {activeTab === 'chat' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px' }}>
+          {/* Left: Threads list */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              height: '750px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700 }}>Direct Inquiries</h3>
+              <button
+                onClick={() => {
+                  setSelectedConversationId(null);
+                  setChatInputMessage('');
+                  showToast('New simulated inquiry thread ready');
+                }}
+                style={{
+                  background: 'none',
+                  border: '1px solid var(--border)',
+                  borderRadius: '4px',
+                  color: 'var(--ink)',
+                  fontSize: '11px',
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                + New Thread
+              </button>
+            </div>
+
+            {/* Auto reply switch */}
+            <div
+              style={{
+                padding: '12px',
+                background: 'var(--page)',
+                borderRadius: '6px',
+                marginBottom: '14px',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>Autonomous AI Reply</div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
+                    Replies to customer DMs automatically
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleAutoReplyChat}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '9999px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    background: autoReplyChatActive ? '#16a34a' : 'var(--border)',
+                    color: '#ffffff',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {autoReplyChatActive ? 'ENABLED' : 'DISABLED'}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {loadingConversations ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--muted)', fontSize: '13px' }}>
+                  Loading inquiries...
+                </div>
+              ) : conversations.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 12px', color: 'var(--muted)', fontSize: '12.5px' }}>
+                  No customer inquiries yet. Type an inquiry in the simulator on the right to test autonomous responses.
+                </div>
+              ) : (
+                conversations.map((conv) => {
+                  const isSelected = selectedConversationId === conv.id;
+                  const lastMsg = conv.messages[conv.messages.length - 1];
+                  return (
+                    <div
+                      key={conv.id}
+                      onClick={() => setSelectedConversationId(conv.id)}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '6px',
+                        background: isSelected ? 'rgba(37, 99, 235, 0.08)' : 'var(--page)',
+                        border: isSelected ? '1px solid #2563eb' : '1px solid var(--border)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '13px' }}>{conv.customerName || conv.customerHandle}</span>
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'rgba(255, 255, 255, 0.06)',
+                            color: 'var(--muted)',
+                          }}
+                        >
+                          {conv.platform}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          color: 'var(--muted)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {lastMsg ? `${lastMsg.role === 'customer' ? 'Client: ' : 'AI: '}${lastMsg.content}` : 'No messages'}
+                      </div>
+                      <div style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '4px', textAlign: 'right' }}>
+                        {new Date(conv.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Right: Active Chat & Simulator */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              height: '750px',
+            }}
+          >
+            {/* Header info */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingBottom: '16px',
+                borderBottom: '1px solid var(--border)',
+                marginBottom: '16px',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
+                    {selectedConversationId
+                      ? conversations.find((c) => c.id === selectedConversationId)?.customerName || 'Client Conversation'
+                      : 'Community Manager DM Simulator'}
+                  </h3>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      padding: '2px 8px',
+                      borderRadius: '9999px',
+                      background: 'rgba(34, 197, 94, 0.15)',
+                      color: '#22c55e',
+                      fontWeight: 600,
+                    }}
+                  >
+                    AI Grounded in Dossier & Style Playbook
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>
+                  Policy: Warm consultation routing to ${overview?.brand?.website || 'brand website'}, no arbitrary quotes, zero emojis strictly enforced.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={simulatedCustomerName}
+                  onChange={(e) => setSimulatedCustomerName(e.target.value)}
+                  placeholder="Customer Name"
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '12px',
+                    width: '140px',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Messages Stream */}
+            <div
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                paddingRight: '6px',
+                marginBottom: '16px',
+              }}
+            >
+              {(() => {
+                const activeConv = conversations.find((c) => c.id === selectedConversationId);
+                const msgs = activeConv ? activeConv.messages : [];
+
+                if (msgs.length === 0) {
+                  return (
+                    <div style={{ margin: 'auto', textAlign: 'center', maxWidth: '420px', color: 'var(--muted)' }}>
+                      <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)' }}>
+                        Interactive Community Manager Simulator
+                      </p>
+                      <p style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                        Simulate how the autonomous AI assistant responds to potential clients, product inquiries, or booking questions for <strong>${overview?.brand?.name || 'this brand'}</strong>.
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'center', marginTop: '14px' }}>
+                        {[
+                          'Cuanto cuesta un servicio / producto?',
+                          'Tenes turnos o disponibilidad para la semana que viene?',
+                          'Haces envios a todo el pais?',
+                          'Hola, me gustaria consultar sobre un pedido personalizado.',
+                        ].map((promptText) => (
+                          <button
+                            key={promptText}
+                            type="button"
+                            onClick={() => setChatInputMessage(promptText)}
+                            style={{
+                              background: 'var(--page)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '4px',
+                              padding: '6px 10px',
+                              fontSize: '11.5px',
+                              color: 'var(--ink)',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                            }}
+                          >
+                            {promptText}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return msgs.map((m, idx) => {
+                  const isClient = m.role === 'customer';
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        alignSelf: isClient ? 'flex-start' : 'flex-end',
+                        maxWidth: '75%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: isClient ? 'flex-start' : 'flex-end',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: 'var(--muted)',
+                          marginBottom: '3px',
+                          display: 'flex',
+                          gap: '6px',
+                        }}
+                      >
+                        <span>{isClient ? activeConv?.customerName || 'Client' : 'Studio Assistant (AI)'}</span>
+                        <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <div
+                        style={{
+                          padding: '12px 16px',
+                          borderRadius: '8px',
+                          background: isClient ? 'var(--page)' : '#1e3a8a',
+                          color: isClient ? 'var(--ink)' : '#ffffff',
+                          border: isClient ? '1px solid var(--border)' : '1px solid #2563eb',
+                          fontSize: '13.5px',
+                          lineHeight: '1.5',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {m.content}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Input Bar */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={chatInputMessage}
+                disabled={sendingChatMessage}
+                onChange={(e) => setChatInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSendChatMessage();
+                  }
+                }}
+                placeholder="Type customer message or inquiry..."
+                style={{
+                  flex: 1,
+                  padding: '12px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--page)',
+                  color: 'var(--ink)',
+                  fontSize: '13.5px',
+                }}
+              />
+              <button
+                type="button"
+                disabled={sendingChatMessage || !chatInputMessage.trim()}
+                onClick={handleSendChatMessage}
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: '6px',
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: '13.5px',
+                  fontWeight: 600,
+                  cursor: sendingChatMessage || !chatInputMessage.trim() ? 'not-allowed' : 'pointer',
+                  opacity: sendingChatMessage || !chatInputMessage.trim() ? 0.6 : 1,
+                }}
+              >
+                {sendingChatMessage ? 'Generating...' : 'Send Inquiry'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: INTEGRATIONS & CREDENTIALS CONFIGURATION */}
+      {activeTab === 'integrations' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1000px' }}>
+          {/* Top Autonomy Switches */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '20px',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '20px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 700 }}>Autonomous Social Publishing</div>
+                <div style={{ fontSize: '12.5px', color: 'var(--muted)', marginTop: '4px' }}>
+                  Automatically publishes post to Instagram/Facebook upon owner approval or schedule.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleToggleAutoPublish}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '9999px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  background: autoPublishActive ? '#16a34a' : 'var(--border)',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {autoPublishActive ? 'ACTIVE' : 'INACTIVE'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 700 }}>Autonomous AI DM Auto-Reply</div>
+                <div style={{ fontSize: '12.5px', color: 'var(--muted)', marginTop: '4px' }}>
+                  Replies directly to incoming DMs using Brand Dossier and Style Playbook rules.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleToggleAutoReplyChat}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '9999px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  background: autoReplyChatActive ? '#16a34a' : 'var(--border)',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {autoReplyChatActive ? 'ACTIVE' : 'INACTIVE'}
+              </button>
+            </div>
+          </div>
+
+          {/* Section 1: Meta Graph API (Instagram & Facebook) */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '20px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Meta Graph API (Instagram & Facebook)</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
+                  Used for autonomous publishing of posts, carousels, and reels, plus reading DM webhooks.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={testingChannel === 'INSTAGRAM'}
+                onClick={() => handleTestIntegration('INSTAGRAM')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '4px',
+                  background: 'none',
+                  border: '1px solid var(--border)',
+                  color: 'var(--ink)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {testingChannel === 'INSTAGRAM' ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                  Meta Page Access Token (Permanent / Long-lived)
+                </label>
+                <input
+                  type="password"
+                  value={String(integrationsForm.metaAccessToken || integrationsForm.metaPageAccessToken || '')}
+                  onChange={(e) =>
+                    setIntegrationsForm((prev) => ({
+                      ...prev,
+                      metaAccessToken: e.target.value,
+                      metaPageAccessToken: e.target.value,
+                    }))
+                  }
+                  placeholder="EAAGm..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                  Instagram Business Account ID
+                </label>
+                <input
+                  type="text"
+                  value={String(integrationsForm.instagramAccountId || integrationsForm.metaInstagramAccountId || '')}
+                  onChange={(e) =>
+                    setIntegrationsForm((prev) => ({
+                      ...prev,
+                      instagramAccountId: e.target.value,
+                      metaInstagramAccountId: e.target.value,
+                    }))
+                  }
+                  placeholder="17841400000000000"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                  Facebook Page ID
+                </label>
+                <input
+                  type="text"
+                  value={String(integrationsForm.facebookPageId || integrationsForm.metaPageId || '')}
+                  onChange={(e) =>
+                    setIntegrationsForm((prev) => ({
+                      ...prev,
+                      facebookPageId: e.target.value,
+                      metaPageId: e.target.value,
+                    }))
+                  }
+                  placeholder="109283746501928"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                  Meta Ads Account ID (act_xxxxxxxxxx)
+                </label>
+                <input
+                  type="text"
+                  value={String(integrationsForm.metaAdsAccountId || '')}
+                  onChange={(e) => setIntegrationsForm((prev) => ({ ...prev, metaAdsAccountId: e.target.value }))}
+                  placeholder="act_1234567890"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Telegram Bot (Mobile Owner Notifications & 1-Click Approvals) */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '20px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Telegram Bot (1-Click Mobile Approvals)</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
+                  Sends rich post previews with inline keyboard action buttons [Approve] and [Reject] directly to the brand owner.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={testingChannel === 'TELEGRAM'}
+                onClick={() => handleTestIntegration('TELEGRAM')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '4px',
+                  background: 'none',
+                  border: '1px solid var(--border)',
+                  color: 'var(--ink)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {testingChannel === 'TELEGRAM' ? 'Sending ping...' : 'Send Test Ping'}
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                  Telegram Bot Token (from @BotFather)
+                </label>
+                <input
+                  type="password"
+                  value={String(integrationsForm.telegramBotToken || '')}
+                  onChange={(e) => setIntegrationsForm((prev) => ({ ...prev, telegramBotToken: e.target.value }))}
+                  placeholder="7123456789:AAH..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                  Owner Chat ID (from @userinfobot)
+                </label>
+                <input
+                  type="text"
+                  value={String(integrationsForm.telegramOwnerChatId || overview?.brand?.telegramChatId || '')}
+                  onChange={(e) => setIntegrationsForm((prev) => ({ ...prev, telegramOwnerChatId: e.target.value }))}
+                  placeholder="123456789"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: WhatsApp Cloud API */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '20px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>WhatsApp Cloud API</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
+                  Sends interactive WhatsApp messages with quick links for one-click mobile approval and client chats.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={testingChannel === 'WHATSAPP'}
+                onClick={() => handleTestIntegration('WHATSAPP')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '4px',
+                  background: 'none',
+                  border: '1px solid var(--border)',
+                  color: 'var(--ink)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {testingChannel === 'WHATSAPP' ? 'Testing...' : 'Check Status'}
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                  WhatsApp Phone Number ID
+                </label>
+                <input
+                  type="text"
+                  value={String(integrationsForm.whatsappPhoneNumberId || '')}
+                  onChange={(e) => setIntegrationsForm((prev) => ({ ...prev, whatsappPhoneNumberId: e.target.value }))}
+                  placeholder="10582910482918"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                  Owner Destination WhatsApp Number
+                </label>
+                <input
+                  type="text"
+                  value={String(integrationsForm.whatsappOwnerNumber || overview?.brand?.whatsappNumber || '')}
+                  onChange={(e) => setIntegrationsForm((prev) => ({ ...prev, whatsappOwnerNumber: e.target.value }))}
+                  placeholder="+54911..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Webhooks & Verification */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '20px',
+            }}
+          >
+            <h3 style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 700 }}>Webhook Endpoints</h3>
+            <p style={{ margin: '0 0 16px', fontSize: '12.5px', color: 'var(--muted)' }}>
+              Configure these webhook URLs in your Meta Developer App and Telegram Bot settings:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Meta Webhook Callback URL</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value="https://control.nicoguzmandev.com/api/marketing/webhooks/whatsapp"
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--page)',
+                      color: 'var(--ink)',
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('https://control.nicoguzmandev.com/api/marketing/webhooks/whatsapp');
+                      showToast('Meta Webhook URL copied');
+                    }}
+                    style={{
+                      padding: '8px 14px',
+                      background: 'none',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      color: 'var(--ink)',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Telegram Webhook Callback URL</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value="https://control.nicoguzmandev.com/api/marketing/webhooks/telegram"
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--page)',
+                      color: 'var(--ink)',
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('https://control.nicoguzmandev.com/api/marketing/webhooks/telegram');
+                      showToast('Telegram Webhook URL copied');
+                    }}
+                    style={{
+                      padding: '8px 14px',
+                      background: 'none',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      color: 'var(--ink)',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+            <button
+              type="button"
+              disabled={savingIntegrations}
+              onClick={handleSaveIntegrations}
+              style={{
+                background: '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: savingIntegrations ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {savingIntegrations ? 'Saving Integrations...' : 'Save Integrations & Autonomy Settings'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* GENERATE DRAFT MODAL */}
       {showGenerateModal && (
         <div
@@ -3534,6 +4486,278 @@ export function MarketingPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+    
+      {/* ADD BRAND ACCOUNT MODAL */}
+      {showAddBrandModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '560px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Add New Brand / Client Account</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddBrandModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--muted)',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBrand} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                  Brand / Business Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newBrandName}
+                  onChange={(e) => {
+                    setNewBrandName(e.target.value);
+                    if (!newBrandSlug) {
+                      setNewBrandSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+                    }
+                  }}
+                  placeholder="e.g. Acme Studio, Black Lotus Tattoo, Studio 88"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13.5px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Slug (Unique Identifier) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newBrandSlug}
+                    onChange={(e) => setNewBrandSlug(e.target.value)}
+                    placeholder="e.g. acmestudio"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--page)',
+                      color: 'var(--ink)',
+                      fontSize: '13.5px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Website URL *
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={newBrandWebsite}
+                    onChange={(e) => setNewBrandWebsite(e.target.value)}
+                    placeholder="https://acmestudio.com"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--page)',
+                      color: 'var(--ink)',
+                      fontSize: '13.5px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Instagram Handle
+                  </label>
+                  <input
+                    type="text"
+                    value={newBrandInstagram}
+                    onChange={(e) => setNewBrandInstagram(e.target.value)}
+                    placeholder="@acmestudio"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--page)',
+                      color: 'var(--ink)',
+                      fontSize: '13.5px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                    Owner WhatsApp Number
+                  </label>
+                  <input
+                    type="text"
+                    value={newBrandWhatsapp}
+                    onChange={(e) => setNewBrandWhatsapp(e.target.value)}
+                    placeholder="+54911..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--page)',
+                      color: 'var(--ink)',
+                      fontSize: '13.5px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                  Tone of Voice
+                </label>
+                <input
+                  type="text"
+                  value={newBrandTone}
+                  onChange={(e) => setNewBrandTone(e.target.value)}
+                  placeholder="e.g. Modern, minimalist, warm, artistic, sophisticated"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13.5px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                  Target Audience
+                </label>
+                <input
+                  type="text"
+                  value={newBrandAudience}
+                  onChange={(e) => setNewBrandAudience(e.target.value)}
+                  placeholder="e.g. Creative professionals and design enthusiasts aged 25-45"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13.5px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
+                  Initial Brand Dossier (.md)
+                </label>
+                <textarea
+                  rows={4}
+                  value={newBrandDossier}
+                  onChange={(e) => setNewBrandDossier(e.target.value)}
+                  placeholder="# Brand Story & Values&#10;&#10;Describe your company history, philosophy, pricing methodology, and guidelines..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    fontSize: '13px',
+                    fontFamily: 'monospace',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddBrandModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--page)',
+                    color: 'var(--ink)',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingBrand}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: '#16a34a',
+                    color: '#ffffff',
+                    cursor: creatingBrand ? 'not-allowed' : 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
+                  {creatingBrand ? 'Creating Account...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
