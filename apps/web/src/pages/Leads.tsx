@@ -87,6 +87,8 @@ export function LeadsPage() {
   const [filterWithoutWeb, setFilterWithoutWeb] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteDraftText, setNoteDraftText] = useState('');
 
   const loadLeads = async () => {
     setLoading(true);
@@ -273,17 +275,119 @@ export function LeadsPage() {
     }
   };
 
+  const getFollowUpInfo = (lead: LeadView) => {
+    const followUpCount = ((lead.metadata as any)?.followUpCount as number) || 0;
+    if (lead.status !== 'contacted' || !lead.contactedAt) {
+      return { isEligible: false, days: 0, count: followUpCount, label: '' };
+    }
+    const diffMs = Date.now() - new Date(lead.contactedAt).getTime();
+    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return {
+      isEligible: days >= 3,
+      days,
+      count: followUpCount,
+      label: days === 0 ? 'Hoy' : `Hace ${days}d`,
+    };
+  };
+
+  const handleSendFollowUp = async (lead: LeadView) => {
+    try {
+      setGeneratingPitchId(lead.id);
+      const res = await fetch(`${API_BASE}/api/leads/${lead.id}/generate-pitch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ isFollowUp: true }),
+      });
+      const data = await res.json();
+      const pitch =
+        data.pitch ||
+        `Hola ${lead.name}! ¿Pudieron ver la propuesta y la demo interactiva que les armé el otro día (${lead.suggestedDemo ?? ''})? Cualquier duda me avisan!`;
+
+      await navigator.clipboard.writeText(pitch);
+      setCopiedToast(`Follow-up copiado. Pegalo en el chat de ${lead.name}`);
+      setTimeout(() => setCopiedToast(null), 5000);
+
+      const username = getInstagramUsername(lead.instagram);
+      const targetUrl = username
+        ? `https://www.instagram.com/${username}/`
+        : lead.instagram || 'https://www.instagram.com/';
+      window.open(targetUrl, '_blank');
+
+      const currentCount = ((lead.metadata as any)?.followUpCount as number) || 0;
+      const nextCount = currentCount + 1;
+      const nowIso = new Date().toISOString();
+
+      await fetch(`${API_BASE}/api/leads/${lead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          status: 'contacted',
+          contactedAt: nowIso,
+          metadata: {
+            ...lead.metadata,
+            followUpCount: nextCount,
+            lastFollowUpSentAt: nowIso,
+          },
+        }),
+      });
+
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === lead.id
+            ? {
+                ...l,
+                contactedAt: nowIso,
+                metadata: { ...l.metadata, followUpCount: nextCount },
+              }
+            : l
+        )
+      );
+    } catch (err: any) {
+      console.error('Follow-up error:', err);
+    } finally {
+      setGeneratingPitchId(null);
+    }
+  };
+
+  const handleSaveNote = async (leadId: string, noteText: string) => {
+    try {
+      await fetch(`${API_BASE}/api/leads/${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ notes: noteText }),
+      });
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, notes: noteText } : l)));
+      setEditingNoteId(null);
+      setCopiedToast('Nota guardada');
+      setTimeout(() => setCopiedToast(null), 3000);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleExportCsv = () => {
+    window.open(`${API_BASE}/api/leads/export/csv`, '_blank');
+  };
+
   // --- Filtering ---
   const filtered = leads.filter((l) => {
     if (filterWithoutWeb && l.hasWebsite) return false;
-    if (filterStatus !== 'all' && l.status !== filterStatus) return false;
+    if (filterStatus === 'needs_follow_up') {
+      if (!getFollowUpInfo(l).isEligible) return false;
+    } else if (filterStatus !== 'all' && l.status !== filterStatus) {
+      return false;
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       return (
         l.name.toLowerCase().includes(q) ||
         l.city.toLowerCase().includes(q) ||
         (l.email?.toLowerCase().includes(q) ?? false) ||
-        (l.phone?.includes(q) ?? false)
+        (l.phone?.includes(q) ?? false) ||
+        (l.notes?.toLowerCase().includes(q) ?? false)
       );
     }
     return true;
@@ -652,6 +756,26 @@ export function LeadsPage() {
           </div>
         </div>
 
+        <div
+          onClick={() => setFilterStatus(filterStatus === 'needs_follow_up' ? 'all' : 'needs_follow_up')}
+          style={{
+            background: filterStatus === 'needs_follow_up' ? '#422006' : '#0b0f19',
+            border: `1px solid ${filterStatus === 'needs_follow_up' ? '#f59e0b' : '#1e293b'}`,
+            borderRadius: '10px',
+            padding: '0.85rem',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          title="Click to filter leads waiting for follow-up"
+        >
+          <div style={{ fontSize: '0.75rem', color: '#f59e0b', textTransform: 'uppercase', fontWeight: 600 }}>
+            Needs Follow-up (3+d)
+          </div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f59e0b', marginTop: '0.2rem' }}>
+            {leads.filter((l) => getFollowUpInfo(l).isEligible).length}
+          </div>
+        </div>
+
         <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
           <div style={{ fontSize: '0.75rem', color: '#4ade80', textTransform: 'uppercase', fontWeight: 600 }}>Converted Clients</div>
           <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#4ade80', marginTop: '0.2rem' }}>
@@ -825,12 +949,34 @@ export function LeadsPage() {
             }}
           >
             <option value="all">All Statuses</option>
+            <option value="needs_follow_up">Needs Follow-up (3+ days)</option>
             {Object.entries(STATUS_BADGES).map(([st, badge]) => (
               <option key={st} value={st}>
                 {badge.label}
               </option>
             ))}
           </select>
+
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            style={{
+              background: '#1e293b',
+              border: '1px solid #334155',
+              color: '#38bdf8',
+              borderRadius: '8px',
+              padding: '0.45rem 0.85rem',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+            }}
+            title="Download CSV export of your leads"
+          >
+            Exportar CSV
+          </button>
 
           <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
             Showing: <strong style={{ color: '#f8fafc' }}>{filtered.length}</strong> / {leads.length}
@@ -1136,33 +1282,162 @@ export function LeadsPage() {
                       )}
                     </td>
 
-                    {/* Status */}
+                    {/* Status & Follow-up */}
                     <td style={{ padding: '0.65rem 1rem' }}>
-                      <select
-                        value={lead.status}
-                        onChange={(e) => void updateStatus(lead.id, e.target.value as LeadStatus)}
-                        style={{
-                          background: badge.bg,
-                          color: badge.color,
-                          border: `1px solid ${badge.border}`,
-                          borderRadius: '6px',
-                          padding: '0.2rem 0.4rem',
-                          fontSize: '0.74rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {Object.entries(STATUS_BADGES).map(([key, item]) => (
-                          <option key={key} value={key} style={{ background: '#0f172a', color: '#f8fafc' }}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                        <select
+                          value={lead.status}
+                          onChange={(e) => void updateStatus(lead.id, e.target.value as LeadStatus)}
+                          style={{
+                            background: badge.bg,
+                            color: badge.color,
+                            border: `1px solid ${badge.border}`,
+                            borderRadius: '6px',
+                            padding: '0.2rem 0.4rem',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {Object.entries(STATUS_BADGES).map(([key, item]) => (
+                            <option key={key} value={key} style={{ background: '#0f172a', color: '#f8fafc' }}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+
+                        {(() => {
+                          const fInfo = getFollowUpInfo(lead);
+                          if (!fInfo.days && !lead.contactedAt) return null;
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                              <span
+                                style={{
+                                  fontSize: '0.68rem',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  background: fInfo.isEligible ? '#451a03' : 'rgba(255,255,255,0.06)',
+                                  color: fInfo.isEligible ? '#fbbf24' : '#94a3b8',
+                                  border: `1px solid ${fInfo.isEligible ? '#b45309' : '#334155'}`,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {fInfo.label || 'Contactado'}
+                                {fInfo.count > 0 ? ` (${fInfo.count} follow-up${fInfo.count > 1 ? 's' : ''})` : ''}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </td>
+
+                    {/* Sales Notes */}
+                    <td style={{ padding: '0.65rem 1rem', maxWidth: '200px' }}>
+                      {editingNoteId === lead.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <textarea
+                            rows={2}
+                            autoFocus
+                            value={noteDraftText}
+                            onChange={(e) => setNoteDraftText(e.target.value)}
+                            placeholder="Anotar feedback..."
+                            style={{
+                              background: '#0f172a',
+                              border: '1px solid #38bdf8',
+                              color: '#f8fafc',
+                              borderRadius: '4px',
+                              padding: '0.3rem',
+                              fontSize: '0.75rem',
+                              width: '100%',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                          <div style={{ display: 'flex', gap: '0.3rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveNote(lead.id, noteDraftText)}
+                              style={{
+                                background: '#0284c7',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '3px',
+                                padding: '2px 6px',
+                                fontSize: '0.7rem',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingNoteId(null)}
+                              style={{
+                                background: 'transparent',
+                                color: '#94a3b8',
+                                border: '1px solid #334155',
+                                borderRadius: '3px',
+                                padding: '2px 6px',
+                                fontSize: '0.7rem',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => {
+                            setEditingNoteId(lead.id);
+                            setNoteDraftText(lead.notes || '');
+                          }}
+                          style={{
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            color: lead.notes ? '#cbd5e1' : '#64748b',
+                            background: lead.notes ? 'rgba(255,255,255,0.03)' : 'transparent',
+                            padding: '4px 6px',
+                            borderRadius: '4px',
+                            border: '1px dashed #334155',
+                            lineHeight: '1.3',
+                            maxHeight: '60px',
+                            overflowY: 'auto',
+                            wordBreak: 'break-word',
+                          }}
+                          title="Hacé clic para editar notas de venta"
+                        >
+                          {lead.notes || '+ Nota...'}
+                        </div>
+                      )}
                     </td>
 
                     {/* Actions */}
                     <td style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
+                        {/* Follow-up button if already contacted */}
+                        {lead.status === 'contacted' && lead.instagram && (
+                          <button
+                            type="button"
+                            disabled={generatingPitchId === lead.id}
+                            onClick={() => void handleSendFollowUp(lead)}
+                            style={{
+                              background: getFollowUpInfo(lead).isEligible ? '#d97706' : '#1e293b',
+                              border: `1px solid ${getFollowUpInfo(lead).isEligible ? '#f59e0b' : '#334155'}`,
+                              color: getFollowUpInfo(lead).isEligible ? '#ffffff' : '#f59e0b',
+                              padding: '0.25rem 0.55rem',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                            }}
+                            title="Generar y copiar mensaje de seguimiento amistoso para Instagram"
+                          >
+                            Follow-up
+                          </button>
+                        )}
                         {waNumber && (
                           <a
                             href={`https://wa.me/${waNumber}?text=${encodeURIComponent(pitchText)}`}

@@ -798,17 +798,92 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
       notes: string;
       email: string;
       phone: string;
+      metadata: Record<string, unknown>;
+      contactedAt?: string;
     }>;
+
+    const existing = await prisma.lead.findUnique({ where: { id } });
+    if (!existing) return reply.code(404).send({ error: 'Lead not found' });
+
+    const mergedMetadata = body.metadata
+      ? { ...((existing.metadata as Record<string, unknown>) ?? {}), ...body.metadata }
+      : existing.metadata;
 
     const updated = await prisma.lead.update({
       where: { id },
       data: {
-        ...body,
-        contactedAt: body.status === 'contacted' ? new Date() : undefined,
+        ...(body.status ? { status: body.status } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
+        ...(body.email !== undefined ? { email: body.email } : {}),
+        ...(body.phone !== undefined ? { phone: body.phone } : {}),
+        ...(body.status === 'contacted' ? { contactedAt: new Date() } : {}),
+        ...(body.contactedAt !== undefined ? { contactedAt: new Date(body.contactedAt) } : {}),
+        metadata: mergedMetadata as any,
       },
     });
 
     return { lead: updated };
+  });
+
+  app.get('/leads/export/csv', async (req, reply) => {
+    const leads = await prisma.lead.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const escapeCsv = (val: unknown) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const header = [
+      'ID',
+      'Name',
+      'Category',
+      'City',
+      'Address',
+      'Rating',
+      'Reviews Count',
+      'Phone',
+      'Email',
+      'Website',
+      'Instagram',
+      'Status',
+      'Contacted At',
+      'Follow Ups Count',
+      'Notes',
+      'Suggested Demo',
+      'Created At',
+    ].join(',');
+
+    const rows = leads.map((l) =>
+      [
+        escapeCsv(l.id),
+        escapeCsv(l.name),
+        escapeCsv(l.category),
+        escapeCsv(l.city),
+        escapeCsv(l.address),
+        escapeCsv(l.rating),
+        escapeCsv(l.reviewsCount),
+        escapeCsv(l.phoneFormatted || l.phone),
+        escapeCsv(l.email),
+        escapeCsv(l.website),
+        escapeCsv(l.instagram),
+        escapeCsv(l.status),
+        escapeCsv(l.contactedAt ? l.contactedAt.toISOString() : ''),
+        escapeCsv((l.metadata as any)?.followUpCount || 0),
+        escapeCsv(l.notes),
+        escapeCsv(l.suggestedDemo),
+        escapeCsv(l.createdAt.toISOString()),
+      ].join(',')
+    );
+
+    const csvContent = '\uFEFF' + [header, ...rows].join('\r\n');
+
+    reply
+      .header('Content-Type', 'text/csv; charset=utf-8')
+      .header('Content-Disposition', 'attachment; filename="control-center-leads-export.csv"')
+      .send(csvContent);
   });
 
   const BatchDeleteInput = z.object({
