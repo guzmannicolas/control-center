@@ -72,10 +72,44 @@ export interface TargetView {
   monitors: MonitorView[];
 }
 
+export interface OverviewTelemetry {
+  leads: {
+    total: number;
+    uncontacted: number;
+    withoutWebsite: number;
+    converted: number;
+  };
+  vault: {
+    itemsCount: number;
+    projectsCount: number;
+  };
+  knowledge: {
+    docsCount: number;
+    skillsCount: number;
+    mcpOnline: boolean;
+  };
+  backups: {
+    lastSnapshotTime: string | null;
+    localBackupsCount: number;
+    cloudSyncProvider: string;
+  };
+  vps: {
+    hostname: string;
+    uptimeHuman: string;
+    ramUsedPercent: number;
+    ramTotalGb: number;
+    ramUsedGb: number;
+    diskUsedPercent: number;
+    diskTotalGb: number;
+    diskUsedGb: number;
+  };
+}
+
 export interface Overview {
   generatedAt: string;
   counts: Record<CheckStatus | 'unknown', number>;
   targets: TargetView[]; // most serious first
+  telemetry?: OverviewTelemetry;
 }
 
 export interface IncidentView {

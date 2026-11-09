@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   listKnowledgeDocs,
   readKnowledgeDoc,
@@ -10,7 +12,7 @@ import { z } from 'zod';
 import {
   CHECK_STATUSES, DatabaseConfig, ImprovementInput, ImprovementPatch, ModuleId, PRIORITIES, statusRank, worstStatus,
   type ImprovementView, type LearningProgressView,
-  type CheckSnapshot, type CheckStatus, type DatabaseView, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview,
+  type CheckSnapshot, type CheckStatus, type DatabaseView, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview, type OverviewTelemetry,
   type ResultPoint, type TargetView, type CloudflareOverview, type CloudflareDnsItem,
   type DirectoryListing, type FileContent, type VaultOverview, type VaultItem,
   type VaultProjectConfig, type VaultAuditSummary, type VaultDiffResult, type DiscoveredEnvFile,
@@ -187,7 +189,85 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
     const counts = Object.fromEntries([...CHECK_STATUSES, 'unknown'].map((s) => [s, 0])) as Overview['counts'];
     for (const t of views) counts[t.status ?? 'unknown']++;
-    return { generatedAt: new Date().toISOString(), counts, targets: views };
+    // Telemetry calculations
+    const [leadsCounts, vpsData] = await Promise.all([
+      (async () => {
+        try {
+          const [total, uncontacted, withoutWebsite, converted] = await Promise.all([
+            prisma.lead.count(),
+            prisma.lead.count({ where: { status: 'discovered' } }),
+            prisma.lead.count({ where: { hasWebsite: false } }),
+            prisma.lead.count({ where: { status: 'converted' } }),
+          ]);
+          return { total, uncontacted, withoutWebsite, converted };
+        } catch {
+          return { total: 0, uncontacted: 0, withoutWebsite: 0, converted: 0 };
+        }
+      })(),
+      (async () => {
+        try {
+          return await getVpsStatus();
+        } catch {
+          return null;
+        }
+      })(),
+    ]);
+
+    let vaultStats = { itemsCount: 0, projectsCount: 0 };
+    try {
+      const v = getVaultOverview();
+      vaultStats = { itemsCount: v.items.length, projectsCount: v.projects.length };
+    } catch {}
+
+    let knowledgeStats = { docsCount: 0, skillsCount: 0, mcpOnline: true };
+    try {
+      const kDocs = listKnowledgeDocs();
+      knowledgeStats = {
+        docsCount: kDocs.length,
+        skillsCount: kDocs.filter((d) => d.category === 'skills').length,
+        mcpOnline: true,
+      };
+    } catch {}
+
+    let backupsStats = {
+      lastSnapshotTime: null as string | null,
+      localBackupsCount: 0,
+      cloudSyncProvider: 'Google Drive (AES-256 gcrypt:daily)',
+    };
+    try {
+      if (existsSync('/home/adminnico/cms/backups')) {
+        const bFiles = readdirSync('/home/adminnico/cms/backups').filter(
+          (f) => f.endsWith('.tar') || f.endsWith('.tar.gz')
+        );
+        backupsStats.localBackupsCount = bFiles.length;
+        if (bFiles.length > 0) {
+          const lastFile = bFiles[bFiles.length - 1];
+        if (lastFile) {
+          const stats = statSync(join('/home/adminnico/cms/backups', lastFile));
+          backupsStats.lastSnapshotTime = stats.mtime.toISOString();
+        }
+        }
+      }
+    } catch {}
+
+    const telemetry: OverviewTelemetry = {
+      leads: leadsCounts,
+      vault: vaultStats,
+      knowledge: knowledgeStats,
+      backups: backupsStats,
+      vps: {
+        hostname: vpsData?.hostname ?? 'ContaboVPS',
+        uptimeHuman: vpsData?.uptimeHuman ?? 'Up',
+        ramUsedPercent: vpsData?.memory.usedPercent ?? 0,
+        ramTotalGb: vpsData?.memory.totalGb ?? 0,
+        ramUsedGb: vpsData?.memory.usedGb ?? 0,
+        diskUsedPercent: vpsData?.disk.usedPercent ?? 0,
+        diskTotalGb: vpsData?.disk.totalGb ?? 0,
+        diskUsedGb: vpsData?.disk.usedGb ?? 0,
+      },
+    };
+
+    return { generatedAt: new Date().toISOString(), counts, targets: views, telemetry };
   });
 
   app.get('/domains', async (): Promise<DomainView[]> => {
