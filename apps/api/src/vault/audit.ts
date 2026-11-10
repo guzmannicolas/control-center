@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { existsSync, promises as fs, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -14,7 +14,7 @@ import type {
 } from '@cc/shared';
 import { exportEnvText, getVaultOverview, updateProjectLastSynced, importEnvText } from './vault.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export function parseEnvContent(raw: string): Map<string, string> {
   const map = new Map<string, string>();
@@ -71,7 +71,7 @@ async function checkGitSecurity(filePath: string): Promise<{ isGitTracked: boole
     // 1. Is it tracked in Git commit history?
     let isGitTracked = false;
     try {
-      await execAsync(`git ls-files --error-unmatch "${relToGit}"`, { cwd: gitRoot });
+      await execFileAsync('git', ['ls-files', '--error-unmatch', relToGit], { cwd: gitRoot });
       isGitTracked = true;
     } catch {
       isGitTracked = false;
@@ -80,7 +80,7 @@ async function checkGitSecurity(filePath: string): Promise<{ isGitTracked: boole
     // 2. Is it covered by .gitignore?
     let isGitIgnored = false;
     try {
-      await execAsync(`git check-ignore "${relToGit}"`, { cwd: gitRoot });
+      await execFileAsync('git', ['check-ignore', relToGit], { cwd: gitRoot });
       isGitIgnored = true;
     } catch {
       isGitIgnored = false;

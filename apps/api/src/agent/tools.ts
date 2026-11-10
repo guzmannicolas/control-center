@@ -1,9 +1,29 @@
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+const BLOCKED_COMMAND_PATTERNS: readonly RegExp[] = [
+  /\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+\/(?:\s|$|\*)/i,
+  /\brm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*\s+\/(?:\s|$|\*)/i,
+  /\b(?:mkfs|wipefs|shred|fdisk|parted)\b/i,
+  /\bdd\s+if=/i,
+  /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,
+  /\b(?:shutdown|reboot|poweroff|halt)\b/i,
+  /\binit\s+[06]\b/i,
+  /\bdocker\s+run\b[^\n]*(?:--privileged|--pid\s*=\s*host|--net(?:work)?\s*=\s*host|-v\s+\/:\/)/i,
+  /\b(?:nsenter|chroot|insmod|modprobe)\b/i,
+  /\b(?:ufw\s+disable|iptables\s+-F)\b/i,
+  /\/etc\/(?:shadow|sudoers)\b/i,
+  /\b(?:curl|wget)\b[^\n|]*\|\s*(?:ba)?sh\b/i,
+];
+
+export function isCommandBlocked(cmd: string): boolean {
+  return BLOCKED_COMMAND_PATTERNS.some((pattern) => pattern.test(cmd));
+}
 
 // Allowed repositories directory on the VPS
 export const REPOS_BASE = process.env.REPOS_BASE ?? '/home/adminnico/repositories';
@@ -168,7 +188,7 @@ export async function ensureRepoCloned(repo: string): Promise<{ cloned: boolean;
     : `https://github.com/guzmannicolas/${repo}.git`;
 
   try {
-    await execAsync(`git clone ${cloneUrl} "${repoDir}"`, {
+    await execFileAsync('git', ['clone', cloneUrl, repoDir], {
       cwd: REPOS_BASE,
       timeout: 60_000,
     });
@@ -259,8 +279,8 @@ export async function executeTool(
 
       case 'run_command': {
         const cmd = String(args.command ?? '');
-        // Block dangerously destructive commands
-        if (cmd.match(/\brm\s+-rf\s+\/|\bmkfs\b|\bdd\s+if=/)) {
+        // Block dangerously destructive or privilege-escalation commands
+        if (isCommandBlocked(cmd)) {
           return { toolCallId: id, name, output: 'Command blocked by security policy', isError: true };
         }
         const { stdout, stderr } = await execAsync(cmd, {

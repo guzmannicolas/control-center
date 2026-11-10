@@ -12,6 +12,10 @@ const Env = z.object({
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
+  GITHUB_TOKEN: z.string().optional(),
+  VERCEL_TOKEN: z.string().optional(),
+  DEPLOY_SECRET: z.string().optional(),
+  MCP_API_TOKEN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof Env>;

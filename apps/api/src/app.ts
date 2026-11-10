@@ -29,7 +29,14 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}) {
   // Browsers always send Origin on these, and another site cannot fake it.
   app.addHook('onRequest', async (req, reply) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return;
-    if (req.url.startsWith('/api/webhooks/') || req.url.startsWith('/api/mcp') || req.url.startsWith('/api/marketing/drafts/public/')) return;
+    const pathname = req.url.split('?')[0] ?? '';
+    if (
+      pathname.startsWith('/api/webhooks/') ||
+      pathname.startsWith('/api/marketing/webhooks/') ||
+      pathname.startsWith('/api/marketing/drafts/public/') ||
+      pathname === '/api/mcp'
+    )
+      return;
     if (req.headers.origin !== deps.dashboardOrigin) return reply.code(403).send({ error: 'Forbidden origin' });
   });
 

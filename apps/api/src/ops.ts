@@ -1,10 +1,11 @@
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createReadStream, existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import os from 'node:os';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const HOME_DIR = '/home/adminnico';
 const CMS_BACKUPS_DIR = '/home/adminnico/cms/backups';
@@ -570,7 +571,7 @@ export async function inspectBackupArchive(filename: string): Promise<{
   error?: string;
 }> {
   const clean = filename.trim();
-  if (!clean || clean.includes('/') || clean.includes('\\') || clean.includes('..') || !clean.endsWith('.tar')) {
+  if (!clean || !/^[a-zA-Z0-9._-]+\.tar$/.test(clean) || clean.includes('..')) {
     return { ok: false, name: clean, sizeHuman: '0 B', files: [], error: 'Invalid filename' };
   }
 
@@ -581,7 +582,7 @@ export async function inspectBackupArchive(filename: string): Promise<{
 
   try {
     const st = statSync(fullPath);
-    const { stdout } = await execAsync(`tar -tvf "${fullPath}"`, { timeout: 15_000 });
+    const { stdout } = await execFileAsync('tar', ['-tvf', fullPath], { timeout: 15_000 });
     const lines = stdout.trim().split('\n').filter(Boolean);
 
     const files: ArchiveFileEntry[] = [];
@@ -614,7 +615,7 @@ export async function inspectBackupArchive(filename: string): Promise<{
     let manifest: Record<string, unknown> | null = null;
     if (manifestPath) {
       try {
-        const { stdout: manifestJson } = await execAsync(`tar -xOf "${fullPath}" "${manifestPath}"`, { timeout: 5000 });
+        const { stdout: manifestJson } = await execFileAsync('tar', ['-xOf', fullPath, manifestPath], { timeout: 5000 });
         manifest = JSON.parse(manifestJson);
       } catch {
         // Ignore if manifest parsing fails
@@ -647,7 +648,7 @@ export async function verifyBackupArchive(filename: string): Promise<{
   details: string[];
 }> {
   const clean = filename.trim();
-  if (!clean || clean.includes('/') || clean.includes('\\') || clean.includes('..') || !clean.endsWith('.tar')) {
+  if (!clean || !/^[a-zA-Z0-9._-]+\.tar$/.test(clean) || clean.includes('..')) {
     return { ok: false, filename: clean, passed: false, message: 'Invalid filename', details: [] };
   }
 
@@ -659,24 +660,25 @@ export async function verifyBackupArchive(filename: string): Promise<{
   const details: string[] = [];
 
   try {
-    await execAsync(`tar -tf "${fullPath}" > /dev/null`, { timeout: 20_000 });
+    await execFileAsync('tar', ['-tf', fullPath], { timeout: 20_000, maxBuffer: 10 * 1024 * 1024 });
     details.push('✓ Tar container structure is valid.');
 
     const workDir = join(os.tmpdir(), `verify-${Date.now()}`);
     try {
-      await execAsync(`mkdir -p "${workDir}" && tar -xf "${fullPath}" -C "${workDir}"`, { timeout: 20_000 });
+      mkdirSync(workDir, { recursive: true });
+      await execFileAsync('tar', ['-xf', fullPath, '-C', workDir], { timeout: 20_000 });
       details.push('✓ Archive extracted successfully without corrupt blocks.');
 
-      const { stdout: gzFiles } = await execAsync(`find "${workDir}" -name "*.gz"`, { timeout: 10_000 });
+      const { stdout: gzFiles } = await execFileAsync('find', [workDir, '-name', '*.gz'], { timeout: 10_000 });
       const gzList = gzFiles.trim().split('\n').filter(Boolean);
 
       for (const gz of gzList) {
-        await execAsync(`gzip -t "${gz}"`, { timeout: 15_000 });
+        await execFileAsync('gzip', ['-t', gz], { timeout: 15_000 });
         const base = gz.split('/').pop();
         details.push(`✓ Gzip checksum verified for ${base}.`);
       }
     } finally {
-      await execAsync(`rm -rf "${workDir}" 2>/dev/null || true`);
+      rmSync(workDir, { recursive: true, force: true });
     }
 
     return {

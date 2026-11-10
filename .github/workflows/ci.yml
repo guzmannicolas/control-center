@@ -1,0 +1,102 @@
+name: CI & Deploy
+
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  ci:
+    name: Typecheck, Test & Build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: control
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: control
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U control -d control"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        env:
+          DATABASE_URL: postgresql://control:testpassword@localhost:5432/control
+        run: pnpm --filter @cc/api exec prisma generate
+
+      - name: Typecheck monorepo
+        run: pnpm typecheck
+
+      - name: Run unit and integration tests
+        env:
+          DATABASE_URL: postgresql://control:testpassword@localhost:5432/control
+          TEST_DATABASE_URL: postgresql://control:testpassword@localhost:5432/control_test
+          REDIS_URL: redis://localhost:6379
+        run: pnpm test
+
+      - name: Build API and Web bundles
+        env:
+          VITE_API_URL: https://control-api.nicoguzmandev.com
+        run: |
+          pnpm --filter @cc/api build
+          pnpm --filter @cc/web build
+
+      - name: Verify production Docker image build
+        run: docker build -f docker/app.Dockerfile --target runtime -t control-center-app:ci .
+
+  deploy:
+    name: Deploy to VPS (after CI green)
+    needs: [ci]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger VPS deployment webhook
+        env:
+          DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL || 'https://control-api.nicoguzmandev.com/api/webhooks/deploy/control-center' }}
+        run: |
+          if [ -z "$DEPLOY_SECRET" ]; then
+            echo "::notice::DEPLOY_SECRET is not configured in GitHub Secrets yet; skipping webhook trigger."
+            exit 0
+          fi
+          curl --fail --silent --show-error -X POST "$DEPLOY_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-deploy-secret: $DEPLOY_SECRET" \
+            -d "{\"ref\":\"${GITHUB_REF}\",\"head_commit\":{\"id\":\"${GITHUB_SHA}\",\"author\":{\"name\":\"${GITHUB_ACTOR}\"}}}"

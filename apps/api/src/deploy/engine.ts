@@ -1,10 +1,11 @@
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { DeploymentOverview, DeploymentRecord, DeploymentStatus } from '@cc/shared';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const STORAGE_PATH = process.env.DEPLOYMENTS_FILE || join(process.cwd(), 'data', 'deployments.json');
 
@@ -95,6 +96,12 @@ export async function runDeployment(options: {
 }): Promise<DeploymentRecord> {
   const repo = options.repo.trim();
   const branch = options.branch?.trim() || 'main';
+  if (!/^[a-zA-Z0-9._-]+$/.test(repo)) {
+    throw new Error(`Invalid repository name: ${repo}`);
+  }
+  if (!/^[a-zA-Z0-9._/-]+$/.test(branch) || branch.includes('..') || branch.startsWith('-')) {
+    throw new Error(`Invalid branch name: ${branch}`);
+  }
   const id = `dep-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const startedAt = new Date().toISOString();
 
@@ -161,7 +168,9 @@ async function executeDeploymentTask(id: string, repo: string, branch: string) {
       appendLog(`Found repository at: ${repoDir}`);
       appendLog(`Fetching origin and pulling branch: ${branch}...`);
 
-      const gitPull = await execAsync(`git fetch origin ${branch} && git checkout ${branch} && git pull origin ${branch}`, {
+      await execFileAsync('git', ['fetch', 'origin', branch], { cwd: repoDir, timeout: 60_000 });
+      await execFileAsync('git', ['checkout', branch], { cwd: repoDir, timeout: 30_000 });
+      const gitPull = await execFileAsync('git', ['pull', 'origin', branch], {
         cwd: repoDir,
         timeout: 60_000,
       });

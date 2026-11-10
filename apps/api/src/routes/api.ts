@@ -1,4 +1,5 @@
 import { getOrRunDailyRepoGraph } from '../knowledge/analyzer.js';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -130,6 +131,24 @@ const improvementView = (i: ImprovementRow): ImprovementView => ({
 });
 const IdParam = z.object({ id: z.uuid() });
 
+function constantTimeEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+function hasValidMcpToken(headers: Record<string, string | string[] | undefined>): boolean {
+  const expected = process.env.MCP_API_TOKEN;
+  if (!expected) return false;
+  const authHeader = typeof headers.authorization === 'string' ? headers.authorization : '';
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const mcpHeader = typeof headers['x-mcp-token'] === 'string' ? headers['x-mcp-token'].trim() : '';
+  const candidate = bearer || mcpHeader;
+  if (!candidate) return false;
+  return constantTimeEquals(candidate, expected);
+}
+
 export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
   const outreachRedis = createRedis(process.env.REDIS_URL || 'redis://redis:6379');
   const outreachQueue = createOutreachQueue(outreachRedis);
@@ -138,14 +157,24 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
   // Every route in this plugin requires a logged-in user, and knows who it is.
   app.decorateRequest('user', null);
   app.addHook('preHandler', async (req, reply) => {
+    const pathname = req.url.split('?')[0] ?? '';
     if (
-      req.url.startsWith('/api/webhooks/') ||
-      req.url.startsWith('/api/agent/context') ||
-      req.url.startsWith('/api/mcp') ||
-      req.url.startsWith('/api/marketing/drafts/public/') ||
-      req.url.startsWith('/api/marketing/webhooks/')
+      pathname.startsWith('/api/webhooks/') ||
+      pathname.startsWith('/api/marketing/drafts/public/') ||
+      pathname.startsWith('/api/marketing/webhooks/')
     )
       return;
+
+    if (pathname === '/api/agent/context' || pathname === '/api/mcp') {
+      if (hasValidMcpToken(req.headers)) return;
+      const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
+      if (user) {
+        req.user = user;
+        return;
+      }
+      return reply.code(401).send({ error: 'Not logged in or missing valid MCP_API_TOKEN' });
+    }
+
     const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
     if (!user) return reply.code(401).send({ error: 'Not logged in' });
     req.user = user;
@@ -1162,10 +1191,29 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
   app.post('/webhooks/deploy/:repo', async (req, reply) => {
     const { repo } = req.params as { repo: string };
-    const secretParam = (req.query as Record<string, string>)?.secret || (req.headers['x-deploy-secret'] as string | undefined);
+    if (!/^[a-zA-Z0-9._-]+$/.test(repo)) {
+      return reply.code(400).send({ error: 'Invalid repository name' });
+    }
+
+    if ((req.query as Record<string, string>)?.secret) {
+      return reply.code(400).send({ error: 'Passing secret in query string is not allowed; use x-deploy-secret or x-hub-signature-256 header' });
+    }
+
     const expectedSecret = process.env.DEPLOY_SECRET;
-    if (expectedSecret && secretParam !== expectedSecret) {
-      return reply.code(401).send({ error: 'Invalid webhook secret' });
+    if (!expectedSecret) {
+      return reply.code(503).send({ error: 'DEPLOY_SECRET is not configured on the server' });
+    }
+
+    const headerSecret = typeof req.headers['x-deploy-secret'] === 'string' ? req.headers['x-deploy-secret'] : '';
+    const githubSig = typeof req.headers['x-hub-signature-256'] === 'string' ? req.headers['x-hub-signature-256'] : '';
+    const rawPayload = JSON.stringify(req.body ?? {});
+    const expectedHmac = `sha256=${createHmac('sha256', expectedSecret).update(rawPayload).digest('hex')}`;
+
+    const validHeader = headerSecret ? constantTimeEquals(headerSecret, expectedSecret) : false;
+    const validHmac = githubSig ? constantTimeEquals(githubSig, expectedHmac) : false;
+
+    if (!validHeader && !validHmac) {
+      return reply.code(401).send({ error: 'Invalid webhook secret or signature' });
     }
 
     const body = (req.body ?? {}) as {
@@ -1173,6 +1221,9 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
       head_commit?: { id?: string; message?: string; author?: { name?: string } };
     };
     const branch = body.ref ? body.ref.replace('refs/heads/', '') : 'main';
+    if (!/^[a-zA-Z0-9._/-]+$/.test(branch) || branch.includes('..') || branch.startsWith('-')) {
+      return reply.code(400).send({ error: 'Invalid branch name' });
+    }
     const commitHash = body.head_commit?.id ? body.head_commit.id.slice(0, 7) : null;
     const commitMessage = body.head_commit?.message ?? null;
     const author = body.head_commit?.author?.name ?? 'GitHub Webhook';
