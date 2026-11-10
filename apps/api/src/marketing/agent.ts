@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import type { SocialPlatform, SocialPostType } from '@cc/shared';
+import type { SocialPlatform, SocialPostType, ContentIdeaSuggestion } from '@cc/shared';
 
 export interface BrandPromptContext {
   name: string;
@@ -387,4 +387,291 @@ export function auditAdCampaigns(campaigns: Array<{
     totalDailyBudget,
     totalSafetyLimit,
   };
+}
+
+export interface GenerateWeeklyPlanParams {
+  brand: BrandPromptContext;
+  theme: string;
+  postCount: number;
+  platforms: SocialPlatform[];
+  startDate: Date;
+  objective?: string;
+  apiKey?: string;
+}
+
+export interface GeneratedPlanItem {
+  dayOffset: number;
+  scheduledFor: Date;
+  platform: SocialPlatform;
+  postType: SocialPostType;
+  topic: string;
+  hook: string;
+  caption: string;
+  hashtags: string[];
+  suggestedMedia: string[];
+  callToAction: string;
+}
+
+export interface GenerateWeeklyPlanResult {
+  theme: string;
+  items: GeneratedPlanItem[];
+  source: 'ai' | 'fallback_engine';
+}
+
+const BOTANICAL_MEDIA_PRESETS = [
+  'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?w=800&q=80',
+  'https://images.unsplash.com/photo-1562962230-16e4623d36e6?w=800&q=80',
+  'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?w=800&q=80',
+  'https://images.unsplash.com/photo-1568515045052-f9a854d70bfd?w=800&q=80',
+  'https://images.unsplash.com/photo-1590246814883-578337415ee9?w=800&q=80',
+  'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?w=800&q=80',
+  'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800&q=80',
+];
+
+export async function generateWeeklyContentPlan(
+  params: GenerateWeeklyPlanParams
+): Promise<GenerateWeeklyPlanResult> {
+  const effectiveApiKey = params.apiKey || process.env.GEMINI_API_KEY;
+  const { brand, theme, postCount, platforms, startDate, objective } = params;
+
+  const calcDate = (offset: number) => {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + offset);
+    d.setHours(offset % 2 === 0 ? 11 : 19, 30, 0, 0);
+    return d;
+  };
+
+  if (effectiveApiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
+      const prompt = `Act as Senior Social Media Director & Content Strategist for ${brand.name}.
+Plan a high-impact, cohesive multi-post editorial campaign with exactly ${postCount} scheduled publications.
+
+Campaign Theme: ${theme}
+Business Objective: ${objective || `Drive qualified leads and consultation bookings on ${brand.website}`}
+Brand Website: ${brand.website}
+Tone of Voice: ${brand.toneOfVoice}
+Target Audience: ${brand.targetAudience || 'Art collectors, tattoo enthusiasts, discerning clients'}
+Allowed Platforms: ${platforms.join(', ')}
+${brand.dossierMd ? `\n--- BRAND DOSSIER ---\n${brand.dossierMd.slice(0, 1500)}\n--------------------` : ''}
+${brand.socialStyleMd ? `\n--- STYLE PLAYBOOK ---\n${brand.socialStyleMd.slice(0, 1500)}\n---------------------` : ''}
+
+DIRECTIVES:
+1. STRICT NO-EMOJI POLICY across all captions, hooks, and hashtags.
+2. Formats to distribute: Alternate smartly between REEL, CAROUSEL, POST, and STORY.
+3. Every post must tell a compelling story or educate on artistic craft, ending with a clear CTA to ${brand.website}.
+4. Return strictly valid JSON array of ${postCount} items:
+[
+  {
+    "dayIndex": 0,
+    "platform": "INSTAGRAM",
+    "postType": "REEL",
+    "topic": "Concise topic",
+    "hook": "Strong opening line",
+    "caption": "Full narrative caption with double breaks and CTA",
+    "hashtags": ["#tag1", "#tag2", "#tag3"],
+    "callToAction": "Consultations at ${brand.website}",
+    "visualSuggestion": "Botanical close-up in studio"
+  }
+]`;
+
+      const res = await ai.models.generateContent({
+        model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          temperature: 0.8,
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const raw = res.text?.trim();
+      if (raw) {
+        const parsed = JSON.parse(raw) as Array<{
+          dayIndex?: number;
+          platform?: string;
+          postType?: string;
+          topic?: string;
+          hook?: string;
+          caption?: string;
+          hashtags?: string[];
+          callToAction?: string;
+          visualSuggestion?: string;
+        }>;
+
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const items: GeneratedPlanItem[] = parsed.slice(0, postCount).map((p, idx) => {
+            const chosenPlatform = platforms.includes((p.platform?.toUpperCase() as any))
+              ? (p.platform?.toUpperCase() as SocialPlatform)
+              : platforms[idx % platforms.length]!;
+            const validPostTypes: SocialPostType[] = ['POST', 'REEL', 'CAROUSEL', 'STORY'];
+            const postType = validPostTypes.includes((p.postType?.toUpperCase() as any))
+              ? (p.postType?.toUpperCase() as SocialPostType)
+              : (idx % 2 === 0 ? 'REEL' : 'CAROUSEL');
+
+            return {
+              dayOffset: idx,
+              scheduledFor: calcDate(idx),
+              platform: chosenPlatform,
+              postType,
+              topic: p.topic || `${theme} - Parte ${idx + 1}`,
+              hook: p.hook || `${theme} - Exploración ${idx + 1}`,
+              caption: p.caption || `${p.hook || theme}\n\nDetalles del proceso artístico y conceptualización.\n\nConsultas en ${brand.website}\n\n#${brand.name.replace(/\s+/g, '')} #Art`,
+              hashtags: p.hashtags && p.hashtags.length > 0 ? p.hashtags : [`#${brand.name.replace(/\s+/g, '')}`, '#BotanicalArt', '#FineLine'],
+              suggestedMedia: [BOTANICAL_MEDIA_PRESETS[idx % BOTANICAL_MEDIA_PRESETS.length]!],
+              callToAction: p.callToAction || `Consultas y reservas en ${brand.website}`,
+            };
+          });
+
+          return {
+            theme,
+            items,
+            source: 'ai',
+          };
+        }
+      }
+    } catch {
+      // Fall through to fallback engine
+    }
+  }
+
+  // Fallback Engine
+  const defaultPillars = [
+    { type: 'REEL' as SocialPostType, focus: 'Behind the Scenes: Técnica y precisión botánica', cta: 'Reserva una consulta personalizada en' },
+    { type: 'CAROUSEL' as SocialPostType, focus: 'Transformación y curado: Guía para clientes', cta: 'Conoce los cuidados y preguntas frecuentes en' },
+    { type: 'POST' as SocialPostType, focus: 'Detalle de pieza botánica terminada: Línea fina orgánica', cta: 'Agenda tu próximo proyecto en' },
+    { type: 'REEL' as SocialPostType, focus: 'Del boceto al diseño sobre piel: Diálogo y composición', cta: 'Descubre el portafolio completo en' },
+    { type: 'CAROUSEL' as SocialPostType, focus: 'Piezas cerámicas y obra visual: Diálogo de texturas', cta: 'Obras y encargos disponibles en' },
+    { type: 'POST' as SocialPostType, focus: 'Espacio de taller y filosofía de trabajo colaborativo', cta: 'Consultas abiertas en' },
+    { type: 'STORY' as SocialPostType, focus: 'Preguntas y respuestas sobre diseño y citas disponibles', cta: 'Escríbenos directamente o visita' },
+  ];
+
+  const items: GeneratedPlanItem[] = Array.from({ length: postCount }).map((_, idx) => {
+    const pillar = defaultPillars[idx % defaultPillars.length]!;
+    const platform = platforms[idx % platforms.length]!;
+    const postTopic = `${theme} — ${pillar.focus}`;
+    const hook = `${theme}: ${pillar.focus}.`;
+    const body = `Cada creación nace de un proceso reflexivo entre la forma orgánica y el cuerpo humano. Trabajamos sin prisas, priorizando el trazo fino, la armonía anatómica y la durabilidad de cada pigmento.\n\nEl estudio es un espacio calmo diseñado para que tu experiencia sea cómoda y colaborativa.`;
+    const cta = `${pillar.cta} ${brand.website}`;
+    const tags = [`#${brand.name.replace(/\s+/g, '')}`, '#BotanicalArt', '#FineLineTattoo', '#ContemporaryArt', '#HandmadeArt'];
+    const caption = `${hook}\n\n${body}\n\n${cta}\n\n${tags.join(' ')}`;
+
+    return {
+      dayOffset: idx,
+      scheduledFor: calcDate(idx),
+      platform,
+      postType: pillar.type,
+      topic: postTopic,
+      hook,
+      caption,
+      hashtags: tags,
+      suggestedMedia: [BOTANICAL_MEDIA_PRESETS[idx % BOTANICAL_MEDIA_PRESETS.length]!],
+      callToAction: cta,
+    };
+  });
+
+  return {
+    theme,
+    items,
+    source: 'fallback_engine',
+  };
+}
+
+export async function generateContentIdeaSuggestions(
+  brand: BrandPromptContext,
+  apiKey?: string
+): Promise<ContentIdeaSuggestion[]> {
+  const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY;
+
+  if (effectiveApiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
+      const prompt = `Act as Chief Creative Officer for ${brand.name}.
+Suggest 5 innovative, strategic, and high-performing content ideas for social media.
+Brand Tone: ${brand.toneOfVoice}
+Website: ${brand.website}
+Audience: ${brand.targetAudience || 'Art collectors, tattoo clients'}
+${brand.dossierMd ? `Dossier: ${brand.dossierMd.slice(0, 1000)}` : ''}
+
+Strict NO-EMOJI directive.
+Return JSON array of 5 items:
+[
+  {
+    "id": "idea-1",
+    "topic": "Short topic title",
+    "platform": "INSTAGRAM",
+    "postType": "REEL",
+    "hook": "Opening hook statement",
+    "objective": "Clear business objective",
+    "rationale": "Why this builds audience trust and converts"
+  }
+]`;
+
+      const res = await ai.models.generateContent({
+        model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          temperature: 0.8,
+          responseMimeType: 'application/json',
+        },
+      });
+
+      const raw = res.text?.trim();
+      if (raw) {
+        const parsed = JSON.parse(raw) as ContentIdeaSuggestion[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  return [
+    {
+      id: 'idea-1',
+      topic: 'Proceso íntimo de diseño botánico personalizado',
+      platform: 'INSTAGRAM',
+      postType: 'REEL',
+      hook: 'Cómo transformamos una referencia botánica en un diseño anatómico único.',
+      objective: 'Fomentar consultas para piezas personalizadas',
+      rationale: 'Muestra maestría técnica, detalle en el trazo y respeto por el cliente.',
+    },
+    {
+      id: 'idea-2',
+      topic: 'Cuidados esenciales para curar un tatuaje fine line',
+      platform: 'INSTAGRAM',
+      postType: 'CAROUSEL',
+      hook: 'Guía paso a paso para que tu tatuaje cure nítido y conserve el pigmento original.',
+      objective: 'Aumentar engagement y guardados como material de referencia',
+      rationale: 'El contenido educativo genera alta tasa de guardados en Instagram y posiciona como autoridad.',
+    },
+    {
+      id: 'idea-3',
+      topic: 'Flash Day exclusivo: Diseños botánicos disponibles',
+      platform: 'INSTAGRAM',
+      postType: 'POST',
+      hook: 'Nuevos bocetos botánicos y orgánicos listos para ser tatuados esta temporada.',
+      objective: 'Llenar espacios de agenda de la semana entrante',
+      rationale: 'Urgencia sutil y exclusividad de diseños irrepetibles.',
+    },
+    {
+      id: 'idea-4',
+      topic: 'Cruce de disciplinas: Entre la arcilla, el lienzo y la piel',
+      platform: 'TIKTOK',
+      postType: 'REEL',
+      hook: 'La relación entre modelar cerámica y trazar líneas sobre la piel humana.',
+      objective: 'Fortalecer el posicionamiento artístico integral de la marca',
+      rationale: 'Atrae coleccionistas de arte y clientes de mayor ticket promedio.',
+    },
+    {
+      id: 'idea-5',
+      topic: 'Visita guiada al estudio: Un espacio seguro y colaborativo',
+      platform: 'FACEBOOK',
+      postType: 'POST',
+      hook: 'Diseñamos cada rincón de nuestro espacio para que te sientas en calma desde el primer minuto.',
+      objective: 'Derribar objeciones y miedos en clientes primerizos',
+      rationale: 'Reduce la ansiedad de personas que nunca se han tatuado y facilita la primera consulta.',
+    },
+  ];
 }

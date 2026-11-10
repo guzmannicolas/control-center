@@ -15,6 +15,8 @@ import type {
   BrandView,
   BrandIntegrations,
   BrandConversationView,
+  ContentIdeaSuggestion,
+  MarketingSchedulerStatus,
 } from '@cc/shared';
 
 export function MarketingPage() {
@@ -49,6 +51,13 @@ export function MarketingPage() {
   const [testingChannel, setTestingChannel] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ channel: string; ok: boolean; message: string } | null>(null);
 
+  // Instagram Quick Connect State
+  const [showConnectIgModal, setShowConnectIgModal] = useState(false);
+  const [igHandleInput, setIgHandleInput] = useState('');
+  const [igTokenInput, setIgTokenInput] = useState('');
+  const [igMode, setIgMode] = useState<'sandbox' | 'live'>('sandbox');
+  const [savingIgConnection, setSavingIgConnection] = useState(false);
+
   // Community Manager & Chat Assistant state
   const [conversations, setConversations] = useState<BrandConversationView[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -59,6 +68,7 @@ export function MarketingPage() {
   const [publishingDraftId, setPublishingDraftId] = useState<string | null>(null);
 
   // Creative Studio State
+  const [creativeViewMode, setCreativeViewMode] = useState<'grid' | 'calendar'>('grid');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPlatform, setFilterPlatform] = useState<string>('all');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -69,6 +79,28 @@ export function MarketingPage() {
   const [newObjective, setNewObjective] = useState('Website conversion sales');
   const [newMediaUrl, setNewMediaUrl] = useState('');
   const [newScheduledDate, setNewScheduledDate] = useState('');
+
+  // Auto-Publisher Daemon & Scheduler Status
+  const [schedulerStatus, setSchedulerStatus] = useState<MarketingSchedulerStatus | null>(null);
+  const [runningScheduler, setRunningScheduler] = useState(false);
+
+  // Batch Weekly Strategy Planner State
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchTheme, setBatchTheme] = useState('Colección Floral de Verano & Consultas');
+  const [batchCount, setBatchCount] = useState(5);
+  const [batchPlatforms, setBatchPlatforms] = useState<SocialPlatform[]>(['INSTAGRAM', 'TIKTOK']);
+  const [batchStartDate, setBatchStartDate] = useState(() => {
+    const tomorrow = new Date(Date.now() + 86400000);
+    return tomorrow.toISOString().slice(0, 10);
+  });
+  const [batchObjective, setBatchObjective] = useState('Consultas y reservas de citas');
+  const [batchAutoApprove, setBatchAutoApprove] = useState(true);
+  const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
+
+  // Content Ideas Bank State
+  const [showIdeasModal, setShowIdeasModal] = useState(false);
+  const [ideas, setIdeas] = useState<ContentIdeaSuggestion[]>([]);
+  const [loadingIdeas, setLoadingIdeas] = useState(false);
 
   // Dispatch / Approval state
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
@@ -184,6 +216,53 @@ export function MarketingPage() {
     }
   };
 
+  const handleSaveInstagram = async () => {
+    const cleanHandle = igHandleInput.trim().replace(/^@/, '');
+    if (!cleanHandle) {
+      showToast('Please enter an Instagram handle');
+      return;
+    }
+    setSavingIgConnection(true);
+    try {
+      const updatedIntegrations: BrandIntegrations = {
+        ...integrationsForm,
+        metaPageAccessToken: igMode === 'live' ? igTokenInput.trim() : '',
+      };
+      const res = await api.marketingUpdateBrandIntegrations(selectedBrandSlug, {
+        integrations: updatedIntegrations,
+        instagramHandle: cleanHandle,
+        autoPublish: true,
+      });
+      setIntegrationsForm(updatedIntegrations);
+      setAutoPublishActive(true);
+      setOverview((prev) => (prev ? { ...prev, brand: res.brand } : prev));
+      setShowConnectIgModal(false);
+      showToast(`Instagram @${cleanHandle} connected (${igMode === 'sandbox' ? 'Sandbox / Test Mode' : 'Live'})`);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to connect Instagram');
+    } finally {
+      setSavingIgConnection(false);
+    }
+  };
+
+  const handleDisconnectInstagram = async () => {
+    try {
+      const updatedIntegrations: BrandIntegrations = {
+        ...integrationsForm,
+        metaPageAccessToken: '',
+      };
+      const res = await api.marketingUpdateBrandIntegrations(selectedBrandSlug, {
+        integrations: updatedIntegrations,
+        instagramHandle: '',
+      });
+      setIntegrationsForm(updatedIntegrations);
+      setOverview((prev) => (prev ? { ...prev, brand: res.brand } : prev));
+      showToast('Instagram disconnected');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to disconnect Instagram');
+    }
+  };
+
   const handleToggleAutoPublish = async () => {
     const nextVal = !autoPublishActive;
     setAutoPublishActive(nextVal);
@@ -277,11 +356,12 @@ export function MarketingPage() {
     setLoading(true);
     setError(null);
     try {
-      const [ovData, draftsData, adsData, brandsData] = await Promise.all([
+      const [ovData, draftsData, adsData, brandsData, schedData] = await Promise.all([
         api.marketingOverview(slug),
         api.marketingDrafts({ brandSlug: slug }),
         api.marketingAds({ brandSlug: slug }),
         api.marketingBrands(),
+        api.marketingGetSchedulerStatus(slug).catch(() => null),
       ]);
 
       setOverview(ovData);
@@ -289,13 +369,25 @@ export function MarketingPage() {
       setCampaigns(adsData.campaigns);
       setAuditInfo(adsData.audit);
       setBrands(brandsData.brands);
+      if (schedData) {
+        setSchedulerStatus(schedData);
+      }
 
       if (ovData.brand) {
         setBrandTone(ovData.brand.toneOfVoice);
         setBrandWhatsapp(ovData.brand.whatsappNumber || '');
         setBrandAudience(ovData.brand.targetAudience || '');
-        if (ovData.brand.instagramHandle) {
-          setInstagramHandleInput(ovData.brand.instagramHandle);
+        const currentIgHandle = ovData.brand.instagramHandle || '';
+        if (currentIgHandle) {
+          setInstagramHandleInput(currentIgHandle);
+          setIgHandleInput(currentIgHandle);
+        }
+        const tokenVal = ovData.brand.integrations?.metaPageAccessToken || (ovData.brand.integrations as any)?.metaAccessToken || '';
+        if (tokenVal) {
+          setIgTokenInput(String(tokenVal));
+          setIgMode('live');
+        } else {
+          setIgMode('sandbox');
         }
         setIntegrationsForm(ovData.brand.integrations || {});
         setAutoPublishActive(Boolean(ovData.brand.autoPublish));
@@ -376,6 +468,66 @@ export function MarketingPage() {
       alert(err.message || 'Failed to update status');
     } finally {
       setStatusUpdatingId(null);
+    }
+  };
+
+  const handleRunScheduler = async () => {
+    setRunningScheduler(true);
+    try {
+      const res = await api.marketingPublishPendingDrafts();
+      showToast(`Auto-Publisher: ${res.publishedCount} post(s) procesados.`);
+      await loadData(selectedBrandSlug);
+    } catch (err: any) {
+      showToast(err?.message || 'Error al ejecutar publicador');
+    } finally {
+      setRunningScheduler(false);
+    }
+  };
+
+  const handleFetchIdeas = async () => {
+    setLoadingIdeas(true);
+    setShowIdeasModal(true);
+    try {
+      const res = await api.marketingGetContentIdeas(selectedBrandSlug);
+      setIdeas(res.ideas);
+    } catch (err: any) {
+      showToast(err?.message || 'Error al obtener ideas');
+    } finally {
+      setLoadingIdeas(false);
+    }
+  };
+
+  const handleApplyIdea = (idea: ContentIdeaSuggestion) => {
+    setNewTopic(idea.topic);
+    setNewPlatform(idea.platform);
+    setNewPostType(idea.postType);
+    setNewObjective(idea.objective);
+    setShowIdeasModal(false);
+    setShowGenerateModal(true);
+    showToast(`Idea seleccionada: "${idea.topic}"`);
+  };
+
+  const handleBatchGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsGeneratingBatch(true);
+    try {
+      const res = await api.marketingBatchGenerateDrafts({
+        brandSlug: selectedBrandSlug,
+        theme: batchTheme,
+        postCount: Number(batchCount),
+        platforms: batchPlatforms,
+        startDate: batchStartDate,
+        objective: batchObjective,
+        autoApprove: batchAutoApprove,
+      });
+      showToast(`¡Plan editorial generado! Se crearon ${res.count} publicaciones programadas.`);
+      setShowBatchModal(false);
+      setCreativeViewMode('calendar');
+      await loadData(selectedBrandSlug);
+    } catch (err: any) {
+      alert(err?.message || 'Error al generar plan semanal');
+    } finally {
+      setIsGeneratingBatch(false);
     }
   };
 
@@ -805,13 +957,13 @@ export function MarketingPage() {
           gap: '16px',
           paddingBottom: '20px',
           borderBottom: '1px solid var(--border)',
-          marginBottom: '24px',
+          marginBottom: '20px',
         }}
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '24px', fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
-              Growth & Marketing Engine
+              Social Media Automation
             </h1>
             <span
               style={{
@@ -820,21 +972,21 @@ export function MarketingPage() {
                 textTransform: 'uppercase',
                 padding: '3px 8px',
                 borderRadius: '4px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                color: '#ef4444',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
+                background: autoPublishActive ? 'rgba(22, 163, 74, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                color: autoPublishActive ? '#16a34a' : 'var(--muted)',
+                border: `1px solid ${autoPublishActive ? 'rgba(22, 163, 74, 0.3)' : 'var(--border)'}`,
                 letterSpacing: '0.05em',
               }}
             >
-              Autonomous Pilot
+              {autoPublishActive ? 'Auto-Pilot Active' : 'Manual Review'}
             </span>
           </div>
           <p style={{ margin: '4px 0 0', fontSize: '14px', color: 'var(--muted)' }}>
-            Supervised ad spend management (Meta & Google Ads) and AI creative production with human-in-the-loop approval
+            Create, schedule, and automate your Instagram publications with AI.
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '13px', color: 'var(--muted)', fontWeight: 500 }}>Brand:</span>
             <select
@@ -846,86 +998,44 @@ export function MarketingPage() {
                 border: '1px solid var(--border)',
                 padding: '8px 12px',
                 borderRadius: '6px',
-                fontSize: '14px',
+                fontSize: '13px',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
             >
               {brands.map((b) => (
                 <option key={b.slug} value={b.slug}>
-                  {b.name} ({b.website})
+                  {b.name}
                 </option>
               ))}
-              {brands.length === 0 && <option value="nikipeppers">Niki Peppers (nikipeppers.com)</option>}
+              {brands.length === 0 && <option value="nikipeppers">Niki Peppers</option>}
             </select>
-
-            <button
-              type="button"
-              onClick={() => setShowAddBrandModal(true)}
-              style={{
-                background: '#16a34a',
-                color: '#ffffff',
-                border: 'none',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-              title="Add a new brand account"
-            >
-              + Add Account
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void openDossierModal()}
-              style={{
-                background: 'var(--surface)',
-                color: 'var(--ink)',
-                border: '1px solid var(--border)',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-              title="Upload, view or edit the Markdown Brand Dossier used by the AI Creative Agent"
-            >
-              Brand Dossier (.md)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void openStylePlaybookModal()}
-              style={{
-                background: overview?.brand?.socialStyleMd ? 'rgba(37,99,235,0.08)' : 'var(--surface)',
-                color: overview?.brand?.socialStyleMd ? '#2563eb' : 'var(--ink)',
-                border: overview?.brand?.socialStyleMd ? '1px solid #2563eb' : '1px solid var(--border)',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-              title="View, analyze or edit the Markdown Social Media Style Playbook used by the AI Agent"
-            >
-              <span>Social Style (.md)</span>
-              {overview?.brand?.socialStyleMd && (
-                <span style={{ fontSize: '10px', background: '#2563eb', color: '#fff', padding: '1px 5px', borderRadius: '4px' }}>
-                  Active
-                </span>
-              )}
-            </button>
           </div>
 
           <button
+            type="button"
+            onClick={() => setShowBatchModal(true)}
+            style={{
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              color: '#ffffff',
+              border: 'none',
+              padding: '8px 14px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
+            }}
+            title="Plan and schedule a full weekly editorial campaign in 1 click"
+          >
+            <span>Plan Week (AI)</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowGenerateModal(true)}
             style={{
               background: '#2563eb',
@@ -938,176 +1048,9 @@ export function MarketingPage() {
               cursor: 'pointer',
             }}
           >
-            Generate Draft with AI
+            + New Post
           </button>
         </div>
-      </div>
-
-      {/* Overview Metrics Bar (Collapsible/Desplegable) */}
-      <div style={{ marginBottom: '20px' }}>
-        <button
-          type="button"
-          onClick={() => setOverviewCardsOpen(!overviewCardsOpen)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%',
-            padding: '10px 16px',
-            borderRadius: '8px',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            color: 'var(--ink)',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Metrics & Guardrails Summary
-            </span>
-            {overview && (
-              <span style={{ fontSize: '12.5px', color: 'var(--ink-2)' }}>
-                Daily Budget: <strong style={{ color: 'var(--ink)' }}>${overview.ads.totalDailyBudget.toFixed(2)}</strong> / max ${overview.ads.safetyGuardrailTotal.toFixed(2)} · ROAS: <strong style={{ color: '#2563eb' }}>${overview.ads.avgRoas.toFixed(2)}x</strong> · Pending Approvals: <strong style={{ color: overview.social.pendingApprovalsCount > 0 ? '#f59e0b' : 'var(--ink)' }}>${overview.social.pendingApprovalsCount}</strong>
-              </span>
-            )}
-          </div>
-          <span style={{ fontSize: '12px', fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap', marginLeft: '12px' }}>
-            {overviewCardsOpen ? 'Hide Metrics ▲' : 'Show Metrics ▼'}
-          </span>
-        </button>
-
-        {overviewCardsOpen && overview && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: '16px',
-              marginTop: '12px',
-            }}
-          >
-          <div
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '18px',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                Daily Budget / Guardrail
-              </span>
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  background: overview.ads.guardrailBreachedCount > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                  color: overview.ads.guardrailBreachedCount > 0 ? '#ef4444' : '#10b981',
-                  border: `1px solid ${overview.ads.guardrailBreachedCount > 0 ? '#ef4444' : '#10b981'}`,
-                }}
-              >
-                {overview.ads.guardrailBreachedCount > 0 ? 'Guardrail Exceeded' : 'Protected Limit'}
-              </span>
-            </div>
-            <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px' }}>
-              ${overview.ads.totalDailyBudget.toFixed(2)}
-              <span style={{ fontSize: '14px', color: 'var(--muted)', fontWeight: 500 }}>
-                {' '}
-                / max ${overview.ads.safetyGuardrailTotal.toFixed(2)} day
-              </span>
-            </div>
-            <div style={{ marginTop: '10px', height: '6px', background: 'var(--grid)', borderRadius: '3px', overflow: 'hidden' }}>
-              <div
-                style={{
-                  height: '100%',
-                  width: `${Math.min(100, (overview.ads.totalDailyBudget / (overview.ads.safetyGuardrailTotal || 1)) * 100)}%`,
-                  background: overview.ads.totalDailyBudget > overview.ads.safetyGuardrailTotal ? '#ef4444' : '#10b981',
-                  borderRadius: '3px',
-                }}
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '18px',
-            }}
-          >
-            <div style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-              Blended ROAS
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '8px' }}>
-              <span style={{ fontSize: '24px', fontWeight: 800, color: '#2563eb' }}>{overview.ads.avgRoas.toFixed(2)}x</span>
-              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Avg CPA: ${overview.ads.avgCpa.toFixed(2)}</span>
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '8px' }}>
-              Total spend to date: <strong>${overview.ads.totalSpendToDate.toFixed(2)}</strong> ({overview.ads.activeCampaignsCount} active campaigns)
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--surface)',
-              border: overview.social.pendingApprovalsCount > 0 ? '1px solid #f59e0b' : '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '18px',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                Human-in-the-Loop
-              </span>
-              {overview.social.pendingApprovalsCount > 0 && (
-                <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', border: '1px solid #f59e0b' }}>
-                  Action Required
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: overview.social.pendingApprovalsCount > 0 ? '#f59e0b' : 'inherit' }}>
-              {overview.social.pendingApprovalsCount}{' '}
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--muted)' }}>pending approval</span>
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '8px' }}>
-              {overview.social.approvedScheduledCount} approved/scheduled · {overview.social.publishedCount} published
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '18px',
-            }}
-          >
-            <div style={{ fontSize: '12px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-              Autonomous Agents
-            </div>
-            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }} />
-                  Traffic Guardian
-                </span>
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>ACTIVE</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563eb' }} />
-                  Social Creative
-                </span>
-                <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>GEMINI 2.5/3.8</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        )}
       </div>
 
       {/* Navigation Sub-Tabs (Mobile view, desktop uses left submenu) */}
@@ -1135,7 +1078,7 @@ export function MarketingPage() {
             gap: '8px',
           }}
         >
-          <span>Social Creative Studio (Drafts & Approvals)</span>
+          <span>Social Media</span>
           {overview && overview.social.pendingApprovalsCount > 0 && (
             <span
               style={{
@@ -1150,22 +1093,6 @@ export function MarketingPage() {
               {overview.social.pendingApprovalsCount}
             </span>
           )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('ads')}
-          style={{
-            padding: '10px 18px',
-            background: 'none',
-            border: 'none',
-            borderBottom: activeTab === 'ads' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'ads' ? 'var(--ink)' : 'var(--muted)',
-            fontWeight: activeTab === 'ads' ? 700 : 500,
-            fontSize: '14px',
-            cursor: 'pointer',
-          }}
-        >
-          Ads & Traffic Engine (Meta & Google)
         </button>
 
         <button
@@ -1184,20 +1111,23 @@ export function MarketingPage() {
             gap: '8px',
           }}
         >
-          <span>Inbox & Chat Assistant</span>
-          <span
-            style={{
-              fontSize: '10px',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              background: autoReplyChatActive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.08)',
-              color: autoReplyChatActive ? '#22c55e' : 'var(--muted)',
-              border: autoReplyChatActive ? '1px solid rgba(34, 197, 94, 0.4)' : '1px solid var(--border)',
-              fontWeight: 700,
-            }}
-          >
-            {autoReplyChatActive ? 'AUTO-REPLY: ON' : 'MANUAL'}
-          </span>
+          <span>Inbox & Assistant</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ads')}
+          style={{
+            padding: '10px 18px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'ads' ? '2px solid #2563eb' : '2px solid transparent',
+            color: activeTab === 'ads' ? 'var(--ink)' : 'var(--muted)',
+            fontWeight: activeTab === 'ads' ? 700 : 500,
+            fontSize: '14px',
+            cursor: 'pointer',
+          }}
+        >
+          Ads & Traffic
         </button>
 
         <button
@@ -1211,65 +1141,190 @@ export function MarketingPage() {
             fontWeight: activeTab === 'integrations' ? 700 : 500,
             fontSize: '14px',
             cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
           }}
         >
-          <span>Integrations & API Keys</span>
-          {autoPublishActive && (
-            <span
-              style={{
-                fontSize: '10px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                background: 'rgba(59, 130, 246, 0.15)',
-                color: '#3b82f6',
-                border: '1px solid rgba(59, 130, 246, 0.4)',
-                fontWeight: 700,
-              }}
-            >
-              AUTO-PUBLISH
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('client_portal')}
-          style={{
-            padding: '10px 18px',
-            background: 'none',
-            border: 'none',
-            borderBottom: activeTab === 'client_portal' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'client_portal' ? 'var(--ink)' : 'var(--muted)',
-            fontWeight: activeTab === 'client_portal' ? 700 : 500,
-            fontSize: '14px',
-            cursor: 'pointer',
-          }}
-        >
-          Client Portal Simulator (Approval Token)
-        </button>
-
-        <button
-          onClick={() => setActiveTab('brand')}
-          style={{
-            padding: '10px 18px',
-            background: 'none',
-            border: 'none',
-            borderBottom: activeTab === 'brand' ? '2px solid #2563eb' : '2px solid transparent',
-            color: activeTab === 'brand' ? 'var(--ink)' : 'var(--muted)',
-            fontWeight: activeTab === 'brand' ? 700 : 500,
-            fontSize: '14px',
-            cursor: 'pointer',
-          }}
-        >
-          Brand Directives & Voice Tone
+          Settings & Accounts
         </button>
       </div>
 
       {/* TAB 1: SOCIAL CREATIVE STUDIO */}
       {activeTab === 'creative' && (
         <div>
+          {/* Instagram Quick Connection Card */}
+          {(() => {
+            const connectedHandle = overview?.brand?.instagramHandle || '';
+            const isConnected = Boolean(connectedHandle);
+            const isLiveMode = Boolean(integrationsForm.metaPageAccessToken);
+
+            return (
+              <div
+                style={{
+                  background: isConnected ? 'var(--surface)' : 'rgba(37, 99, 235, 0.04)',
+                  border: isConnected ? '1px solid var(--border)' : '1px dashed #2563eb',
+                  borderRadius: '10px',
+                  padding: '16px 20px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '16px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: '260px' }}>
+                  <div
+                    style={{
+                      width: '42px',
+                      height: '42px',
+                      borderRadius: '10px',
+                      background: isConnected
+                        ? 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)'
+                        : 'var(--border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                    </svg>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ fontSize: '15px', color: 'var(--ink)' }}>
+                        {isConnected ? `@${connectedHandle}` : 'Instagram Account'}
+                      </strong>
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: isConnected ? 'rgba(22, 163, 74, 0.1)' : 'rgba(234, 88, 12, 0.1)',
+                          color: isConnected ? '#16a34a' : '#ea580c',
+                          border: `1px solid ${isConnected ? 'rgba(22, 163, 74, 0.3)' : 'rgba(234, 88, 12, 0.3)'}`,
+                        }}
+                      >
+                        {isConnected ? (isLiveMode ? 'Connected (Live API)' : 'Connected (Sandbox Mode)') : 'Not Connected'}
+                      </span>
+                    </div>
+                    <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
+                      {isConnected
+                        ? (isLiveMode
+                            ? 'Posts will publish live to your official Instagram page when scheduled.'
+                            : 'Sandbox / Test Mode ready. Generate, schedule, and test publications with no Meta credentials required.')
+                        : 'Link your Instagram account to start auto-scheduling and publishing posts.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  {isConnected ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void handleTestIntegration('INSTAGRAM')}
+                        disabled={testingChannel === 'INSTAGRAM'}
+                        style={{
+                          padding: '7px 14px',
+                          background: 'var(--page)',
+                          color: 'var(--ink)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '6px',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {testingChannel === 'INSTAGRAM' ? 'Testing...' : 'Test Connection'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIgHandleInput(connectedHandle);
+                          setShowConnectIgModal(true);
+                        }}
+                        style={{
+                          padding: '7px 14px',
+                          background: 'var(--page)',
+                          color: 'var(--ink)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '6px',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Configure
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleDisconnectInstagram()}
+                        style={{
+                          padding: '7px 12px',
+                          background: 'transparent',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          borderRadius: '6px',
+                          fontSize: '12.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Disconnect
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowConnectIgModal(true)}
+                      style={{
+                        padding: '8px 18px',
+                        background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 6px rgba(220, 39, 67, 0.3)',
+                      }}
+                    >
+                      Connect Instagram
+                    </button>
+                  )}
+
+                  {/* Auto-Pilot Switch */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      paddingLeft: '10px',
+                      borderLeft: '1px solid var(--border)',
+                    }}
+                  >
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <input
+                        type="checkbox"
+                        checked={autoPublishActive}
+                        onChange={handleToggleAutoPublish}
+                        style={{ cursor: 'pointer', accentColor: '#16a34a' }}
+                      />
+                      <span>Auto-Pilot</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           <div
             style={{
               display: 'flex',
@@ -1357,18 +1412,389 @@ export function MarketingPage() {
               </div>
             </div>
 
-            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Showing <strong>{filteredDrafts.length}</strong> content drafts
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'var(--surface)',
+                  padding: '3px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setCreativeViewMode('grid')}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    background: creativeViewMode === 'grid' ? 'var(--ink)' : 'transparent',
+                    color: creativeViewMode === 'grid' ? 'var(--page)' : 'var(--muted)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Grid View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreativeViewMode('calendar')}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    background: creativeViewMode === 'calendar' ? 'var(--ink)' : 'transparent',
+                    color: creativeViewMode === 'calendar' ? 'var(--page)' : 'var(--muted)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Editorial Timeline
+                </button>
+              </div>
+
+              <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
+                <strong>{filteredDrafts.length}</strong> publications
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => void handleFetchIdeas()}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    color: 'var(--ink)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                  title="Content Ideas Bank"
+                >
+                  AI Ideas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openStylePlaybookModal()}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                    color: 'var(--ink)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                  title="Instagram Style Voice & Aesthetics (.md)"
+                >
+                  Style Voice (.md)
+                </button>
+              </div>
             </div>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-              gap: '20px',
-            }}
-          >
+          {creativeViewMode === 'calendar' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {filteredDrafts.length === 0 ? (
+                <div
+                  style={{
+                    background: 'var(--surface)',
+                    border: '1px dashed var(--border)',
+                    borderRadius: '8px',
+                    padding: '40px 20px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <p style={{ margin: '0 0 12px', fontSize: '15px', color: 'var(--ink)' }}>
+                    No publications match this filter.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowBatchModal(true)}
+                    style={{
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '10px 20px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Weekly AI Planner
+                  </button>
+                </div>
+              ) : (
+                (() => {
+                  const sorted = [...filteredDrafts].sort((a, b) => {
+                    if (!a.scheduledFor) return 1;
+                    if (!b.scheduledFor) return -1;
+                    return new Date(a.scheduledFor).getTime() - new Date(b.scheduledFor).getTime();
+                  });
+
+                  const groups: Record<string, SocialDraftView[]> = {};
+                  for (const d of sorted) {
+                    const key = d.scheduledFor
+                      ? new Date(d.scheduledFor).toISOString().slice(0, 10)
+                      : 'unscheduled';
+                    if (!groups[key]) groups[key] = [];
+                    groups[key]!.push(d);
+                  }
+
+                  return Object.entries(groups).map(([dateKey, groupDrafts]) => {
+                    const isUnscheduled = dateKey === 'unscheduled';
+                    const dateLabel = isUnscheduled
+                      ? 'Drafts Without Scheduled Date'
+                      : new Intl.DateTimeFormat('en-US', {
+                          weekday: 'long',
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        }).format(new Date(`${dateKey}T12:00:00`));
+
+                    return (
+                      <div
+                        key={dateKey}
+                        style={{
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '10px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: '12px 18px',
+                            background: isUnscheduled ? 'rgba(0,0,0,0.02)' : 'rgba(37, 99, 235, 0.06)',
+                            borderBottom: '1px solid var(--border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span
+                              style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: isUnscheduled ? 'var(--muted)' : '#2563eb',
+                                display: 'inline-block',
+                              }}
+                            />
+                            <strong style={{ fontSize: '14px', textTransform: 'capitalize', color: 'var(--ink)' }}>
+                              {dateLabel}
+                            </strong>
+                          </div>
+                          <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                            {groupDrafts.length} {groupDrafts.length === 1 ? 'publication' : 'publications'}
+                          </span>
+                        </div>
+
+                        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {groupDrafts.map((draft) => {
+                            const isPending = draft.status === 'PENDING_APPROVAL';
+                            const isApproved = draft.status === 'APPROVED';
+                            const isPublished = draft.status === 'PUBLISHED';
+
+                            const timeStr = draft.scheduledFor
+                              ? new Date(draft.scheduledFor).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : 'No time';
+
+                            return (
+                              <div
+                                key={draft.id}
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '80px 140px 1fr 140px auto',
+                                  alignItems: 'center',
+                                  gap: '14px',
+                                  padding: '12px',
+                                  borderRadius: '6px',
+                                  border: '1px solid var(--border)',
+                                  background: isPending
+                                    ? 'rgba(245, 158, 11, 0.03)'
+                                    : isApproved
+                                    ? 'rgba(22, 163, 74, 0.03)'
+                                    : 'var(--page)',
+                                }}
+                              >
+                                <div>
+                                  <strong style={{ fontSize: '12.5px', color: 'var(--ink)' }}>{timeStr}</strong>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      background: 'var(--surface)',
+                                      border: '1px solid var(--border)',
+                                    }}
+                                  >
+                                    {draft.platform}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      background: 'var(--surface)',
+                                      color: 'var(--muted)',
+                                      border: '1px solid var(--border)',
+                                    }}
+                                  >
+                                    {draft.postType}
+                                  </span>
+                                </div>
+
+                                <div style={{ minWidth: 0 }}>
+                                  <p
+                                    style={{
+                                      margin: 0,
+                                      fontSize: '12.5px',
+                                      color: 'var(--ink)',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }}
+                                    title={draft.caption}
+                                  >
+                                    {draft.caption}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      padding: '3px 8px',
+                                      borderRadius: '4px',
+                                      background: isPublished
+                                        ? 'rgba(147, 51, 234, 0.1)'
+                                        : isApproved
+                                        ? 'rgba(22, 163, 74, 0.1)'
+                                        : isPending
+                                        ? 'rgba(245, 158, 11, 0.1)'
+                                        : 'rgba(0, 0, 0, 0.05)',
+                                      color: isPublished
+                                        ? '#9333ea'
+                                        : isApproved
+                                        ? '#16a34a'
+                                        : isPending
+                                        ? '#d97706'
+                                        : 'var(--muted)',
+                                      border: isPublished
+                                        ? '1px solid rgba(147, 51, 234, 0.3)'
+                                        : isApproved
+                                        ? '1px solid rgba(22, 163, 74, 0.3)'
+                                        : isPending
+                                        ? '1px solid rgba(245, 158, 11, 0.3)'
+                                        : '1px solid var(--border)',
+                                    }}
+                                  >
+                                    {isPublished
+                                      ? 'PUBLISHED'
+                                      : isApproved
+                                      ? 'READY (AUTO)'
+                                      : isPending
+                                      ? 'PENDING'
+                                      : draft.status}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  {isPending && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateStatus(draft.id, 'APPROVED')}
+                                      disabled={statusUpdatingId === draft.id}
+                                      style={{
+                                        padding: '5px 10px',
+                                        background: '#16a34a',
+                                        color: '#ffffff',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      Approve
+                                    </button>
+                                  )}
+
+                                  {isApproved && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDirectPublish(draft.id)}
+                                      disabled={publishingDraftId === draft.id}
+                                      style={{
+                                        padding: '5px 10px',
+                                        background: '#2563eb',
+                                        color: '#ffffff',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {publishingDraftId === draft.id ? 'Publishing...' : 'Publish Now'}
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingDraftId(draft.id);
+                                      setEditingDraftCaption(draft.caption);
+                                    }}
+                                    style={{
+                                      padding: '5px 10px',
+                                      background: 'transparent',
+                                      border: '1px solid var(--border)',
+                                      color: 'var(--muted)',
+                                      borderRadius: '4px',
+                                      fontSize: '12px',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Edit caption"
+                                  >
+                                    Edit
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()
+              )}
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+                gap: '20px',
+              }}
+            >
             {filteredDrafts.map((draft) => {
               const isPending = draft.status === 'PENDING_APPROVAL';
               const isApproved = draft.status === 'APPROVED';
@@ -1827,6 +2253,7 @@ export function MarketingPage() {
               );
             })}
           </div>
+          )}
         </div>
       )}
 
@@ -3405,6 +3832,227 @@ export function MarketingPage() {
         </div>
       )}
 
+      {/* CONNECT INSTAGRAM MODAL */}
+      {showConnectIgModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '480px',
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                  }}
+                >
+                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                  </svg>
+                </div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                  Connect Instagram
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowConnectIgModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--muted)', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+
+            <p style={{ margin: '0 0 18px', fontSize: '13px', color: 'var(--muted)' }}>
+              Enter your Instagram handle to schedule and automate publications. You can test everything immediately in Sandbox Mode.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleSaveInstagram();
+              }}
+            >
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, marginBottom: '6px' }}>
+                  Instagram Handle / Username:
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <span style={{ position: 'absolute', left: '12px', color: 'var(--muted)', fontWeight: 600 }}>@</span>
+                  <input
+                    type="text"
+                    value={igHandleInput}
+                    onChange={(e) => setIgHandleInput(e.target.value)}
+                    placeholder="nikipepperstattoo"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px 9px 28px',
+                      borderRadius: '6px',
+                      background: 'var(--page)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--ink)',
+                      fontSize: '14px',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, marginBottom: '8px' }}>
+                  Connection Mode:
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '10px',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: igMode === 'sandbox' ? '1px solid #2563eb' : '1px solid var(--border)',
+                      background: igMode === 'sandbox' ? 'rgba(37, 99, 235, 0.05)' : 'var(--page)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="igMode"
+                      value="sandbox"
+                      checked={igMode === 'sandbox'}
+                      onChange={() => setIgMode('sandbox')}
+                      style={{ marginTop: '3px', accentColor: '#2563eb' }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: '13px', color: 'var(--ink)', display: 'block' }}>
+                        Sandbox / Test Mode (Instant, No API Setup Needed)
+                      </strong>
+                      <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                        Recommended for testing right away. Generates posts, schedules them, and simulates automated publishing without needing a Meta Developer App.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '10px',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      border: igMode === 'live' ? '1px solid #2563eb' : '1px solid var(--border)',
+                      background: igMode === 'live' ? 'rgba(37, 99, 235, 0.05)' : 'var(--page)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="igMode"
+                      value="live"
+                      checked={igMode === 'live'}
+                      onChange={() => setIgMode('live')}
+                      style={{ marginTop: '3px', accentColor: '#2563eb' }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: '13px', color: 'var(--ink)', display: 'block' }}>
+                        Live Publishing (Meta Graph API)
+                      </strong>
+                      <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                        Publishes live to your official Instagram Business account using a Meta Long-Lived Page Access Token.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {igMode === 'live' && (
+                <div style={{ marginBottom: '18px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
+                    Meta Page Access Token:
+                  </label>
+                  <input
+                    type="password"
+                    value={igTokenInput}
+                    onChange={(e) => setIgTokenInput(e.target.value)}
+                    placeholder="EAAB..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'var(--page)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--ink)',
+                      fontSize: '13px',
+                    }}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowConnectIgModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    color: 'var(--muted)',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingIgConnection}
+                  style={{
+                    padding: '8px 20px',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: savingIgConnection ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {savingIgConnection ? 'Saving...' : 'Connect Instagram'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* GENERATE DRAFT MODAL */}
       {showGenerateModal && (
         <div
@@ -3511,6 +4159,32 @@ export function MarketingPage() {
                   placeholder="https://..."
                   style={{ width: '100%', padding: '10px', background: 'var(--page)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--ink)', boxSizing: 'border-box' }}
                 />
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--muted)', alignSelf: 'center' }}>Presets:</span>
+                  {[
+                    { label: 'Fine Line Botanical', url: 'https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?w=800&q=80' },
+                    { label: 'Studio Process', url: 'https://images.unsplash.com/photo-1562962230-16e4623d36e6?w=800&q=80' },
+                    { label: 'Organic Ceramics', url: 'https://images.unsplash.com/photo-1611501275019-9b5cda994e8d?w=800&q=80' },
+                    { label: 'Sketchbook Studies', url: 'https://images.unsplash.com/photo-1568515045052-f9a854d70bfd?w=800&q=80' },
+                  ].map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setNewMediaUrl(p.url)}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--ink)',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div style={{ marginBottom: '20px' }}>
@@ -3550,6 +4224,371 @@ export function MarketingPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* BATCH WEEKLY STRATEGY PLANNER MODAL */}
+      {showBatchModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '580px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>
+                  Weekly AI Strategy Planner
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
+                  Generate a cohesive multi-post editorial campaign distributed across consecutive days.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBatchModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--muted)', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+
+            <form onSubmit={handleBatchGenerate}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Campaign Theme or Angle:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={batchTheme}
+                  onChange={(e) => setBatchTheme(e.target.value)}
+                  placeholder="e.g. Summer Botanical Collection & Consultation Bookings"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    background: 'var(--page)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    color: 'var(--ink)',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                  Commercial Objective:
+                </label>
+                <input
+                  type="text"
+                  value={batchObjective}
+                  onChange={(e) => setBatchObjective(e.target.value)}
+                  placeholder="e.g. Consultation bookings and studio appointments"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    background: 'var(--page)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    color: 'var(--ink)',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                    Publication Volume:
+                  </label>
+                  <select
+                    value={batchCount}
+                    onChange={(e) => setBatchCount(Number(e.target.value))}
+                    style={{
+                      width: '100%',
+                      padding: '9px',
+                      background: 'var(--page)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    <option value={3}>3 publications (Mon, Wed, Fri)</option>
+                    <option value={5}>5 publications (Weekdays)</option>
+                    <option value={7}>7 publications (Full Week 24/7)</option>
+                    <option value={10}>10 publications (High Frequency)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
+                    Start Date:
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={batchStartDate}
+                    onChange={(e) => setBatchStartDate(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '9px',
+                      background: 'var(--page)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      color: 'var(--ink)',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
+                  Distribution Channels:
+                </label>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  {(['INSTAGRAM', 'TIKTOK', 'FACEBOOK'] as const).map((plat) => {
+                    const isChecked = batchPlatforms.includes(plat);
+                    return (
+                      <label
+                        key={plat}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '12.5px',
+                          cursor: 'pointer',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          border: isChecked ? '1px solid #2563eb' : '1px solid var(--border)',
+                          background: isChecked ? 'rgba(37, 99, 235, 0.08)' : 'var(--page)',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setBatchPlatforms([...batchPlatforms, plat]);
+                            } else if (batchPlatforms.length > 1) {
+                              setBatchPlatforms(batchPlatforms.filter((p) => p !== plat));
+                            }
+                          }}
+                        />
+                        {plat}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px',
+                  borderRadius: '6px',
+                  background: 'rgba(22, 163, 74, 0.05)',
+                  border: '1px solid rgba(22, 163, 74, 0.2)',
+                  marginBottom: '20px',
+                }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12.5px' }}>
+                  <input
+                    type="checkbox"
+                    checked={batchAutoApprove}
+                    onChange={(e) => setBatchAutoApprove(e.target.checked)}
+                  />
+                  <span>
+                    <strong>Auto-approve publications</strong> (Ready for autonomous worker publishing at scheduled times)
+                  </span>
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBatchModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    color: 'var(--muted)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isGeneratingBatch}
+                  style={{
+                    padding: '9px 22px',
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(79, 70, 229, 0.3)',
+                  }}
+                >
+                  {isGeneratingBatch ? 'Generating Plan with AI...' : 'Generate Weekly Batch'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* AI CONTENT IDEAS MODAL */}
+      {showIdeasModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '680px',
+              width: '100%',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--ink)' }}>
+                  AI Content Idea Bank & Hooks
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
+                  Strategic concepts synthesized by Gemini based on brand dossier and audience for {selectedBrandSlug}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowIdeasModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', color: 'var(--muted)', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+
+            {loadingIdeas ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted)' }}>
+                <p style={{ fontSize: '14px' }}>Synthesizing brand identity and generating suggestions...</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {ideas.map((idea) => (
+                  <div
+                    key={idea.id}
+                    style={{
+                      padding: '16px',
+                      borderRadius: '8px',
+                      background: 'var(--page)',
+                      border: '1px solid var(--border)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      <strong style={{ fontSize: '14px', color: 'var(--ink)' }}>{idea.topic}</strong>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                          }}
+                        >
+                          {idea.platform}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'var(--surface)',
+                            color: 'var(--muted)',
+                            border: '1px solid var(--border)',
+                          }}
+                        >
+                          {idea.postType}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '13px', color: 'var(--ink)', fontStyle: 'italic', background: 'rgba(0,0,0,0.02)', padding: '8px 10px', borderRadius: '4px', borderLeft: '3px solid #2563eb' }}>
+                      "{idea.hook}"
+                    </div>
+
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                      <strong>Objective:</strong> {idea.objective}
+                    </div>
+
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                      <strong>Strategy:</strong> {idea.rationale}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyIdea(idea)}
+                        style={{
+                          padding: '6px 14px',
+                          background: '#2563eb',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Create Post with This Idea
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

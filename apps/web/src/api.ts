@@ -36,6 +36,9 @@ import type {
   UpdateBrandIntegrationsInput,
   TestChatMessageInput,
   BrandConversationView,
+  BatchGenerateDraftsInput,
+  ContentIdeaSuggestion,
+  MarketingSchedulerStatus,
   PromotionsOverview,
   ArgentinePromo,
   PriceGlitchOverview,
@@ -328,6 +331,22 @@ export const api = {
       }
     ),
 
+  marketingBatchGenerateDrafts: (payload: BatchGenerateDraftsInput) =>
+    request<{ success: boolean; theme: string; source: string; count: number; drafts: SocialDraftView[] }>(
+      '/api/marketing/drafts/batch-generate',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    ),
+  marketingGetContentIdeas: (brandSlug?: string) =>
+    request<{ ideas: ContentIdeaSuggestion[] }>(
+      `/api/marketing/ideas/suggestions${brandSlug ? `?brandSlug=${encodeURIComponent(brandSlug)}` : ''}`
+    ),
+  marketingGetSchedulerStatus: (brandSlug?: string) =>
+    request<MarketingSchedulerStatus>(
+      `/api/marketing/scheduler/status${brandSlug ? `?brandSlug=${encodeURIComponent(brandSlug)}` : ''}`
+    ),
   marketingPublishDraft: (id: string) =>
     request<{ draft: SocialDraftView; publishResult: any }>(`/api/marketing/drafts/${id}/publish`, {
       method: 'POST',

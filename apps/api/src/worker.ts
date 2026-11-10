@@ -5,6 +5,7 @@ import { createPrisma, createRedis } from './infra.js';
 import { runMonitor } from './runner.js';
 import { QUEUE, syncSchedules, type RunMonitorJob } from './schedules.js';
 import { createOutreachWorker } from './leads/outreach-queue.js';
+import { checkAndPublishScheduledDrafts } from './marketing/publisher.js';
 
 const env = loadEnv();
 const log = pino({ level: env.LOG_LEVEL });
@@ -42,12 +43,28 @@ async function sync() {
 }
 await sync();
 const timer = setInterval(sync, 60_000);
+
+// Recurring autonomous marketing auto-publisher (checks every 60 seconds)
+async function runMarketingScheduler() {
+  try {
+    const res = await checkAndPublishScheduledDrafts(prisma);
+    if (res.publishedCount > 0) {
+      log.info({ count: res.publishedCount }, 'Auto-published scheduled marketing drafts');
+    }
+  } catch (err) {
+    log.error({ err }, 'Marketing scheduler execution failed');
+  }
+}
+const marketingTimer = setInterval(runMarketingScheduler, 60_000);
+setTimeout(runMarketingScheduler, 5_000);
+
 log.info({ concurrency: CONCURRENCY }, 'worker started');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, async () => {
     log.info({ signal }, 'shutting down');
     clearInterval(timer);
+    clearInterval(marketingTimer);
     await worker.close(); // lets running checks finish
     await outreachWorker.close();
     await queue.close();

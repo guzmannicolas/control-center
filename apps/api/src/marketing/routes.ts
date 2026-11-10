@@ -13,17 +13,30 @@ import {
   AddInstagramPostInput,
   UpdateBrandIntegrationsInput,
   TestChatMessageInput,
+  BatchGenerateDraftsInput,
+  type ContentIdeaSuggestion,
+  type MarketingSchedulerStatus,
   type MarketingOverview,
   type SocialDraftView,
   type AdCampaignView,
   type BrandView,
   type BrandConversationView,
 } from '@cc/shared';
-import { generateSocialCreative, auditAdCampaigns, synthesizeSocialStylePlaybook } from './agent.js';
+import {
+  generateSocialCreative,
+  auditAdCampaigns,
+  synthesizeSocialStylePlaybook,
+  generateWeeklyContentPlan,
+  generateContentIdeaSuggestions,
+} from './agent.js';
 import { dispatchDraftApproval } from './dispatch.js';
 import { ensureMarketingSeed } from './seed-helper.js';
 import { scrapeInstagramProfile, extractInstagramPostFromEmbed } from './instagram-scraper.js';
-import { publishDraftToSocialPlatforms, checkAndPublishScheduledDrafts } from './publisher.js';
+import {
+  publishDraftToSocialPlatforms,
+  checkAndPublishScheduledDrafts,
+  getSchedulerRecentLogs,
+} from './publisher.js';
 import { generateBrandChatReply } from './chat-agent.js';
 
 export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
@@ -352,6 +365,162 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         hashtags: creative.hashtags,
         source: creative.source,
       },
+    };
+  });
+
+  // 3b. POST /api/marketing/drafts/batch-generate (Weekly / Multi-Post Batch Strategy)
+  app.post('/drafts/batch-generate', async (req, reply) => {
+    const parsed = BatchGenerateDraftsInput.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'Invalid batch generate input' });
+    }
+
+    const { brandSlug = 'nikipeppers', brandId, theme, postCount, platforms, startDate, objective, autoApprove } =
+      parsed.data;
+
+    let brand = brandId
+      ? await prisma.brand.findUnique({ where: { id: brandId } })
+      : await prisma.brand.findUnique({ where: { slug: brandSlug } });
+
+    if (!brand) {
+      await ensureMarketingSeed(prisma);
+      brand = await prisma.brand.findUnique({ where: { slug: 'nikipeppers' } });
+    }
+
+    if (!brand) {
+      return reply.code(404).send({ error: 'Brand not found' });
+    }
+
+    const start = startDate ? new Date(startDate) : new Date(Date.now() + 86400000);
+
+    const plan = await generateWeeklyContentPlan({
+      brand: {
+        name: brand.name,
+        website: brand.website,
+        toneOfVoice: brand.toneOfVoice,
+        styleDirectives: brand.styleDirectives as Record<string, unknown>,
+        targetAudience: brand.targetAudience,
+        dossierMd: brand.dossierMd ?? undefined,
+        socialStyleMd: (brand as any).socialStyleMd ?? undefined,
+        instagramHandle: (brand as any).instagramHandle ?? undefined,
+        scrapedPosts: (brand as any).scrapedPosts ?? undefined,
+      },
+      theme,
+      postCount,
+      platforms,
+      startDate: start,
+      objective,
+    });
+
+    const createdDrafts = [];
+    const status = autoApprove ? 'APPROVED' : 'PENDING_APPROVAL';
+
+    for (const item of plan.items) {
+      const approvalToken = `appr_${randomUUID().replace(/-/g, '')}`;
+      const draft = await prisma.socialDraft.create({
+        data: {
+          brandId: brand.id,
+          platform: item.platform,
+          postType: item.postType,
+          caption: item.caption,
+          mediaUrls: item.suggestedMedia,
+          status,
+          approvalToken,
+          scheduledFor: item.scheduledFor,
+        },
+        include: { brand: { select: { name: true, slug: true } } },
+      });
+      createdDrafts.push(toDraftView(draft));
+    }
+
+    return {
+      success: true,
+      theme: plan.theme,
+      source: plan.source,
+      count: createdDrafts.length,
+      drafts: createdDrafts,
+    };
+  });
+
+  // 3c. GET /api/marketing/ideas/suggestions (AI Content Ideas Bank)
+  app.get('/ideas/suggestions', async (req, reply) => {
+    const { brandSlug = 'nikipeppers' } = (req.query ?? {}) as { brandSlug?: string };
+
+    let brand = await prisma.brand.findUnique({ where: { slug: brandSlug } });
+    if (!brand) {
+      brand = await prisma.brand.findUnique({ where: { slug: 'nikipeppers' } });
+    }
+    if (!brand) {
+      return reply.code(404).send({ error: 'Brand not found' });
+    }
+
+    const ideas = await generateContentIdeaSuggestions({
+      name: brand.name,
+      website: brand.website,
+      toneOfVoice: brand.toneOfVoice,
+      styleDirectives: brand.styleDirectives as Record<string, unknown>,
+      targetAudience: brand.targetAudience,
+      dossierMd: brand.dossierMd ?? undefined,
+      socialStyleMd: (brand as any).socialStyleMd ?? undefined,
+      instagramHandle: (brand as any).instagramHandle ?? undefined,
+      scrapedPosts: (brand as any).scrapedPosts ?? undefined,
+    });
+
+    return { ideas };
+  });
+
+  // 3d. GET /api/marketing/scheduler/status (Daemon & Queue Status)
+  app.get('/scheduler/status', async (req) => {
+    const { brandSlug } = (req.query ?? {}) as { brandSlug?: string };
+    const now = new Date();
+
+    const brandFilter = brandSlug
+      ? { brand: { slug: brandSlug } }
+      : {};
+
+    const [scheduledQueueCount, publishedCount, upcoming] = await Promise.all([
+      prisma.socialDraft.count({
+        where: {
+          ...brandFilter,
+          scheduledFor: { gt: now },
+          status: { in: ['APPROVED', 'PENDING_APPROVAL'] },
+        },
+      }),
+      prisma.socialDraft.count({
+        where: {
+          ...brandFilter,
+          status: 'PUBLISHED',
+        },
+      }),
+      prisma.socialDraft.findMany({
+        where: {
+          ...brandFilter,
+          scheduledFor: { not: null },
+        },
+        orderBy: { scheduledFor: 'asc' },
+        take: 10,
+        include: { brand: { select: { name: true } } },
+      }),
+    ]);
+
+    const upcomingDrafts = upcoming.map((d) => ({
+      id: d.id,
+      brandName: d.brand.name,
+      platform: d.platform,
+      postType: d.postType,
+      scheduledFor: d.scheduledFor?.toISOString() ?? '',
+      captionPreview: d.caption.slice(0, 100) + (d.caption.length > 100 ? '...' : ''),
+      status: d.status,
+    }));
+
+    return {
+      enabled: true,
+      intervalSeconds: 60,
+      lastCheckedAt: now.toISOString(),
+      scheduledQueueCount,
+      publishedCount,
+      upcomingDrafts,
+      recentLogs: getSchedulerRecentLogs(),
     };
   });
 
@@ -1005,6 +1174,7 @@ export const marketingRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = asy
         integrations: mergedIntegrations as any,
         ...(parsed.data.autoPublish !== undefined ? { autoPublish: parsed.data.autoPublish } : {}),
         ...(parsed.data.autoReplyChat !== undefined ? { autoReplyChat: parsed.data.autoReplyChat } : {}),
+        ...(parsed.data.instagramHandle !== undefined ? { instagramHandle: parsed.data.instagramHandle } : {}),
       },
     });
 

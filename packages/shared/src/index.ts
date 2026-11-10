@@ -469,6 +469,9 @@ export interface BrandIntegrations {
   metaInstagramAccountId?: string;
   metaAdsAccountId?: string;
   googleAdsCustomerId?: string;
+  tiktokAccessToken?: string;
+  tiktokAdvertiserId?: string;
+  customWebhookUrl?: string;
   whatsappPhoneNumberId?: string;
   whatsappAccessToken?: string;
   whatsappOwnerNumber?: string;
@@ -611,6 +614,45 @@ export const GenerateDraftInput = z.object({
 });
 export type GenerateDraftInput = z.infer<typeof GenerateDraftInput>;
 
+export const BatchGenerateDraftsInput = z.object({
+  brandSlug: z.string().optional(),
+  brandId: z.string().optional(),
+  theme: z.string().min(3, 'Theme must be at least 3 characters'),
+  postCount: z.number().int().min(1).max(14).default(5),
+  platforms: z.array(z.enum(SOCIAL_PLATFORMS)).min(1).default(['INSTAGRAM']),
+  startDate: z.string().optional(),
+  objective: z.string().optional(),
+  autoApprove: z.boolean().optional().default(false),
+});
+export type BatchGenerateDraftsInput = z.infer<typeof BatchGenerateDraftsInput>;
+
+export interface ContentIdeaSuggestion {
+  id: string;
+  topic: string;
+  platform: SocialPlatform;
+  postType: SocialPostType;
+  hook: string;
+  objective: string;
+  rationale: string;
+}
+
+export interface MarketingSchedulerStatus {
+  enabled: boolean;
+  intervalSeconds: number;
+  lastCheckedAt: string | null;
+  scheduledQueueCount: number;
+  publishedCount: number;
+  upcomingDrafts: Array<{
+    id: string;
+    brandName: string;
+    platform: SocialPlatform;
+    postType: SocialPostType;
+    scheduledFor: string;
+    captionPreview: string;
+    status: SocialDraftStatus;
+  }>;
+}
+
 export const UpdateDraftStatusInput = z.object({
   status: z.enum(SOCIAL_DRAFT_STATUSES),
   feedback: z.string().optional(),
@@ -677,6 +719,7 @@ export const UpdateBrandIntegrationsInput = z.object({
   integrations: z.record(z.string(), z.unknown()).optional(),
   autoPublish: z.boolean().optional(),
   autoReplyChat: z.boolean().optional(),
+  instagramHandle: z.string().optional(),
 });
 export type UpdateBrandIntegrationsInput = z.infer<typeof UpdateBrandIntegrationsInput>;
 

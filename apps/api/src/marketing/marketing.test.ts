@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { auditAdCampaigns, generateSocialCreative, synthesizeSocialStylePlaybook } from './agent.js';
+import {
+  auditAdCampaigns,
+  generateSocialCreative,
+  synthesizeSocialStylePlaybook,
+  generateWeeklyContentPlan,
+  generateContentIdeaSuggestions,
+} from './agent.js';
 import { dispatchDraftApproval } from './dispatch.js';
 import { scrapeInstagramProfile } from './instagram-scraper.js';
 import type { SocialDraftView } from '@cc/shared';
@@ -155,5 +161,42 @@ describe('Growth & Marketing Engine - Social Style Playbook Synthesizer', () => 
     expect(md).toContain('## 2. Caption Architecture & Hook Formulas');
     expect(md).toContain('## 6. Few-Shot Golden Reference Captions');
     expect(md).toContain('## 7. Directives for Autonomous Post Generation');
+  });
+});
+
+describe('Growth & Marketing Engine - Weekly Batch Planner & Ideas Bank', () => {
+  it('generates multi-day scheduled content plan distributed over time', async () => {
+    const startDate = new Date('2026-11-10T10:00:00Z');
+    const plan = await generateWeeklyContentPlan({
+      brand: {
+        name: 'Niki Peppers',
+        website: 'https://nikipeppers.com',
+        toneOfVoice: 'Botanical, fine line, artistic and authentic',
+      },
+      theme: 'Colección Floral de Verano',
+      postCount: 5,
+      platforms: ['INSTAGRAM', 'TIKTOK'],
+      startDate,
+    });
+
+    expect(plan.theme).toBe('Colección Floral de Verano');
+    expect(plan.items.length).toBe(5);
+    expect(plan.items[0]?.scheduledFor).toBeDefined();
+    expect(plan.items[0]?.caption).toContain('nikipeppers.com');
+    expect(['INSTAGRAM', 'TIKTOK']).toContain(plan.items[0]?.platform);
+    expect(plan.items[1]?.scheduledFor.getTime()).toBeGreaterThan(plan.items[0]!.scheduledFor.getTime());
+  });
+
+  it('suggests strategic content ideas matching brand persona', async () => {
+    const ideas = await generateContentIdeaSuggestions({
+      name: 'Niki Peppers',
+      website: 'https://nikipeppers.com',
+      toneOfVoice: 'Artistic, thoughtful, fine line botanical tattoo',
+    });
+
+    expect(ideas.length).toBeGreaterThanOrEqual(4);
+    expect(ideas[0]?.topic).toBeDefined();
+    expect(ideas[0]?.hook).toBeDefined();
+    expect(ideas[0]?.objective).toBeDefined();
   });
 });
