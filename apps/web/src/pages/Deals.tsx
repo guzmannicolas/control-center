@@ -102,10 +102,62 @@ function AlertTriangleIcon() {
   );
 }
 
+function SlidersIcon() {
+  return (
+    <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="21" x2="4" y2="14" />
+      <line x1="4" y1="10" x2="4" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12" y2="3" />
+      <line x1="20" y1="21" x2="20" y2="16" />
+      <line x1="20" y1="12" x2="20" y2="3" />
+      <line x1="1" y1="14" x2="7" y2="14" />
+      <line x1="9" y1="8" x2="15" y2="8" />
+      <line x1="17" y1="16" x2="23" y2="16" />
+    </svg>
+  );
+}
+
+export interface UserDealPreferences {
+  enabledEntities: string[];
+  hideSeniors60: boolean;
+  hideTierGated: boolean;
+  hideAirfareTravel: boolean;
+}
+
+const DEFAULT_USER_PREFERENCES: UserDealPreferences = {
+  enabledEntities: [],
+  hideSeniors60: true,
+  hideTierGated: true,
+  hideAirfareTravel: true,
+};
+
 export function DealsPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'deals' | 'glitches' | 'calculator' | 'schedule'>('deals');
   const [expandedCard, setExpandedCard] = useState<'today' | 'entities' | 'glitches' | 'max_rates' | null>(null);
+
+  // Persistent User Preferences & Custom Filters
+  const [showFilterDrawer, setShowFilterDrawer] = useState(false);
+  const [userPrefs, setUserPrefs] = useState<UserDealPreferences>(() => {
+    try {
+      const saved = localStorage.getItem('cc_deals_user_custom_filters_v2');
+      if (saved) {
+        return { ...DEFAULT_USER_PREFERENCES, ...JSON.parse(saved) };
+      }
+    } catch {}
+    return DEFAULT_USER_PREFERENCES;
+  });
+
+  const updateUserPrefs = (updater: (prev: UserDealPreferences) => UserDealPreferences) => {
+    setUserPrefs((prev) => {
+      const next = updater(prev);
+      try {
+        localStorage.setItem('cc_deals_user_custom_filters_v2', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Deals Filter State
   const [selectedDayFilter, setSelectedDayFilter] = useState<'today' | 'all' | number>('today');
@@ -234,9 +286,94 @@ export function DealsPage() {
     setTimeout(() => setCopiedGlitchId(null), 2500);
   };
 
+  const allEntitiesList = Array.from(
+    new Set((overview?.promotions ?? []).map((p) => p.entity))
+  ).sort();
+
+  const toggleEntity = (entityName: string) => {
+    updateUserPrefs((prev) => {
+      if (prev.enabledEntities.length === 0) {
+        const allMinusThis = allEntitiesList.filter(
+          (e) => e.toLowerCase() !== entityName.toLowerCase()
+        );
+        return { ...prev, enabledEntities: allMinusThis };
+      }
+      const exists = prev.enabledEntities.some(
+        (e) => e.toLowerCase() === entityName.toLowerCase()
+      );
+      if (exists) {
+        const nextList = prev.enabledEntities.filter(
+          (e) => e.toLowerCase() !== entityName.toLowerCase()
+        );
+        return { ...prev, enabledEntities: nextList.length === 0 ? ['__NONE__'] : nextList };
+      } else {
+        const nextList = [...prev.enabledEntities.filter((e) => e !== '__NONE__'), entityName];
+        if (nextList.length === allEntitiesList.length) {
+          return { ...prev, enabledEntities: [] };
+        }
+        return { ...prev, enabledEntities: nextList };
+      }
+    });
+  };
+
   // Filter promotions
   const filteredPromos = (overview?.promotions ?? []).filter((promo) => {
     if (showFavoritesOnly && !favorites.has(promo.id)) return false;
+
+    // Custom preference: Exclude senior citizens (+60)
+    if (userPrefs.hideSeniors60) {
+      if (
+        promo.targetAudience === 'seniors_60' ||
+        promo.title.toLowerCase().includes('+60') ||
+        promo.title.toLowerCase().includes('senior') ||
+        promo.description.toLowerCase().includes('60 and older') ||
+        promo.description.toLowerCase().includes('jubilados') ||
+        (promo.highlight && promo.highlight.toLowerCase().includes('senior'))
+      ) {
+        return false;
+      }
+    }
+
+    // Custom preference: Exclude Tier / Level Requirements (Level 2/3, Black / Signature)
+    if (userPrefs.hideTierGated) {
+      if (promo.tierRequirement && promo.tierRequirement !== 'none') {
+        return false;
+      }
+      const combined = `${promo.title} ${promo.description} ${promo.highlight || ''}`.toLowerCase();
+      if (
+        combined.includes('level 2') ||
+        combined.includes('level 3') ||
+        combined.includes('nivel 2') ||
+        combined.includes('nivel 3') ||
+        combined.includes('signature') ||
+        combined.includes('black')
+      ) {
+        return false;
+      }
+    }
+
+    // Custom preference: Hide Flights & Airfare
+    if (userPrefs.hideAirfareTravel) {
+      if (
+        promo.category === 'travel' ||
+        promo.title.toLowerCase().includes('flight') ||
+        promo.title.toLowerCase().includes('airline') ||
+        promo.title.toLowerCase().includes('aereas') ||
+        promo.applicableBusinesses.some(
+          (b) => b.toLowerCase().includes('flight') || b.toLowerCase().includes('airline')
+        )
+      ) {
+        return false;
+      }
+    }
+
+    // Custom preference: My enabled banks & wallets
+    if (userPrefs.enabledEntities.length > 0) {
+      const isAllowed = userPrefs.enabledEntities.some(
+        (ent) => ent.toLowerCase() === promo.entity.toLowerCase()
+      );
+      if (!isAllowed) return false;
+    }
 
     if (selectedDayFilter === 'today') {
       if (!promo.isTodayActive) return false;
@@ -282,6 +419,56 @@ export function DealsPage() {
 
   // Filter Price Glitches
   const filteredGlitches = (glitchesOverview?.glitches ?? []).filter((item) => {
+    // Custom preference: Hide airfare & flight promos
+    if (userPrefs.hideAirfareTravel) {
+      if (
+        item.category === 'travel' ||
+        item.retailer.toLowerCase().includes('aereas') ||
+        item.retailer.toLowerCase().includes('gol') ||
+        item.retailer.toLowerCase().includes('arajet') ||
+        item.retailer.toLowerCase().includes('flybondi') ||
+        item.title.toLowerCase().includes('flight') ||
+        item.title.toLowerCase().includes('vuelo') ||
+        item.title.toLowerCase().includes('buzios') ||
+        item.title.toLowerCase().includes('punta cana') ||
+        item.title.toLowerCase().includes('airfare')
+      ) {
+        return false;
+      }
+    }
+
+    // Custom preference: Exclude tier / level gated glitches
+    if (userPrefs.hideTierGated) {
+      if (item.tierRequirement && item.tierRequirement !== 'none') return false;
+      const combined = `${item.title} ${item.notes || ''}`.toLowerCase();
+      if (
+        combined.includes('level 2') ||
+        combined.includes('level 3') ||
+        combined.includes('nivel 2') ||
+        combined.includes('nivel 3')
+      ) {
+        return false;
+      }
+    }
+
+    // Custom preference: Seniors +60
+    if (userPrefs.hideSeniors60) {
+      if (item.targetAudience === 'seniors_60') return false;
+    }
+
+    // Custom preference: Enabled entities if retailer matches a known financial entity
+    if (userPrefs.enabledEntities.length > 0) {
+      const matchKnownEntity = allEntitiesList.find(
+        (e) => e.toLowerCase() === item.retailer.toLowerCase()
+      );
+      if (matchKnownEntity) {
+        const isAllowed = userPrefs.enabledEntities.some(
+          (e) => e.toLowerCase() === matchKnownEntity.toLowerCase()
+        );
+        if (!isAllowed) return false;
+      }
+    }
+
     if (glitchAnomalyFilter !== 'ALL' && item.anomalyType !== glitchAnomalyFilter) {
       return false;
     }
@@ -329,6 +516,51 @@ export function DealsPage() {
   const glitchRetailersList = Array.from(
     new Set((glitchesOverview?.glitches ?? []).map((g) => g.retailer))
   ).sort();
+
+  const filteredCalcResults = calcResults.filter((res) => {
+    if (userPrefs.hideSeniors60) {
+      if (
+        res.promoTitle.toLowerCase().includes('+60') ||
+        res.promoTitle.toLowerCase().includes('senior') ||
+        res.recommendation.toLowerCase().includes('senior')
+      ) {
+        return false;
+      }
+    }
+
+    if (userPrefs.hideTierGated) {
+      const combined = `${res.promoTitle} ${res.recommendation}`.toLowerCase();
+      if (
+        combined.includes('level 2') ||
+        combined.includes('level 3') ||
+        combined.includes('nivel 2') ||
+        combined.includes('nivel 3') ||
+        combined.includes('signature') ||
+        combined.includes('black')
+      ) {
+        return false;
+      }
+    }
+
+    if (userPrefs.hideAirfareTravel) {
+      if (
+        res.category === 'travel' ||
+        res.promoTitle.toLowerCase().includes('flight') ||
+        res.promoTitle.toLowerCase().includes('airline')
+      ) {
+        return false;
+      }
+    }
+
+    if (userPrefs.enabledEntities.length > 0) {
+      const isAllowed = userPrefs.enabledEntities.some(
+        (e) => e.toLowerCase() === res.entity.toLowerCase()
+      );
+      if (!isAllowed) return false;
+    }
+
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -678,6 +910,170 @@ export function DealsPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* =========================================================================
+          CUSTOM FILTER CONTROL CENTER: USER-CONFIGURABLE PREFERENCES & WALLETS
+          ========================================================================= */}
+      <div className="card p-4 border border-line bg-card/80 space-y-3 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-series">
+                <SlidersIcon />
+              </span>
+              <h3 className="text-xs font-bold text-ink uppercase tracking-wider">
+                Personalized Deal Filters & My Wallets
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-series/15 text-series border border-series/30">
+                Preferences Saved
+              </span>
+            </div>
+            <p className="text-[11px] text-muted">
+              Choose your active accounts and exclusions. Disabled banks or categories are completely hidden across all tabs.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowFilterDrawer((prev) => !prev)}
+              className="btn btn-secondary text-xs px-2.5 py-1.5 flex items-center gap-1.5 font-semibold"
+            >
+              <span>{showFilterDrawer ? 'Hide Accounts Selector' : 'Configure My Wallets & Cards'}</span>
+              <ChevronDownIcon open={showFilterDrawer} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => updateUserPrefs(() => DEFAULT_USER_PREFERENCES)}
+              className="text-[11px] text-muted hover:text-ink px-2.5 py-1.5 rounded border border-line bg-surface hover:bg-subtle transition"
+              title="Reset all filters to defaults"
+            >
+              Reset Filters
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Exclusions Toggles */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line/60">
+          <span className="text-[11px] text-muted font-medium mr-1">Eligibility & Limits:</span>
+
+          {/* Toggle: Exclude Senior Citizens (+60) */}
+          <button
+            type="button"
+            onClick={() => updateUserPrefs((p) => ({ ...p, hideSeniors60: !p.hideSeniors60 }))}
+            className={`px-2.5 py-1 text-xs rounded-md border flex items-center gap-1.5 transition ${
+              userPrefs.hideSeniors60
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold'
+                : 'bg-surface border-line text-ink-2 hover:text-ink'
+            }`}
+          >
+            {userPrefs.hideSeniors60 ? <CheckIcon /> : <span className="size-3 rounded-full border border-line" />}
+            <span>{userPrefs.hideSeniors60 ? 'Excluding Seniors (+60)' : 'Include Seniors (+60)'}</span>
+          </button>
+
+          {/* Toggle: Exclude Tier / Level Requirements */}
+          <button
+            type="button"
+            onClick={() => updateUserPrefs((p) => ({ ...p, hideTierGated: !p.hideTierGated }))}
+            className={`px-2.5 py-1 text-xs rounded-md border flex items-center gap-1.5 transition ${
+              userPrefs.hideTierGated
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold'
+                : 'bg-surface border-line text-ink-2 hover:text-ink'
+            }`}
+          >
+            {userPrefs.hideTierGated ? <CheckIcon /> : <span className="size-3 rounded-full border border-line" />}
+            <span>{userPrefs.hideTierGated ? 'Excluding Tier-Gated (Level 2/3, Black)' : 'Include Tier-Gated'}</span>
+          </button>
+
+          {/* Toggle: Hide Airfare & Flights */}
+          <button
+            type="button"
+            onClick={() => updateUserPrefs((p) => ({ ...p, hideAirfareTravel: !p.hideAirfareTravel }))}
+            className={`px-2.5 py-1 text-xs rounded-md border flex items-center gap-1.5 transition ${
+              userPrefs.hideAirfareTravel
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 font-semibold'
+                : 'bg-surface border-line text-ink-2 hover:text-ink'
+            }`}
+          >
+            {userPrefs.hideAirfareTravel ? <CheckIcon /> : <span className="size-3 rounded-full border border-line" />}
+            <span>{userPrefs.hideAirfareTravel ? 'Hiding Flights & Airfare' : 'Include Flights & Airfare'}</span>
+          </button>
+
+          <div className="ml-auto text-[11px] text-muted flex items-center gap-2">
+            <span className="font-medium">
+              {userPrefs.enabledEntities.length === 0
+                ? `All ${allEntitiesList.length} banks active`
+                : `${userPrefs.enabledEntities.length} of ${allEntitiesList.length} banks active`}
+            </span>
+          </div>
+        </div>
+
+        {/* Expandable My Wallets & Bank Multi-Select Selector */}
+        {showFilterDrawer && (
+          <div className="p-3.5 rounded-lg bg-surface/90 border border-series/25 space-y-2.5 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line/60 pb-2">
+              <span className="text-xs font-semibold text-ink">
+                Select Your Active Banks & Wallets (Unchecked accounts are completely filtered out):
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => updateUserPrefs((p) => ({ ...p, enabledEntities: [] }))}
+                  className="text-[10px] px-2 py-0.5 rounded bg-series/15 text-series border border-series/30 font-medium hover:bg-series/25"
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateUserPrefs((p) => ({
+                      ...p,
+                      enabledEntities: allEntitiesList.filter((e) =>
+                        ['cuenta dni', 'modo', 'mercado pago'].some((w) => e.toLowerCase().includes(w))
+                      ),
+                    }))
+                  }
+                  className="text-[10px] px-2 py-0.5 rounded bg-subtle text-ink-2 hover:text-ink border border-line"
+                >
+                  Only Popular Wallets (Cuenta DNI, MODO, MP)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateUserPrefs((p) => ({ ...p, enabledEntities: ['__NONE__'] }))}
+                  className="text-[10px] px-2 py-0.5 rounded bg-subtle text-ink-2 hover:text-ink border border-line"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {allEntitiesList.map((entity) => {
+                const isEntityActive =
+                  userPrefs.enabledEntities.length === 0 ||
+                  userPrefs.enabledEntities.some((e) => e.toLowerCase() === entity.toLowerCase());
+
+                return (
+                  <button
+                    key={entity}
+                    type="button"
+                    onClick={() => toggleEntity(entity)}
+                    className={`px-2.5 py-1 text-xs rounded-md border transition flex items-center gap-1.5 ${
+                      isEntityActive
+                        ? 'bg-series/20 text-series border-series/40 font-semibold shadow-2xs'
+                        : 'bg-surface/50 text-muted border-line/60 line-through opacity-60 hover:opacity-100 hover:border-line'
+                    }`}
+                  >
+                    {isEntityActive ? <CheckIcon /> : <span className="size-2 rounded-full bg-muted/40" />}
+                    <span>{entity}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -1432,13 +1828,13 @@ export function DealsPage() {
               Optimal Payment Methods for ${calcAmount.toLocaleString('en-US')} ARS ({calcCategory})
             </h3>
 
-            {calcResults.length === 0 ? (
+            {filteredCalcResults.length === 0 ? (
               <div className="card p-8 text-center text-xs text-muted">
-                No active promotions found for this category today. Try selecting a different category.
+                No active promotions match your custom filters for this category today. Try adjusting your exclusions or selecting a different category.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {calcResults.map((res, idx) => (
+                {filteredCalcResults.map((res, idx) => (
                   <div
                     key={res.promoId}
                     className={`card p-4 border flex flex-col justify-between ${

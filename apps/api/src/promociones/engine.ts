@@ -24,6 +24,7 @@ const CATEGORY_LABELS_EN: Record<ArgentinePromoCategory, string> = {
   clothing: 'Apparel & Fashion',
   technology: 'Electronics & Tech',
   entertainment: 'Cinema & Entertainment',
+  travel: 'Travel & Flights',
   services: 'Utilities & Bill Pay',
   other: 'Local Neighborhood Stores',
 };
@@ -102,6 +103,7 @@ const BASELINE_ARGENTINE_PROMOTIONS: Omit<ArgentinePromo, 'isTodayActive' | 'scr
     termsUrl: 'https://www.bancoprovincia.com.ar/cuentadni',
     highlight: 'Senior exclusive benefit',
     sourceUrl: 'https://www.bancoprovincia.com.ar',
+    targetAudience: 'seniors_60',
   },
 
   // --- MODO (AFFILIATED BANKS: NACION, GALICIA, SANTANDER, BBVA, MACRO) ---
@@ -420,6 +422,7 @@ const BASELINE_ARGENTINE_PROMOTIONS: Omit<ArgentinePromo, 'isTodayActive' | 'scr
     termsUrl: 'https://www.personalpay.com.ar/beneficios',
     highlight: '20% daily for Level 3',
     sourceUrl: 'https://www.personalpay.com.ar',
+    tierRequirement: 'level_3',
   },
 
   // --- BANCO SANTANDER ---
@@ -515,6 +518,7 @@ const BASELINE_ARGENTINE_PROMOTIONS: Omit<ArgentinePromo, 'isTodayActive' | 'scr
     termsUrl: 'https://www.bbva.com.ar/personas/beneficios',
     highlight: 'Premium dining discount',
     sourceUrl: 'https://www.bbva.com.ar',
+    tierRequirement: 'vip_black',
   },
 
   // --- BANCO MACRO ---
@@ -1068,7 +1072,7 @@ const BASELINE_PRICE_GLITCHES: PriceGlitchItem[] = [
     id: 'glitch-buzios-gol-under-400',
     title: 'Roundtrip Flights & Accommodation to Buzios under USD 400 with Gol Linhas Aereas',
     retailer: 'Gol / Promociones Aereas',
-    category: 'entertainment',
+    category: 'travel',
     originalPrice: 1400000,
     glitchPrice: 420000,
     discountPercent: 70,
@@ -1087,7 +1091,7 @@ const BASELINE_PRICE_GLITCHES: PriceGlitchItem[] = [
     id: 'glitch-disney-universal-pass-rebate',
     title: 'Disney Theme Parks & Universal Studios Resort Passes with up to USD 200 OFF Voucher',
     retailer: 'Promociones Aereas',
-    category: 'entertainment',
+    category: 'travel',
     originalPrice: 650000,
     glitchPrice: 162500,
     discountPercent: 75,
@@ -1106,7 +1110,7 @@ const BASELINE_PRICE_GLITCHES: PriceGlitchItem[] = [
     id: 'glitch-annual-travel-insurance',
     title: 'Annual Multi-Trip Travel Assistance Insurance Package from USD 120 in Interest-Free Installments',
     retailer: 'Promociones Aereas',
-    category: 'services',
+    category: 'travel',
     originalPrice: 400000,
     glitchPrice: 120000,
     discountPercent: 70,
@@ -1125,7 +1129,7 @@ const BASELINE_PRICE_GLITCHES: PriceGlitchItem[] = [
     id: 'glitch-punta-cana-all-inclusive-arajet',
     title: '4-Star All Inclusive Package to Punta Cana with Direct Flight from Buenos Aires (Arajet)',
     retailer: 'Arajet / Promociones Aereas',
-    category: 'entertainment',
+    category: 'travel',
     originalPrice: 2400000,
     glitchPrice: 884000,
     discountPercent: 63,

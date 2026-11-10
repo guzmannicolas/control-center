@@ -740,6 +740,7 @@ export const PROMO_CATEGORIES = [
   'clothing',
   'technology',
   'entertainment',
+  'travel',
   'services',
   'other',
 ] as const;
@@ -747,6 +748,9 @@ export type ArgentinePromoCategory = (typeof PROMO_CATEGORIES)[number];
 
 export const PAYMENT_METHODS = ['qr', 'credit', 'debit', 'wallet_balance', 'any'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export type PromoAudience = 'general' | 'seniors_60' | 'teens' | 'students';
+export type PromoTier = 'none' | 'level_2' | 'level_3' | 'vip_black';
 
 export interface ArgentinePromo {
   id: string;
@@ -771,6 +775,8 @@ export interface ArgentinePromo {
   httpResponseTimeMs?: number;
   httpVerifiedAt?: string;
   isVerifiedLive?: boolean;
+  targetAudience?: PromoAudience;
+  tierRequirement?: PromoTier;
 }
 
 export interface PromotionsOverview {
@@ -833,6 +839,8 @@ export interface PriceGlitchItem {
   httpVerifiedAt?: string;
   httpResponseTimeMs?: number;
   notes?: string;
+  targetAudience?: PromoAudience;
+  tierRequirement?: PromoTier;
 }
 
 export interface PriceGlitchOverview {
