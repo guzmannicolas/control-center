@@ -22,6 +22,7 @@ import type {
   DiscoveredEnvFile,
   KnowledgeDocMeta,
   KnowledgeDocDetail,
+  RepoAnalysisResult,
   MarketingOverview,
   SocialDraftView,
   SocialDraftStatus,
@@ -192,7 +193,7 @@ export const api = {
       body: JSON.stringify({ filePath, project }),
     }),
 
-  // Knowledge Base & Agent Context
+// Knowledge Base & Agent Context
   knowledgeList: () => request<KnowledgeDocMeta[]>('/api/knowledge'),
   knowledgeGet: (slug: string) => request<KnowledgeDocDetail>(`/api/knowledge/${slug}`),
   knowledgeSave: (slug: string, content: string) =>
@@ -202,6 +203,8 @@ export const api = {
     }),
   agentContext: (topics?: string) =>
     request<{ topic: string; context: string }>(topics ? `/api/agent/context?topic=${encodeURIComponent(topics)}&format=json` : '/api/agent/context?format=json'),
+  knowledgeGraph: () => request<RepoAnalysisResult>('/api/knowledge/graph'),
+  knowledgeGraphAnalyze: () => request<RepoAnalysisResult>('/api/knowledge/graph/analyze', { method: 'POST' }),
 
   // Growth & Marketing Engine
   marketingOverview: (brandSlug?: string) =>

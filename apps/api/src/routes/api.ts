@@ -1,3 +1,4 @@
+import { getOrRunDailyRepoGraph } from '../knowledge/analyzer.js';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -1511,6 +1512,15 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     const project = query.project || 'global';
     const envText = exportEnvText(project);
     return { project, envText };
+  });
+
+  // Knowledge Base & Repository Graph routes
+  app.get('/knowledge/graph', async () => {
+    return getOrRunDailyRepoGraph(false);
+  });
+
+  app.post('/knowledge/graph/analyze', async () => {
+    return getOrRunDailyRepoGraph(true);
   });
 
   // Knowledge Base & Agent Context routes

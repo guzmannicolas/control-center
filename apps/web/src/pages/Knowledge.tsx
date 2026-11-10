@@ -1,3 +1,4 @@
+import { RepoGraphView } from '../components/RepoGraphView.tsx';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { KnowledgeDocMeta, KnowledgeDocDetail } from '@cc/shared';
@@ -199,6 +200,7 @@ function MarkdownRenderer({ content }: { content: string }) {
 
 export function KnowledgePage() {
   const queryClient = useQueryClient();
+  const [activeKnowledgeTab, setActiveKnowledgeTab] = useState<'docs' | 'graph'>('docs');
   const [activeSlug, setActiveSlug] = useState<string>('index');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
@@ -347,6 +349,60 @@ export function KnowledgePage() {
           </button>
         </div>
       </div>
+
+      {/* Sub-Tabs: Canonical Docs vs Architecture Map */}
+      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.6rem' }}>
+        <button
+          type="button"
+          onClick={() => setActiveKnowledgeTab('docs')}
+          style={{
+            background: activeKnowledgeTab === 'docs' ? '#1e293b' : 'transparent',
+            border: `1px solid ${activeKnowledgeTab === 'docs' ? '#3b82f6' : 'transparent'}`,
+            color: activeKnowledgeTab === 'docs' ? '#f8fafc' : '#94a3b8',
+            borderRadius: '8px',
+            padding: '0.5rem 1rem',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          <span>Canonical Documentation</span>
+          <span style={{ fontSize: '0.72rem', background: '#0f172a', border: '1px solid #334155', padding: '0.1rem 0.4rem', borderRadius: '4px', color: '#93c5fd' }}>
+            {docs.length} docs
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveKnowledgeTab('graph')}
+          style={{
+            background: activeKnowledgeTab === 'graph' ? '#1e293b' : 'transparent',
+            border: `1px solid ${activeKnowledgeTab === 'graph' ? '#38bdf8' : 'transparent'}`,
+            color: activeKnowledgeTab === 'graph' ? '#f8fafc' : '#94a3b8',
+            borderRadius: '8px',
+            padding: '0.5rem 1rem',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          <span>Repository Architecture Map & Graph</span>
+          <span style={{ fontSize: '0.72rem', background: '#052e16', border: '1px solid #166534', padding: '0.1rem 0.4rem', borderRadius: '4px', color: '#6ee7b7' }}>
+            Daily Auto-Scan
+          </span>
+        </button>
+      </div>
+
+      {activeKnowledgeTab === 'graph' ? (
+        <RepoGraphView />
+      ) : (
+        <>
 
       {/* Metrics Banner */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
@@ -639,6 +695,9 @@ export function KnowledgePage() {
           )}
         </div>
       </div>
+
+        </>
+      )}
 
       {/* MCP Connection Modal */}
       {mcpModalOpen && (

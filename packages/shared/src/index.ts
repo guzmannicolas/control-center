@@ -884,3 +884,50 @@ export interface VpsSecurityAudit {
   checks: SecurityCheckItem[];
 }
 
+
+export interface RepoGraphNode {
+  id: string;
+  label: string;
+  category: 'app' | 'infrastructure' | 'module' | 'service' | 'database' | 'external';
+  tech: string;
+  description: string;
+  filePath?: string;
+  inbound: string[];
+  outbound: string[];
+  tags: string[];
+}
+
+export interface RepoGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  protocol: 'HTTP/REST' | 'MCP/JSON-RPC' | 'Redis/BullMQ' | 'PostgreSQL/TCP' | 'Docker/Mount' | 'Internal/Import';
+  label: string;
+  description: string;
+}
+
+export interface RepoAnalysisResult {
+  analyzedAt: string;
+  nextScheduledAnalysis: string;
+  repoName: string;
+  version: string;
+  summary: {
+    totalNodes: number;
+    totalEdges: number;
+    totalApps: number;
+    totalServices: number;
+    totalTechnologies: number;
+  };
+  technologies: Array<{
+    name: string;
+    category: string;
+    version?: string;
+    usedIn: string[];
+  }>;
+  nodes: RepoGraphNode[];
+  edges: RepoGraphEdge[];
+  communicationFlows: Array<{
+    title: string;
+    steps: string[];
+  }>;
+}
