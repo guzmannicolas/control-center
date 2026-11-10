@@ -97,6 +97,7 @@ import {
   enrichLeadSocials,
   guessSuggestedDemo,
 } from '../leads/scraper.js';
+import { verifyInstagramProfile } from '../leads/instagram.js';
 import { generatePersonalizedPitch } from '../leads/pitch.js';
 import { createOutreachQueue, type OutreachJobData } from '../leads/outreach-queue.js';
 import {
@@ -808,6 +809,79 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     });
 
     return { lead: updated };
+  });
+
+  app.post('/leads/:id/verify-instagram', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const lead = await prisma.lead.findUnique({ where: { id } });
+    if (!lead) return reply.code(404).send({ error: 'Lead not found' });
+    if (!lead.instagram) return reply.code(400).send({ error: 'Lead has no Instagram URL' });
+
+    const result = await verifyInstagramProfile(lead.instagram);
+    const existingMeta = (lead.metadata as Record<string, unknown>) ?? {};
+    const normalizedUrl = result.username ? `https://www.instagram.com/${result.username}/` : lead.instagram;
+
+    const updated = await prisma.lead.update({
+      where: { id },
+      data: {
+        instagram: normalizedUrl,
+        metadata: {
+          ...existingMeta,
+          instagramVerified: result.valid,
+          instagramStatusCode: result.statusCode,
+          instagramCheckedAt: new Date().toISOString(),
+          instagramReason: result.reason ?? null,
+        },
+      },
+    });
+
+    return { lead: updated, verification: result };
+  });
+
+  app.post('/leads/verify-all-instagram', async (req, reply) => {
+    const leads = await prisma.lead.findMany({
+      where: {
+        instagram: { not: null },
+      },
+    });
+
+    let verifiedCount = 0;
+    let failedCount = 0;
+
+    for (let i = 0; i < leads.length; i += 3) {
+      const batch = leads.slice(i, i + 3);
+      await Promise.all(
+        batch.map(async (lead) => {
+          if (!lead.instagram) return;
+          try {
+            const res = await verifyInstagramProfile(lead.instagram);
+            const existingMeta = (lead.metadata as Record<string, unknown>) ?? {};
+            const normalizedUrl = res.username ? `https://www.instagram.com/${res.username}/` : lead.instagram;
+
+            await prisma.lead.update({
+              where: { id: lead.id },
+              data: {
+                instagram: normalizedUrl,
+                metadata: {
+                  ...existingMeta,
+                  instagramVerified: res.valid,
+                  instagramStatusCode: res.statusCode,
+                  instagramCheckedAt: new Date().toISOString(),
+                  instagramReason: res.reason ?? null,
+                },
+              },
+            });
+
+            if (res.valid) verifiedCount++;
+            else failedCount++;
+          } catch {
+            failedCount++;
+          }
+        })
+      );
+    }
+
+    return { total: leads.length, verifiedCount, failedCount };
   });
 
   app.patch('/leads/:id', async (req, reply) => {

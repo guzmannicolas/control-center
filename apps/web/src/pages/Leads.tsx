@@ -46,14 +46,56 @@ export const PRESET_AREAS = [
   'Salta Capital, Argentina',
 ];
 
-const DEFAULT_PITCH_TEMPLATE =
-  'Buenas! Che te escribo por acá porque vi su negocio y me gustó mucho lo que hacen. Te cuento: soy desarrollador y esto lo hago como un plus mientras tanto para darle una mano a negocios y que tengan más exposición en Google. Vi que todavía no tienen página web propia, así que les armé una demo de muestra para su rubro: {demo} Como la idea es ayudarlos el costo es mínimo: unos 45 o 50 mil pesos al año nada más para cubrir el hosting y mantenerla activa. Mírenla tranquilos y si les sirve o quieren adaptarla con sus fotos y servicios me avisan, cero compromiso!';
+export interface SpeechPreset {
+  id: string;
+  label: string;
+  description: string;
+  template: string;
+}
+
+export const INITIAL_SPEECH_PRESETS: SpeechPreset[] = [
+  {
+    id: 'web_local',
+    label: 'Web para Comercios (Sin Web)',
+    description: 'Para comercios locales sin sitio web. Enfasis en desarrollador independiente que ayuda a tener exposicion en Google con demo armada.',
+    template:
+      'Buenas! Che te escribo por acá porque vi su negocio en {city} y me gustó mucho lo que hacen. Te cuento: soy desarrollador y esto lo hago como un plus mientras tanto para darle una mano a negocios y que tengan más exposición en Google. Vi que todavía no tienen página web propia, así que les armé una demo de muestra para su rubro: {demo} Como la idea es ayudarlos el costo es súper accesible, nada más para cubrir el hosting y mantenerla activa. Mírenla tranquilos y si les sirve o quieren adaptarla con sus fotos y servicios me avisan, cero compromiso!',
+  },
+  {
+    id: 'automation',
+    label: 'Automatización de Respuestas (Inmobiliarias / Con Web)',
+    description: 'Para inmobiliarias o negocios con pagina. Enfocado en responder consultas repetitivas 24/7 en Instagram y WhatsApp sin perder tiempo.',
+    template:
+      'Buenas! Che te escribo por acá porque vi lo que hacen en {name} y la presencia que manejan. Te cuento: soy desarrollador y trabajo armando automatizaciones para negocios. Se que muchas veces se pierde tiempo respondiendo siempre las mismas consultas por DM o WhatsApp (precios, horarios, disponibilidad). Armé un sistema para responder y filtrar consultas 24/7 sin que tengan que estar encima. Si les interesa ver cómo funciona avísenme y se los muestro, cero compromiso!',
+  },
+  {
+    id: 'custom',
+    label: 'Personalizado / Libre',
+    description: 'Plantilla abierta para escribir libremente con variables dinamicas {name}, {city}, {category}, {demo}.',
+    template:
+      'Hola {name}! ¿Cómo andan? Les escribo porque vi su negocio en {city}. Me dedico al desarrollo y les preparé esta propuesta interactiva para su rubro: {demo} Si les interesa avísenme y la vemos sin compromiso!',
+  },
+];
 
 export function LeadsPage() {
   const [leads, setLeads] = useState<LeadView[]>([]);
   const [loading, setLoading] = useState(true);
   const [scraping, setScraping] = useState(false);
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
+
+  // Tab State
+  const [activeTab, setActiveTab] = useState<'prospecting' | 'followups' | 'speeches'>('prospecting');
+
+  // Speech Presets State
+  const [speechPresets, setSpeechPresets] = useState<SpeechPreset[]>(INITIAL_SPEECH_PRESETS);
+  const [selectedSpeechPreset, setSelectedSpeechPreset] = useState<string>('web_local');
+  const [leadPresetOverrides, setLeadPresetOverrides] = useState<Record<string, string>>({});
+  const [previewLeadId, setPreviewLeadId] = useState<string>('');
+
+  // Instagram Verification State
+  const [verifyingIgId, setVerifyingIgId] = useState<string | null>(null);
+  const [verifyingAllIg, setVerifyingAllIg] = useState<boolean>(false);
+  const [filterIgVerifiedOnly, setFilterIgVerifiedOnly] = useState<boolean>(false);
 
   // Selection state for bulk operations
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -62,7 +104,6 @@ export function LeadsPage() {
   // Outreach Assistant State
   const [outreachOpen, setOutreachOpen] = useState(false);
   const [outreachIndex, setOutreachIndex] = useState(0);
-  const [pitchTemplate, setPitchTemplate] = useState(DEFAULT_PITCH_TEMPLATE);
   const [showPitchEditor, setShowPitchEditor] = useState(false);
   const [generatingPitchId, setGeneratingPitchId] = useState<string | null>(null);
   const [copiedToast, setCopiedToast] = useState<string | null>(null);
@@ -85,7 +126,7 @@ export function LeadsPage() {
   const [customCity, setCustomCity] = useState('');
   const [limit, setLimit] = useState(15);
   const [filterWithoutWeb, setFilterWithoutWeb] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterFollowupStatus, setFilterFollowupStatus] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteDraftText, setNoteDraftText] = useState('');
@@ -141,7 +182,8 @@ export function LeadsPage() {
         credentials: 'include',
       });
       if (res.ok) {
-        await loadLeads();
+        const data = (await res.json()) as { lead: LeadView };
+        setLeads((prev) => prev.map((l) => (l.id === id ? data.lead : l)));
       }
     } catch (err) {
       console.error(err);
@@ -150,35 +192,100 @@ export function LeadsPage() {
     }
   };
 
-  const updateStatus = async (id: string, status: LeadStatus) => {
+  const handleVerifyInstagram = async (leadId: string) => {
+    setVerifyingIgId(leadId);
     try {
-      await fetch(`${API_BASE}/api/leads/${id}`, {
+      const res = await fetch(`${API_BASE}/api/leads/${leadId}/verify-instagram`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLeads((prev) => prev.map((l) => (l.id === leadId ? data.lead : l)));
+        setCopiedToast(data.verification.valid ? 'Instagram verificado (200 OK)' : 'Perfil no disponible (404)');
+        setTimeout(() => setCopiedToast(null), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setVerifyingIgId(null);
+    }
+  };
+
+  const handleVerifyAllInstagram = async () => {
+    setVerifyingAllIg(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/verify-all-instagram`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await loadLeads();
+        setCopiedToast(`Verificacion completa: ${data.verifiedCount} perfiles validos (200 OK).`);
+        setTimeout(() => setCopiedToast(null), 4000);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setVerifyingAllIg(false);
+    }
+  };
+
+  const updateStatus = async (id: string, newStatus: LeadStatus) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/${id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: newStatus }),
       });
-      setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status, contactedAt: status === 'contacted' ? new Date().toISOString() : l.contactedAt } : l)));
+      if (res.ok) {
+        setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)));
+      }
     } catch (err) {
       console.error(err);
     }
   };
 
-  // --- Deletion Handlers ---
+  const updateSelectedStatus = async (newStatus: LeadStatus) => {
+    if (selectedIds.size === 0) return;
+    setBatchActionRunning(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`${API_BASE}/api/leads/${id}`, {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+          })
+        )
+      );
+      setLeads((prev) => prev.map((l) => (selectedIds.has(l.id) ? { ...l, status: newStatus } : l)));
+      setSelectedIds(new Set());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBatchActionRunning(false);
+    }
+  };
 
   const deleteLead = async (id: string) => {
-    if (!confirm('Permanently delete this prospect?')) return;
+    if (!confirm('Eliminar lead de la base de datos?')) return;
     try {
-      await fetch(`${API_BASE}/api/leads/${id}`, {
+      const res = await fetch(`${API_BASE}/api/leads/${id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      if (res.ok) {
+        setLeads((prev) => prev.filter((l) => l.id !== id));
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
     } catch (err) {
       console.error(err);
     }
@@ -186,20 +293,19 @@ export function LeadsPage() {
 
   const deleteSelectedLeads = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Permanently delete ${selectedIds.size} selected prospects?`)) return;
-
+    if (!confirm(`Eliminar ${selectedIds.size} leads seleccionados?`)) return;
     setBatchActionRunning(true);
     try {
-      const res = await fetch(`${API_BASE}/api/leads/batch-delete`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selectedIds) }),
-      });
-      if (res.ok) {
-        setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
-        setSelectedIds(new Set());
-      }
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`${API_BASE}/api/leads/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          })
+        )
+      );
+      setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
+      setSelectedIds(new Set());
     } catch (err) {
       console.error(err);
     } finally {
@@ -209,55 +315,23 @@ export function LeadsPage() {
 
   const clearAllLeads = async () => {
     if (leads.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ALL ${leads.length} stored prospects? This will remove all previous scraping data.`)) return;
-
-    setBatchActionRunning(true);
+    if (!confirm('Eliminar TODOS los leads de la base de datos?')) return;
     try {
-      const res = await fetch(`${API_BASE}/api/leads/batch-delete`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ all: true }),
-      });
-      if (res.ok) {
-        setLeads([]);
-        setSelectedIds(new Set());
-      }
+      await Promise.all(
+        leads.map((l) =>
+          fetch(`${API_BASE}/api/leads/${l.id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          })
+        )
+      );
+      setLeads([]);
+      setSelectedIds(new Set());
     } catch (err) {
       console.error(err);
-    } finally {
-      setBatchActionRunning(false);
     }
   };
 
-  const updateSelectedStatus = async (status: LeadStatus) => {
-    if (selectedIds.size === 0) return;
-    setBatchActionRunning(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/leads/batch-update`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selectedIds), status }),
-      });
-      if (res.ok) {
-        setLeads((prev) =>
-          prev.map((l) =>
-            selectedIds.has(l.id)
-              ? { ...l, status, contactedAt: status === 'contacted' ? new Date().toISOString() : l.contactedAt }
-              : l
-          )
-        );
-        setSelectedIds(new Set());
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setBatchActionRunning(false);
-    }
-  };
-
-  // --- Multi-selection helpers ---
   const toggleSelectRow = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -265,14 +339,6 @@ export function LeadsPage() {
       else next.add(id);
       return next;
     });
-  };
-
-  const toggleSelectAllFiltered = () => {
-    if (selectedIds.size === filtered.length && filtered.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filtered.map((l) => l.id)));
-    }
   };
 
   const getFollowUpInfo = (lead: LeadView) => {
@@ -372,20 +438,90 @@ export function LeadsPage() {
     window.open(`${API_BASE}/api/leads/export/csv`, '_blank');
   };
 
-  // --- Filtering ---
-  const filtered = leads.filter((l) => {
-    if (filterWithoutWeb && l.hasWebsite) return false;
-    if (filterStatus === 'needs_follow_up') {
-      if (!getFollowUpInfo(l).isEligible) return false;
-    } else if (filterStatus !== 'all' && l.status !== filterStatus) {
-      return false;
+  // --- Dynamic Pitch Resolution ---
+  const getPitchForLead = (lead: LeadView | undefined, presetIdOverride?: string): string => {
+    if (!lead) return '';
+    const effPresetId = presetIdOverride || leadPresetOverrides[lead.id] || selectedSpeechPreset;
+    const preset = speechPresets.find((p) => p.id === effPresetId) || speechPresets[0]!;
+    return preset.template
+      .replace(/{name}/g, lead.name)
+      .replace(/{city}/g, lead.city.split(',')[0] ?? lead.city)
+      .replace(/{rating}/g, lead.rating ? String(lead.rating) : '5.0')
+      .replace(/{reviews}/g, String(lead.reviewsCount || 'varias'))
+      .replace(/{category}/g, lead.category)
+      .replace(/{demo}/g, lead.suggestedDemo ?? 'https://templates.nicoguzmandev.com/')
+      .replace(/{website}/g, lead.website ?? lead.name);
+  };
+
+  const getInstagramUsername = (igUrl: string | null | undefined): string | null => {
+    if (!igUrl) return null;
+    try {
+      const clean = igUrl.trim().replace(/\/+$/, '');
+      const parts = clean.split('/');
+      const last = parts[parts.length - 1];
+      if (last && !last.includes('?') && last !== 'instagram.com') return last;
+      if (last && last.includes('?')) return last.split('?')[0] ?? null;
+      return null;
+    } catch {
+      return null;
     }
+  };
+
+  const handleOpenInstagramDM = (lead: LeadView, customPitchText?: string, presetIdOverride?: string) => {
+    const pitch = customPitchText || aiPitchOverride || getPitchForLead(lead, presetIdOverride);
+    const username = getInstagramUsername(lead.instagram);
+
+    navigator.clipboard.writeText(pitch).then(() => {
+      setCopiedToast(`Mensaje copiado. Pegalo en el chat de ${lead.name}`);
+      setTimeout(() => setCopiedToast(null), 4000);
+    }).catch(() => {});
+
+    const targetUrl = username
+      ? `https://www.instagram.com/${username}/`
+      : (lead.instagram || 'https://www.instagram.com/');
+
+    window.open(targetUrl, '_blank');
+
+    // Auto mark as contacted (moves lead from Prospecting to Follow-ups)
+    void updateStatus(lead.id, 'contacted');
+
+    if (outreachOpen && outreachIndex + 1 < outreachQueue.length) {
+      setOutreachIndex((i) => i + 1);
+      setAiPitchOverride(null);
+    }
+  };
+
+  // --- Segmentation for Tabs ---
+  const prospectingLeads = leads.filter((l) => l.status === 'discovered' || l.status === 'enriched');
+  const contactedLeads = leads.filter((l) => l.status === 'contacted' || l.status === 'replied' || l.status === 'converted');
+  const needsFollowUpCount = contactedLeads.filter((l) => getFollowUpInfo(l).isEligible).length;
+
+  // Filtered lists per tab
+  const filteredProspecting = prospectingLeads.filter((l) => {
+    if (filterWithoutWeb && l.hasWebsite) return false;
+    if (filterIgVerifiedOnly && !(l.metadata as any)?.instagramVerified) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       return (
         l.name.toLowerCase().includes(q) ||
         l.city.toLowerCase().includes(q) ||
-        (l.email?.toLowerCase().includes(q) ?? false) ||
+        (l.category?.toLowerCase().includes(q) ?? false) ||
+        (l.phone?.includes(q) ?? false)
+      );
+    }
+    return true;
+  });
+
+  const filteredFollowups = contactedLeads.filter((l) => {
+    if (filterFollowupStatus === 'needs_follow_up' && !getFollowUpInfo(l).isEligible) return false;
+    if (filterFollowupStatus === 'waiting' && getFollowUpInfo(l).isEligible) return false;
+    if (filterFollowupStatus === 'replied' && l.status !== 'replied') return false;
+    if (filterFollowupStatus === 'converted' && l.status !== 'converted') return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return (
+        l.name.toLowerCase().includes(q) ||
+        l.city.toLowerCase().includes(q) ||
         (l.phone?.includes(q) ?? false) ||
         (l.notes?.toLowerCase().includes(q) ?? false)
       );
@@ -393,23 +529,17 @@ export function LeadsPage() {
     return true;
   });
 
-  // --- Outreach Queue Candidates ---
-  // Qualified targets: has phone number and not yet contacted (discovered or enriched)
   const outreachQueue = leads.filter(
     (l) => Boolean(l.phoneFormatted) && (l.status === 'discovered' || l.status === 'enriched')
   );
-
   const currentOutreachLead = outreachQueue[outreachIndex];
 
-  const buildPitch = (lead: LeadView | undefined): string => {
-    if (!lead) return '';
-    return pitchTemplate
-      .replace(/{name}/g, lead.name)
-      .replace(/{city}/g, lead.city.split(',')[0] ?? lead.city)
-      .replace(/{rating}/g, lead.rating ? String(lead.rating) : '5.0')
-      .replace(/{reviews}/g, String(lead.reviewsCount || 'varias'))
-      .replace(/{category}/g, lead.category)
-      .replace(/{demo}/g, lead.suggestedDemo ?? 'https://templates.nicoguzmandev.com/');
+  const toggleSelectAllProspecting = () => {
+    if (selectedIds.size === filteredProspecting.length && filteredProspecting.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredProspecting.map((l) => l.id)));
+    }
   };
 
   const loadWhatsAppStatus = async () => {
@@ -462,9 +592,7 @@ export function LeadsPage() {
 
   useEffect(() => {
     void loadWhatsAppStatus();
-    const interval = setInterval(() => {
-      void loadWhatsAppStatus();
-    }, 5000);
+    const interval = setInterval(loadWhatsAppStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -519,10 +647,10 @@ export function LeadsPage() {
       if (res.ok) {
         await loadQueueStatus();
         await loadLeads();
-        alert(`🚀 ¡Campaña iniciada! Se encolaron ${leadIds.length} mensajes con despacho espaciado en segundo plano.`);
+        alert(`Campana iniciada: se encolaron ${leadIds.length} mensajes con despacho espaciado en segundo plano.`);
       } else {
         const errJson = await res.json();
-        alert(`Error: ${errJson.error || 'No se pudo iniciar la campaña'}`);
+        alert(`Error: ${errJson.error || 'No se pudo iniciar la campana'}`);
       }
     } catch (err) {
       console.error(err);
@@ -531,69 +659,34 @@ export function LeadsPage() {
     }
   };
 
-  const getInstagramUsername = (igUrl: string | null | undefined): string | null => {
-    if (!igUrl) return null;
-    try {
-      const clean = igUrl.trim().replace(/\/+$/, '');
-      const parts = clean.split('/');
-      const last = parts[parts.length - 1];
-      if (last && !last.includes('?') && last !== 'instagram.com') return last;
-      if (last && last.includes('?')) return last.split('?')[0] ?? null;
-      return null;
-    } catch {
-      return null;
-    }
-  };
-
-  const handleOpenInstagramDM = (lead: LeadView, customPitchText?: string) => {
-    const pitch = customPitchText || aiPitchOverride || buildPitch(lead);
-    const username = getInstagramUsername(lead.instagram);
-
-    // Copy personalized pitch to clipboard
-    navigator.clipboard.writeText(pitch).then(() => {
-      setCopiedToast(`Mensaje copiado. Pegalo en el chat de ${lead.name}`);
-      setTimeout(() => setCopiedToast(null), 4000);
-    }).catch(() => {});
-
-    // Target profile URL (desktop-friendly: opens profile where you can click 'Enviar mensaje')
-    // If opened on mobile, Instagram app opens directly.
-    const targetUrl = username
-      ? `https://www.instagram.com/${username}/`
-      : (lead.instagram || 'https://www.instagram.com/');
-
-    window.open(targetUrl, '_blank');
-
-    // Auto mark as contacted
-    void updateStatus(lead.id, 'contacted');
-
-    // Advance assistant queue if open
-    if (outreachOpen && outreachIndex + 1 < outreachQueue.length) {
-      setOutreachIndex((i) => i + 1);
-      setAiPitchOverride(null);
-    }
-  };
-
-  const handleOpenWhatsAppAndAdvance = (lead: LeadView) => {
-    const rawDigits = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : '';
-    if (!rawDigits) return;
-
-    const pitch = buildPitch(lead);
-    const waUrl = `https://wa.me/${rawDigits}?text=${encodeURIComponent(pitch)}`;
-
-    // Open WhatsApp in new tab
-    window.open(waUrl, '_blank');
-
-    // Mark as contacted
-    void updateStatus(lead.id, 'contacted');
-
-    // Advance queue
-    if (outreachIndex + 1 < outreachQueue.length) {
-      setOutreachIndex((i) => i + 1); setAiPitchOverride(null);
-    }
-  };
+  // Preview lead for Tab 3
+  const activePreviewLead = previewLeadId
+    ? leads.find((l) => l.id === previewLeadId)
+    : leads[0];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Toast */}
+      {copiedToast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            right: '2rem',
+            background: '#047857',
+            color: '#ecfdf5',
+            padding: '0.75rem 1.25rem',
+            borderRadius: '8px',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
+            zIndex: 9999,
+          }}
+        >
+          {copiedToast}
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -601,7 +694,7 @@ export function LeadsPage() {
             B2B Sales & Outreach Hub
           </h1>
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem', color: '#94a3b8' }}>
-            Live Google Maps business extraction, verified website detection, and semi-automated outreach dispatcher.
+            Live Google Maps business extraction, verified Instagram detection, and segmented outreach pipeline.
           </p>
         </div>
 
@@ -620,8 +713,8 @@ export function LeadsPage() {
               alignItems: 'center',
               gap: '0.4rem',
             }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#38bdf8', animation: 'pulse 1.5s infinite' }} />
-              Campaña activa: {queueStatus.waiting} en cola ({queueStatus.active} enviando)
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#38bdf8' }} />
+              Campana activa: {queueStatus.waiting} en cola ({queueStatus.active} enviando)
             </div>
           )}
 
@@ -643,7 +736,7 @@ export function LeadsPage() {
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '0.45rem',
+              gap: '0.5rem',
             }}
           >
             <span style={{
@@ -659,52 +752,6 @@ export function LeadsPage() {
                 ? 'Escanear QR de WhatsApp'
                 : 'Conectar WhatsApp'}
             </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleQueueCampaign(outreachQueue.map((l) => l.id))}
-            disabled={outreachQueue.length === 0 || queuingCampaign}
-            title="Despachar mensajes automáticamente en segundo plano con intervalos seguros de 60-120s"
-            style={{
-              background: '#4338ca',
-              border: '1px solid #6366f1',
-              color: '#ffffff',
-              borderRadius: '8px',
-              padding: '0.55rem 1rem',
-              fontSize: '0.84rem',
-              fontWeight: 700,
-              cursor: outreachQueue.length > 0 ? 'pointer' : 'not-allowed',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-            }}
-          >
-            {queuingCampaign ? '⏳ Encolando...' : `⚡ Auto-Despachar Cola (${outreachQueue.length})`}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setOutreachIndex(0); setAiPitchOverride(null);
-              setOutreachOpen(true);
-            }}
-            disabled={outreachQueue.length === 0}
-            style={{
-              background: outreachQueue.length > 0 ? '#065f46' : '#1e293b',
-              border: `1px solid ${outreachQueue.length > 0 ? '#059669' : '#334155'}`,
-              color: outreachQueue.length > 0 ? '#34d399' : '#64748b',
-              borderRadius: '8px',
-              padding: '0.55rem 1rem',
-              fontSize: '0.84rem',
-              fontWeight: 700,
-              cursor: outreachQueue.length > 0 ? 'pointer' : 'not-allowed',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-            }}
-          >
-            Launch Outreach Assistant ({outreachQueue.length} ready)
           </button>
 
           <button
@@ -728,1047 +775,1450 @@ export function LeadsPage() {
         </div>
       </div>
 
-      {/* Metrics Bar */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
-        <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Total Leads</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>{leads.length}</div>
-        </div>
-
-        <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#f87171', textTransform: 'uppercase', fontWeight: 600 }}>No Website (Targets)</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f87171', marginTop: '0.2rem' }}>
-            {leads.filter((l) => !l.hasWebsite).length}
-          </div>
-        </div>
-
-        <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#34d399', textTransform: 'uppercase', fontWeight: 600 }}>Ready for Outreach</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#34d399', marginTop: '0.2rem' }}>
-            {outreachQueue.length}
-          </div>
-        </div>
-
-        <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#facc15', textTransform: 'uppercase', fontWeight: 600 }}>Contacted</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#facc15', marginTop: '0.2rem' }}>
-            {leads.filter((l) => l.status === 'contacted').length}
-          </div>
-        </div>
-
-        <div
-          onClick={() => setFilterStatus(filterStatus === 'needs_follow_up' ? 'all' : 'needs_follow_up')}
+      {/* Main Tab Navigation */}
+      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.65rem' }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('prospecting')}
           style={{
-            background: filterStatus === 'needs_follow_up' ? '#422006' : '#0b0f19',
-            border: `1px solid ${filterStatus === 'needs_follow_up' ? '#f59e0b' : '#1e293b'}`,
-            borderRadius: '10px',
-            padding: '0.85rem',
+            background: activeTab === 'prospecting' ? '#1e293b' : 'transparent',
+            border: `1px solid ${activeTab === 'prospecting' ? '#3b82f6' : 'transparent'}`,
+            color: activeTab === 'prospecting' ? '#f8fafc' : '#94a3b8',
+            borderRadius: '8px',
+            padding: '0.55rem 1.1rem',
+            fontSize: '0.86rem',
+            fontWeight: 700,
             cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
             transition: 'all 0.15s ease',
           }}
-          title="Click to filter leads waiting for follow-up"
         >
-          <div style={{ fontSize: '0.75rem', color: '#f59e0b', textTransform: 'uppercase', fontWeight: 600 }}>
-            Needs Follow-up (3+d)
-          </div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f59e0b', marginTop: '0.2rem' }}>
-            {leads.filter((l) => getFollowUpInfo(l).isEligible).length}
-          </div>
-        </div>
+          Prospeccion en Frio
+          <span style={{
+            background: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: '12px',
+            padding: '2px 8px',
+            fontSize: '0.72rem',
+            color: '#38bdf8',
+          }}>
+            {prospectingLeads.length}
+          </span>
+        </button>
 
-        <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#4ade80', textTransform: 'uppercase', fontWeight: 600 }}>Converted Clients</div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#4ade80', marginTop: '0.2rem' }}>
-            {leads.filter((l) => l.status === 'converted').length}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('followups')}
+          style={{
+            background: activeTab === 'followups' ? '#1e293b' : 'transparent',
+            border: `1px solid ${activeTab === 'followups' ? '#f59e0b' : 'transparent'}`,
+            color: activeTab === 'followups' ? '#f8fafc' : '#94a3b8',
+            borderRadius: '8px',
+            padding: '0.55rem 1.1rem',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          Seguimientos & CRM
+          <span style={{
+            background: needsFollowUpCount > 0 ? '#451a03' : '#0f172a',
+            border: `1px solid ${needsFollowUpCount > 0 ? '#b45309' : '#334155'}`,
+            borderRadius: '12px',
+            padding: '2px 8px',
+            fontSize: '0.72rem',
+            color: needsFollowUpCount > 0 ? '#f59e0b' : '#94a3b8',
+            fontWeight: 700,
+          }}>
+            {contactedLeads.length} {needsFollowUpCount > 0 ? `(${needsFollowUpCount} pendientes)` : ''}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('speeches')}
+          style={{
+            background: activeTab === 'speeches' ? '#1e293b' : 'transparent',
+            border: `1px solid ${activeTab === 'speeches' ? '#10b981' : 'transparent'}`,
+            color: activeTab === 'speeches' ? '#f8fafc' : '#94a3b8',
+            borderRadius: '8px',
+            padding: '0.55rem 1.1rem',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          Biblioteca de Speeches
+          <span style={{
+            background: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: '12px',
+            padding: '2px 8px',
+            fontSize: '0.72rem',
+            color: '#34d399',
+          }}>
+            {speechPresets.length} presets
+          </span>
+        </button>
       </div>
 
-      {/* Scraper Launcher Box */}
-      <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
-        <h2 style={{ margin: '0 0 0.8rem', fontSize: '1.05rem', color: '#f8fafc' }}>
-          Launch Live Google Maps Scraping
-        </h2>
-        <form onSubmit={handleScrape} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end' }}>
-          {/* Niche Dropdown */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Category / Niche</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              style={{
-                background: '#0f172a',
-                border: '1px solid #334155',
-                color: '#f8fafc',
-                borderRadius: '8px',
-                padding: '0.5rem 0.8rem',
-                fontSize: '0.85rem',
-                minWidth: '220px',
-              }}
-            >
-              {PRESET_NICHES.map((n) => (
-                <option key={n.value} value={n.value}>
-                  {n.label}
-                </option>
-              ))}
-              <option value="custom">+ Custom Niche...</option>
-            </select>
-            {category === 'custom' && (
-              <input
-                type="text"
-                placeholder="Type custom niche..."
-                value={customCategory}
-                onChange={(e) => setCustomCategory(e.target.value)}
-                required
-                style={{
-                  background: '#0f172a',
-                  border: '1px solid #334155',
-                  color: '#f8fafc',
-                  borderRadius: '8px',
-                  padding: '0.4rem 0.75rem',
-                  fontSize: '0.82rem',
-                  marginTop: '0.2rem',
-                }}
-              />
-            )}
+      {/* ========================================================================= */}
+      {/* TAB 1: PROSPECCION EN FRIO (NUEVOS LEADS)                                  */}
+      {/* ========================================================================= */}
+      {activeTab === 'prospecting' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Prospecting Metrics */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Nuevos Leads</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>{prospectingLeads.length}</div>
+            </div>
+
+            <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#f87171', textTransform: 'uppercase', fontWeight: 600 }}>Sin Sitio Web</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f87171', marginTop: '0.2rem' }}>
+                {prospectingLeads.filter((l) => !l.hasWebsite).length}
+              </div>
+            </div>
+
+            <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#38bdf8', textTransform: 'uppercase', fontWeight: 600 }}>Instagram 200 OK</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#38bdf8', marginTop: '0.2rem' }}>
+                {prospectingLeads.filter((l) => (l.metadata as any)?.instagramVerified === true).length}
+              </div>
+            </div>
+
+            <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '0.85rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#34d399', textTransform: 'uppercase', fontWeight: 600 }}>Con Contacto Directo</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#34d399', marginTop: '0.2rem' }}>
+                {prospectingLeads.filter((l) => l.instagram || l.phone).length}
+              </div>
+            </div>
           </div>
 
-          {/* City / Area Dropdown */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>City / Area</label>
-            <select
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              style={{
-                background: '#0f172a',
-                border: '1px solid #334155',
-                color: '#f8fafc',
-                borderRadius: '8px',
-                padding: '0.5rem 0.8rem',
-                fontSize: '0.85rem',
-                minWidth: '220px',
-              }}
-            >
-              {PRESET_AREAS.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-              <option value="custom">+ Custom City / Area...</option>
-            </select>
-            {city === 'custom' && (
-              <input
-                type="text"
-                placeholder="Type custom area (e.g. Rosario Centro)..."
-                value={customCity}
-                onChange={(e) => setCustomCity(e.target.value)}
-                required
+          {/* Scraper Launcher Box */}
+          <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
+            <h2 style={{ margin: '0 0 0.8rem', fontSize: '1.05rem', color: '#f8fafc' }}>
+              Launch Live Google Maps Scraping
+            </h2>
+            <form onSubmit={handleScrape} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end' }}>
+              {/* Niche Dropdown */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Category / Niche</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    color: '#f8fafc',
+                    borderRadius: '8px',
+                    padding: '0.5rem 0.8rem',
+                    fontSize: '0.85rem',
+                    minWidth: '220px',
+                  }}
+                >
+                  {PRESET_NICHES.map((n) => (
+                    <option key={n.value} value={n.value}>
+                      {n.label}
+                    </option>
+                  ))}
+                  <option value="custom">+ Custom Niche...</option>
+                </select>
+                {category === 'custom' && (
+                  <input
+                    type="text"
+                    placeholder="Type custom niche..."
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                    required
+                    style={{
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      color: '#f8fafc',
+                      borderRadius: '8px',
+                      padding: '0.4rem 0.75rem',
+                      fontSize: '0.82rem',
+                      marginTop: '0.2rem',
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* City / Area Dropdown */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>City / Area</label>
+                <select
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    color: '#f8fafc',
+                    borderRadius: '8px',
+                    padding: '0.5rem 0.8rem',
+                    fontSize: '0.85rem',
+                    minWidth: '220px',
+                  }}
+                >
+                  {PRESET_AREAS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  <option value="custom">+ Custom City...</option>
+                </select>
+                {city === 'custom' && (
+                  <input
+                    type="text"
+                    placeholder="e.g. Villa Carlos Paz, Cordoba"
+                    value={customCity}
+                    onChange={(e) => setCustomCity(e.target.value)}
+                    required
+                    style={{
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      color: '#f8fafc',
+                      borderRadius: '8px',
+                      padding: '0.4rem 0.75rem',
+                      fontSize: '0.82rem',
+                      marginTop: '0.2rem',
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Limit input */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', width: '90px' }}>
+                <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Max Leads</label>
+                <input
+                  type="number"
+                  min="5"
+                  max="50"
+                  value={limit}
+                  onChange={(e) => setLimit(Math.max(1, parseInt(e.target.value, 10) || 15))}
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    color: '#f8fafc',
+                    borderRadius: '8px',
+                    padding: '0.5rem 0.6rem',
+                    fontSize: '0.85rem',
+                  }}
+                />
+              </div>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={scraping}
                 style={{
-                  background: '#0f172a',
-                  border: '1px solid #334155',
-                  color: '#f8fafc',
+                  background: scraping ? '#1e293b' : '#0284c7',
+                  border: 'none',
+                  color: '#ffffff',
                   borderRadius: '8px',
-                  padding: '0.4rem 0.75rem',
-                  fontSize: '0.82rem',
-                  marginTop: '0.2rem',
+                  padding: '0.55rem 1.25rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: scraping ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
                 }}
-              />
-            )}
+              >
+                {scraping ? 'Scraping Google Maps...' : 'Start Scraping'}
+              </button>
+            </form>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            <label style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Max Results</label>
+          {/* Prospecting Toolbar */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              background: '#0b0f19',
+              border: '1px solid #1e293b',
+              borderRadius: '10px',
+              padding: '0.75rem 1rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              {/* Active Speech Preset Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600 }}>Speech Activo:</span>
+                <select
+                  value={selectedSpeechPreset}
+                  onChange={(e) => setSelectedSpeechPreset(e.target.value)}
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #3b82f6',
+                    color: '#38bdf8',
+                    borderRadius: '8px',
+                    padding: '0.42rem 0.75rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                  }}
+                  title="Selecciona la plantilla de mensaje que se copiara al portapapeles al abrir Instagram"
+                >
+                  {speechPresets.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filter without website */}
+              <button
+                type="button"
+                onClick={() => setFilterWithoutWeb(!filterWithoutWeb)}
+                style={{
+                  background: filterWithoutWeb ? '#450a0a' : '#1e293b',
+                  border: `1px solid ${filterWithoutWeb ? '#7f1d1d' : '#334155'}`,
+                  color: filterWithoutWeb ? '#f87171' : '#94a3b8',
+                  borderRadius: '8px',
+                  padding: '0.42rem 0.8rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {filterWithoutWeb ? 'Solo SIN website' : 'Todas las webs'}
+              </button>
+
+              {/* Filter Instagram 200 OK */}
+              <button
+                type="button"
+                onClick={() => setFilterIgVerifiedOnly(!filterIgVerifiedOnly)}
+                style={{
+                  background: filterIgVerifiedOnly ? '#064e3b' : '#1e293b',
+                  border: `1px solid ${filterIgVerifiedOnly ? '#059669' : '#334155'}`,
+                  color: filterIgVerifiedOnly ? '#34d399' : '#94a3b8',
+                  borderRadius: '8px',
+                  padding: '0.42rem 0.8rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {filterIgVerifiedOnly ? 'Solo Instagram 200 OK' : 'Todos los Instagrams'}
+              </button>
+
+              {/* Verify all instagrams button */}
+              <button
+                type="button"
+                onClick={() => void handleVerifyAllInstagram()}
+                disabled={verifyingAllIg}
+                style={{
+                  background: '#0284c7',
+                  border: 'none',
+                  color: '#ffffff',
+                  borderRadius: '8px',
+                  padding: '0.42rem 0.85rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: verifyingAllIg ? 'not-allowed' : 'pointer',
+                }}
+                title="Chequea que todos los links de Instagram devuelvan HTTP 200 y no 404"
+              >
+                {verifyingAllIg ? 'Verificando...' : 'Verificar Instagrams (HTTP 200)'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                style={{
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  color: '#38bdf8',
+                  borderRadius: '8px',
+                  padding: '0.42rem 0.85rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Exportar CSV
+              </button>
+
+              <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                Mostrando: <strong style={{ color: '#f8fafc' }}>{filteredProspecting.length}</strong> / {prospectingLeads.length}
+              </span>
+            </div>
+
             <input
-              type="number"
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              min={1}
-              max={50}
+              type="text"
+              placeholder="Buscar por nombre, rubro, ciudad..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               style={{
                 background: '#0f172a',
                 border: '1px solid #334155',
                 color: '#f8fafc',
                 borderRadius: '8px',
-                padding: '0.5rem 0.8rem',
-                fontSize: '0.85rem',
-                width: '80px',
+                padding: '0.45rem 0.8rem',
+                fontSize: '0.84rem',
+                minWidth: '220px',
               }}
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={scraping}
-            style={{
-              background: scraping ? '#1e3a8a' : '#2563eb',
-              border: 'none',
-              color: '#ffffff',
-              borderRadius: '8px',
-              padding: '0.55rem 1.2rem',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              cursor: scraping ? 'wait' : 'pointer',
-            }}
-          >
-            {scraping ? 'Extracting from Google Maps...' : 'Start Scraping'}
-          </button>
-        </form>
-      </div>
-
-      {/* Filter and stats bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.8rem' }}>
-        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => setFilterWithoutWeb(!filterWithoutWeb)}
-            style={{
-              background: filterWithoutWeb ? '#052e16' : '#1e293b',
-              border: `1px solid ${filterWithoutWeb ? '#22c55e' : '#334155'}`,
-              color: filterWithoutWeb ? '#4ade80' : '#cbd5e1',
-              borderRadius: '8px',
-              padding: '0.45rem 0.85rem',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {filterWithoutWeb ? 'Only WITHOUT website' : 'Show all websites'}
-          </button>
-
-          {/* Filter by Status */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            style={{
-              background: '#0f172a',
-              border: '1px solid #334155',
-              color: '#f8fafc',
-              borderRadius: '8px',
-              padding: '0.45rem 0.75rem',
-              fontSize: '0.8rem',
-            }}
-          >
-            <option value="all">All Statuses</option>
-            <option value="needs_follow_up">Needs Follow-up (3+ days)</option>
-            {Object.entries(STATUS_BADGES).map(([st, badge]) => (
-              <option key={st} value={st}>
-                {badge.label}
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            style={{
-              background: '#1e293b',
-              border: '1px solid #334155',
-              color: '#38bdf8',
-              borderRadius: '8px',
-              padding: '0.45rem 0.85rem',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-            }}
-            title="Download CSV export of your leads"
-          >
-            Exportar CSV
-          </button>
-
-          <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-            Showing: <strong style={{ color: '#f8fafc' }}>{filtered.length}</strong> / {leads.length}
-          </span>
-        </div>
-
-        <input
-          type="text"
-          placeholder="Filter by name, phone, address..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            background: '#0f172a',
-            border: '1px solid #334155',
-            color: '#f8fafc',
-            borderRadius: '8px',
-            padding: '0.45rem 0.8rem',
-            fontSize: '0.84rem',
-            minWidth: '240px',
-          }}
-        />
-      </div>
-
-      {/* Sticky Bulk Action Bar when leads are selected */}
-      {selectedIds.size > 0 && (
-        <div
-          style={{
-            background: '#1e293b',
-            border: '1px solid #3b82f6',
-            borderRadius: '10px',
-            padding: '0.65rem 1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '0.8rem',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f8fafc' }}>
-              {selectedIds.size} leads selected
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedIds(new Set())}
+          {/* Sticky Bulk Action Bar */}
+          {selectedIds.size > 0 && (
+            <div
               style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#94a3b8',
-                fontSize: '0.78rem',
-                cursor: 'pointer',
-                textDecoration: 'underline',
+                background: '#1e293b',
+                border: '1px solid #3b82f6',
+                borderRadius: '10px',
+                padding: '0.65rem 1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.8rem',
               }}
             >
-              Deselect all
-            </button>
-          </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f8fafc' }}>
+                  {selectedIds.size} leads seleccionados
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set())}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Deseleccionar todos
+                </button>
+              </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => void updateSelectedStatus('contacted')}
-              disabled={batchActionRunning}
-              style={{
-                background: '#422006',
-                border: '1px solid #854d0e',
-                color: '#facc15',
-                borderRadius: '6px',
-                padding: '0.35rem 0.75rem',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Mark Contacted ({selectedIds.size})
-            </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => void updateSelectedStatus('contacted')}
+                  disabled={batchActionRunning}
+                  style={{
+                    background: '#422006',
+                    border: '1px solid #854d0e',
+                    color: '#facc15',
+                    borderRadius: '6px',
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Marcar Contactados ({selectedIds.size})
+                </button>
 
-            <button
-              type="button"
-              onClick={() => void updateSelectedStatus('discarded')}
-              disabled={batchActionRunning}
-              style={{
-                background: '#334155',
-                border: '1px solid #475569',
-                color: '#cbd5e1',
-                borderRadius: '6px',
-                padding: '0.35rem 0.75rem',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Mark Discarded
-            </button>
+                <button
+                  type="button"
+                  onClick={() => void updateSelectedStatus('discarded')}
+                  disabled={batchActionRunning}
+                  style={{
+                    background: '#334155',
+                    border: '1px solid #475569',
+                    color: '#cbd5e1',
+                    borderRadius: '6px',
+                    padding: '0.35rem 0.75rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Descartar
+                </button>
 
-            <button
-              type="button"
-              onClick={() => void deleteSelectedLeads()}
-              disabled={batchActionRunning}
-              style={{
-                background: '#dc2626',
-                border: 'none',
-                color: '#ffffff',
-                borderRadius: '6px',
-                padding: '0.35rem 0.85rem',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Delete Selected ({selectedIds.size})
-            </button>
-          </div>
-        </div>
-      )}
+                <button
+                  type="button"
+                  onClick={() => void deleteSelectedLeads()}
+                  disabled={batchActionRunning}
+                  style={{
+                    background: '#dc2626',
+                    border: 'none',
+                    color: '#ffffff',
+                    borderRadius: '6px',
+                    padding: '0.35rem 0.85rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Eliminar ({selectedIds.size})
+                </button>
+              </div>
+            </div>
+          )}
 
-      {/* Leads Table Container */}
-      <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
-        {/* Desktop Table View */}
-        <div className="hidden md:block" style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
-            <thead>
-              <tr style={{ background: '#0f172a', color: '#94a3b8', textAlign: 'left' }}>
-                <th style={{ padding: '0.65rem 0.75rem', width: '36px' }}>
-                  <input
-                    type="checkbox"
-                    checked={filtered.length > 0 && selectedIds.size === filtered.length}
-                    onChange={toggleSelectAllFiltered}
-                    title="Select/Deselect all filtered leads"
-                    style={{ cursor: 'pointer' }}
-                  />
-                </th>
-                <th style={{ padding: '0.65rem 1rem' }}>Business</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Address & Maps Link</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Website Status</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Contact Details</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Suggested Pitch</th>
-                <th style={{ padding: '0.65rem 1rem' }}>Status</th>
-                <th style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((lead) => {
-                const badge = STATUS_BADGES[lead.status] ?? STATUS_BADGES.discovered;
-                const waNumber = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : null;
-                const metaSource = (lead.metadata as { sourceUrl?: string })?.sourceUrl;
-                const mapsSearchUrl = metaSource || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address}`)}`;
-                const pitchText = buildPitch(lead);
-                const isSelected = selectedIds.has(lead.id);
-
-                return (
-                  <tr
-                    key={lead.id}
-                    style={{
-                      borderTop: '1px solid #1e293b',
-                      color: '#e2e8f0',
-                      background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
-                    }}
-                  >
-                    {/* Checkbox */}
-                    <td style={{ padding: '0.65rem 0.75rem' }}>
+          {/* Prospecting Desktop Table */}
+          <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
+            <div className="hidden md:block" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                <thead>
+                  <tr style={{ background: '#0f172a', color: '#94a3b8', textAlign: 'left' }}>
+                    <th style={{ padding: '0.65rem 0.75rem', width: '36px' }}>
                       <input
                         type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectRow(lead.id)}
+                        checked={filteredProspecting.length > 0 && selectedIds.size === filteredProspecting.length}
+                        onChange={toggleSelectAllProspecting}
                         style={{ cursor: 'pointer' }}
                       />
-                    </td>
+                    </th>
+                    <th style={{ padding: '0.65rem 1rem' }}>Negocio</th>
+                    <th style={{ padding: '0.65rem 1rem' }}>Rubro / Ciudad</th>
+                    <th style={{ padding: '0.65rem 1rem' }}>Sitio Web</th>
+                    <th style={{ padding: '0.65rem 1rem' }}>Instagram (HTTP Check)</th>
+                    <th style={{ padding: '0.65rem 1rem' }}>Demo / Oferta</th>
+                    <th style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>Acciones Directas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProspecting.map((lead) => {
+                    const isSelected = selectedIds.has(lead.id);
+                    const igVerified = (lead.metadata as any)?.instagramVerified as boolean | undefined;
+                    const igUsername = getInstagramUsername(lead.instagram);
+                    const leadPresetId = leadPresetOverrides[lead.id] || selectedSpeechPreset;
+                    const waNumber = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : null;
+                    const metaSource = (lead.metadata as { sourceUrl?: string })?.sourceUrl;
+                    const mapsUrl = metaSource || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address}`)}`;
 
-                    {/* Name and Rating */}
-                    <td style={{ padding: '0.65rem 1rem' }}>
-                      <div style={{ fontWeight: 700, color: '#f8fafc' }}>{lead.name}</div>
-                      <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '0.15rem' }}>
-                        {lead.category}
-                      </div>
-                      {lead.rating && (
-                        <div style={{ fontSize: '0.74rem', color: '#eab308', marginTop: '0.15rem' }}>
-                          ★ {lead.rating} ({lead.reviewsCount} reviews)
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Address & Direct Google Maps link */}
-                    <td style={{ padding: '0.65rem 1rem' }}>
-                      <div style={{ color: '#cbd5e1', fontSize: '0.8rem', maxWidth: '240px' }}>
-                        {lead.address || lead.city}
-                      </div>
-                      <div style={{ marginTop: '0.25rem' }}>
-                        <a
-                          href={mapsSearchUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="Verify listing directly on Google Maps"
-                          style={{
-                            fontSize: '0.72rem',
-                            color: '#38bdf8',
-                            textDecoration: 'none',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.2rem',
-                          }}
-                        >
-                          Verify on Google Maps ↗
-                        </a>
-                      </div>
-                    </td>
-
-                    {/* Website */}
-                    <td style={{ padding: '0.65rem 1rem' }}>
-                      {lead.hasWebsite && lead.website ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                          <span style={{ color: '#4ade80', fontSize: '0.72rem', fontWeight: 700 }}>
-                            HAS WEBSITE
-                          </span>
-                          <a
-                            href={lead.website}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              color: '#60a5fa',
-                              textDecoration: 'none',
-                              fontSize: '0.76rem',
-                              maxWidth: '180px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              display: 'block',
-                            }}
-                          >
-                            {lead.website.replace(/^https?:\/\/(www\.)?/, '')}
-                          </a>
-                        </div>
-                      ) : (
-                        <span
-                          style={{
-                            background: '#450a0a',
-                            color: '#f87171',
-                            padding: '0.2rem 0.55rem',
-                            borderRadius: '6px',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            display: 'inline-block',
-                          }}
-                        >
-                          NO WEBSITE TARGET
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Contact */}
-                    <td style={{ padding: '0.65rem 1rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                        {lead.phone ? (
-                          <div style={{ fontFamily: 'monospace', color: '#93c5fd', fontSize: '0.78rem' }}>
-                            {lead.phone}
-                          </div>
-                        ) : null}
-                        {lead.email ? (
-                          <a
-                            href={`mailto:${lead.email}`}
-                            style={{ color: '#34d399', fontSize: '0.78rem', textDecoration: 'none' }}
-                          >
-                            {lead.email}
-                          </a>
-                        ) : null}
-                        {lead.instagram ? (
-                          <a
-                            href={lead.instagram}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ color: '#f472b6', fontSize: '0.75rem', textDecoration: 'none' }}
-                          >
-                            Instagram Profile ↗
-                          </a>
-                        ) : null}
-                        {!lead.email && !lead.phone && (
-                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>No phone available</span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Suggested Pitch / Demo */}
-                    <td style={{ padding: '0.65rem 1rem' }}>
-                      {lead.suggestedDemo ? (
-                        <a
-                          href={lead.suggestedDemo}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            color: '#a78bfa',
-                            textDecoration: 'none',
-                            fontSize: '0.76rem',
-                            fontWeight: 600,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.2rem',
-                          }}
-                        >
-                          Pitch Demo ↗
-                        </a>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-
-                    {/* Status & Follow-up */}
-                    <td style={{ padding: '0.65rem 1rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                        <select
-                          value={lead.status}
-                          onChange={(e) => void updateStatus(lead.id, e.target.value as LeadStatus)}
-                          style={{
-                            background: badge.bg,
-                            color: badge.color,
-                            border: `1px solid ${badge.border}`,
-                            borderRadius: '6px',
-                            padding: '0.2rem 0.4rem',
-                            fontSize: '0.74rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {Object.entries(STATUS_BADGES).map(([key, item]) => (
-                            <option key={key} value={key} style={{ background: '#0f172a', color: '#f8fafc' }}>
-                              {item.label}
-                            </option>
-                          ))}
-                        </select>
-
-                        {(() => {
-                          const fInfo = getFollowUpInfo(lead);
-                          if (!fInfo.days && !lead.contactedAt) return null;
-                          return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
-                              <span
-                                style={{
-                                  fontSize: '0.68rem',
-                                  padding: '1px 5px',
-                                  borderRadius: '4px',
-                                  background: fInfo.isEligible ? '#451a03' : 'rgba(255,255,255,0.06)',
-                                  color: fInfo.isEligible ? '#fbbf24' : '#94a3b8',
-                                  border: `1px solid ${fInfo.isEligible ? '#b45309' : '#334155'}`,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {fInfo.label || 'Contactado'}
-                                {fInfo.count > 0 ? ` (${fInfo.count} follow-up${fInfo.count > 1 ? 's' : ''})` : ''}
-                              </span>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </td>
-
-                    {/* Sales Notes */}
-                    <td style={{ padding: '0.65rem 1rem', maxWidth: '200px' }}>
-                      {editingNoteId === lead.id ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                          <textarea
-                            rows={2}
-                            autoFocus
-                            value={noteDraftText}
-                            onChange={(e) => setNoteDraftText(e.target.value)}
-                            placeholder="Anotar feedback..."
-                            style={{
-                              background: '#0f172a',
-                              border: '1px solid #38bdf8',
-                              color: '#f8fafc',
-                              borderRadius: '4px',
-                              padding: '0.3rem',
-                              fontSize: '0.75rem',
-                              width: '100%',
-                              boxSizing: 'border-box',
-                            }}
+                    return (
+                      <tr
+                        key={lead.id}
+                        style={{
+                          borderTop: '1px solid #1e293b',
+                          color: '#e2e8f0',
+                          background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                        }}
+                      >
+                        {/* Checkbox */}
+                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectRow(lead.id)}
+                            style={{ cursor: 'pointer' }}
                           />
-                          <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        </td>
+
+                        {/* Name and Rating */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.88rem' }}>
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: '#f8fafc', textDecoration: 'none' }}
+                              title="Ver en Google Maps"
+                            >
+                              {lead.name}
+                            </a>
+                          </div>
+                          {lead.rating && (
+                            <div style={{ fontSize: '0.75rem', color: '#facc15', marginTop: '2px' }}>
+                              ★ {lead.rating} <span style={{ color: '#64748b' }}>({lead.reviewsCount} reviews)</span>
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
+                            {lead.address}
+                          </div>
+                        </td>
+
+                        {/* Category & City */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          <div style={{ color: '#cbd5e1' }}>{lead.category}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{lead.city}</div>
+                        </td>
+
+                        {/* Website Status */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          {lead.hasWebsite && lead.website ? (
+                            <a
+                              href={lead.website}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                color: '#38bdf8',
+                                textDecoration: 'underline',
+                                fontSize: '0.78rem',
+                                wordBreak: 'break-all',
+                              }}
+                            >
+                              {lead.website.replace(/^https?:\/\/(www\.)?/, '')}
+                            </a>
+                          ) : (
+                            <span
+                              style={{
+                                background: '#450a0a',
+                                color: '#f87171',
+                                border: '1px solid #7f1d1d',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              Sin Sitio Web
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Instagram with HTTP Check */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          {lead.instagram ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <a
+                                  href={lead.instagram}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ color: '#f43f5e', textDecoration: 'none', fontWeight: 600, fontSize: '0.8rem' }}
+                                >
+                                  @{igUsername || 'perfil'}
+                                </a>
+
+                                {/* Verification Status Badge */}
+                                {igVerified === true ? (
+                                  <span
+                                    style={{
+                                      background: '#052e16',
+                                      color: '#4ade80',
+                                      border: '1px solid #166534',
+                                      borderRadius: '4px',
+                                      padding: '1px 5px',
+                                      fontSize: '0.68rem',
+                                      fontWeight: 700,
+                                    }}
+                                    title="Respuesta HTTP 200 OK: el perfil existe"
+                                  >
+                                    200 OK
+                                  </span>
+                                ) : igVerified === false ? (
+                                  <span
+                                    style={{
+                                      background: '#450a0a',
+                                      color: '#f87171',
+                                      border: '1px solid #7f1d1d',
+                                      borderRadius: '4px',
+                                      padding: '1px 5px',
+                                      fontSize: '0.68rem',
+                                      fontWeight: 700,
+                                    }}
+                                    title="Respuesta HTTP 404: perfil inexistente o borrado"
+                                  >
+                                    404 Roto
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleVerifyInstagram(lead.id)}
+                                    disabled={verifyingIgId === lead.id}
+                                    style={{
+                                      background: '#1e293b',
+                                      border: '1px solid #334155',
+                                      color: '#94a3b8',
+                                      borderRadius: '4px',
+                                      padding: '1px 5px',
+                                      fontSize: '0.68rem',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Verificar enlace HTTP 200"
+                                  >
+                                    {verifyingIgId === lead.id ? '...' : 'Test'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
                             <button
                               type="button"
-                              onClick={() => void handleSaveNote(lead.id, noteDraftText)}
+                              onClick={() => void handleEnrich(lead.id)}
+                              disabled={enrichingId === lead.id}
                               style={{
-                                background: '#0284c7',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '3px',
+                                background: '#1e293b',
+                                border: '1px solid #334155',
+                                color: '#93c5fd',
                                 padding: '2px 6px',
-                                fontSize: '0.7rem',
+                                borderRadius: '4px',
+                                fontSize: '0.72rem',
                                 cursor: 'pointer',
                               }}
                             >
-                              Guardar
+                              {enrichingId === lead.id ? 'Buscando...' : 'Buscar Socials'}
                             </button>
+                          )}
+                        </td>
+
+                        {/* Demo Assigned */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          {lead.suggestedDemo ? (
+                            <a
+                              href={lead.suggestedDemo}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: '#38bdf8', fontSize: '0.75rem', textDecoration: 'none' }}
+                            >
+                              Demo Demo ↗
+                            </a>
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: '0.72rem' }}>Generica</span>
+                          )}
+                        </td>
+
+                        {/* Direct Actions */}
+                        <td style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
+                            {/* Preset Selector Dropdown per row */}
+                            <select
+                              value={leadPresetId}
+                              onChange={(e) =>
+                                setLeadPresetOverrides((prev) => ({ ...prev, [lead.id]: e.target.value }))
+                              }
+                              style={{
+                                background: '#0f172a',
+                                border: '1px solid #334155',
+                                color: '#cbd5e1',
+                                borderRadius: '6px',
+                                padding: '0.25rem 0.4rem',
+                                fontSize: '0.72rem',
+                              }}
+                              title="Seleccionar speech para este lead"
+                            >
+                              {speechPresets.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.label.split('(')[0]?.trim()}
+                                </option>
+                              ))}
+                            </select>
+
+                            {/* Instagram DM Button */}
+                            {lead.instagram && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenInstagramDM(lead, undefined, leadPresetId)}
+                                style={{
+                                  background: '#e11d48',
+                                  border: 'none',
+                                  color: '#ffffff',
+                                  padding: '0.28rem 0.6rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                                title="Copia el speech seleccionado y abre el chat de Instagram"
+                              >
+                                Abrir DM
+                              </button>
+                            )}
+
+                            {/* WhatsApp Button */}
+                            {waNumber && (
+                              <a
+                                href={`https://wa.me/${waNumber}?text=${encodeURIComponent(getPitchForLead(lead, leadPresetId))}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => void updateStatus(lead.id, 'contacted')}
+                                style={{
+                                  background: '#064e3b',
+                                  border: '1px solid #059669',
+                                  color: '#6ee7b7',
+                                  padding: '0.28rem 0.6rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  textDecoration: 'none',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                WhatsApp
+                              </a>
+                            )}
+
+                            {/* Discard button */}
                             <button
                               type="button"
-                              onClick={() => setEditingNoteId(null)}
+                              onClick={() => void updateStatus(lead.id, 'discarded')}
                               style={{
                                 background: 'transparent',
-                                color: '#94a3b8',
                                 border: '1px solid #334155',
-                                borderRadius: '3px',
-                                padding: '2px 6px',
-                                fontSize: '0.7rem',
+                                color: '#94a3b8',
+                                padding: '0.28rem 0.4rem',
+                                borderRadius: '6px',
+                                fontSize: '0.72rem',
                                 cursor: 'pointer',
                               }}
+                              title="Descartar"
                             >
                               ✕
                             </button>
                           </div>
-                        </div>
-                      ) : (
-                        <div
-                          onClick={() => {
-                            setEditingNoteId(lead.id);
-                            setNoteDraftText(lead.notes || '');
-                          }}
-                          style={{
-                            cursor: 'pointer',
-                            fontSize: '0.75rem',
-                            color: lead.notes ? '#cbd5e1' : '#64748b',
-                            background: lead.notes ? 'rgba(255,255,255,0.03)' : 'transparent',
-                            padding: '4px 6px',
-                            borderRadius: '4px',
-                            border: '1px dashed #334155',
-                            lineHeight: '1.3',
-                            maxHeight: '60px',
-                            overflowY: 'auto',
-                            wordBreak: 'break-word',
-                          }}
-                          title="Hacé clic para editar notas de venta"
-                        >
-                          {lead.notes || '+ Nota...'}
-                        </div>
-                      )}
-                    </td>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
 
-                    {/* Actions */}
-                    <td style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
-                        {/* Follow-up button if already contacted */}
-                        {lead.status === 'contacted' && lead.instagram && (
-                          <button
-                            type="button"
-                            disabled={generatingPitchId === lead.id}
-                            onClick={() => void handleSendFollowUp(lead)}
-                            style={{
-                              background: getFollowUpInfo(lead).isEligible ? '#d97706' : '#1e293b',
-                              border: `1px solid ${getFollowUpInfo(lead).isEligible ? '#f59e0b' : '#334155'}`,
-                              color: getFollowUpInfo(lead).isEligible ? '#ffffff' : '#f59e0b',
-                              padding: '0.25rem 0.55rem',
-                              borderRadius: '6px',
-                              fontSize: '0.75rem',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.2rem',
-                            }}
-                            title="Generar y copiar mensaje de seguimiento amistoso para Instagram"
-                          >
-                            Follow-up
-                          </button>
-                        )}
-                        {waNumber && (
-                          <a
-                            href={`https://wa.me/${waNumber}?text=${encodeURIComponent(pitchText)}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={() => void updateStatus(lead.id, 'contacted')}
-                            title="Open WhatsApp chat with prefilled pitch"
-                            style={{
-                              background: '#064e3b',
-                              border: '1px solid #059669',
-                              color: '#6ee7b7',
-                              padding: '0.25rem 0.55rem',
-                              borderRadius: '6px',
-                              fontSize: '0.75rem',
-                              textDecoration: 'none',
-                              fontWeight: 600,
-                            }}
-                          >
-                            WhatsApp
-                          </a>
-                        )}
-
-                        {lead.instagram && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenInstagramDM(lead)}
-                            title="Abrir Instagram DM y copiar mensaje personalizado"
-                            style={{
-                              background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
-                              border: 'none',
-                              color: '#ffffff',
-                              padding: '0.25rem 0.55rem',
-                              borderRadius: '6px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.25rem',
-                              boxShadow: '0 2px 4px rgba(219, 39, 119, 0.25)',
-                            }}
-                          >
-                            <span>📸</span> DM
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => void handleEnrich(lead.id)}
-                          disabled={enrichingId === lead.id}
-                          title="Search public email and Instagram profile"
-                          style={{
-                            background: '#1e293b',
-                            border: '1px solid #334155',
-                            color: '#cbd5e1',
-                            padding: '0.25rem 0.5rem',
-                            borderRadius: '6px',
-                            fontSize: '0.75rem',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {enrichingId === lead.id ? '...' : 'Find Socials'}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => void deleteLead(lead.id)}
-                          title="Delete this prospect"
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            padding: '0.2rem 0.4rem',
-                            fontSize: '0.88rem',
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={8} style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>
-                    No prospects found. Launch a new Google Maps scraping scan above to populate real leads!
-                  </td>
-                </tr>
+              {filteredProspecting.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                  No hay leads nuevos con los filtros actuales. Ejecuta una busqueda en Google Maps arriba.
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Cards View (< md) */}
-        <div className="block md:hidden divide-y divide-line/60">
-          {filtered.length === 0 && !loading ? (
-            <div className="p-8 text-center text-muted text-sm">
-              No prospects found. Launch a new Google Maps scraping scan above to populate real leads!
             </div>
-          ) : (
-            filtered.map((lead) => {
-              const badge = STATUS_BADGES[lead.status] ?? STATUS_BADGES.discovered;
-              const waNumber = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : null;
-              const metaSource = (lead.metadata as { sourceUrl?: string })?.sourceUrl;
-              const mapsSearchUrl = metaSource || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address}`)}`;
-              const pitchText = buildPitch(lead);
-              const isSelected = selectedIds.has(lead.id);
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: SEGUIMIENTOS & CRM (CONTACTADOS)                                    */}
+      {/* ========================================================================= */}
+      {activeTab === 'followups' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Follow-up Overview Strip */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div
+              onClick={() => setFilterFollowupStatus('all')}
+              style={{
+                background: filterFollowupStatus === 'all' ? '#1e293b' : '#0b0f19',
+                border: `1px solid ${filterFollowupStatus === 'all' ? '#3b82f6' : '#1e293b'}`,
+                borderRadius: '10px',
+                padding: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Total Contactados</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', marginTop: '0.2rem' }}>{contactedLeads.length}</div>
+            </div>
+
+            <div
+              onClick={() => setFilterFollowupStatus('needs_follow_up')}
+              style={{
+                background: filterFollowupStatus === 'needs_follow_up' ? '#422006' : '#0b0f19',
+                border: `1px solid ${filterFollowupStatus === 'needs_follow_up' ? '#f59e0b' : '#1e293b'}`,
+                borderRadius: '10px',
+                padding: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', color: '#f59e0b', textTransform: 'uppercase', fontWeight: 600 }}>
+                Requieren Follow-up (3+d)
+              </div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f59e0b', marginTop: '0.2rem' }}>
+                {needsFollowUpCount}
+              </div>
+            </div>
+
+            <div
+              onClick={() => setFilterFollowupStatus('waiting')}
+              style={{
+                background: filterFollowupStatus === 'waiting' ? '#1e293b' : '#0b0f19',
+                border: `1px solid ${filterFollowupStatus === 'waiting' ? '#64748b' : '#1e293b'}`,
+                borderRadius: '10px',
+                padding: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>En Espera (&lt;3d)</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#cbd5e1', marginTop: '0.2rem' }}>
+                {contactedLeads.length - needsFollowUpCount}
+              </div>
+            </div>
+
+            <div
+              onClick={() => setFilterFollowupStatus('replied')}
+              style={{
+                background: filterFollowupStatus === 'replied' ? '#064e3b' : '#0b0f19',
+                border: `1px solid ${filterFollowupStatus === 'replied' ? '#059669' : '#1e293b'}`,
+                borderRadius: '10px',
+                padding: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', color: '#34d399', textTransform: 'uppercase', fontWeight: 600 }}>Respondieron</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#34d399', marginTop: '0.2rem' }}>
+                {leads.filter((l) => l.status === 'replied').length}
+              </div>
+            </div>
+
+            <div
+              onClick={() => setFilterFollowupStatus('converted')}
+              style={{
+                background: filterFollowupStatus === 'converted' ? '#052e16' : '#0b0f19',
+                border: `1px solid ${filterFollowupStatus === 'converted' ? '#166534' : '#1e293b'}`,
+                borderRadius: '10px',
+                padding: '0.85rem',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: '0.75rem', color: '#4ade80', textTransform: 'uppercase', fontWeight: 600 }}>Clientes Ganados</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#4ade80', marginTop: '0.2rem' }}>
+                {leads.filter((l) => l.status === 'converted').length}
+              </div>
+            </div>
+          </div>
+
+          {/* Follow-up Toolbar */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              background: '#0b0f19',
+              border: '1px solid #1e293b',
+              borderRadius: '10px',
+              padding: '0.75rem 1rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <select
+                value={filterFollowupStatus}
+                onChange={(e) => setFilterFollowupStatus(e.target.value)}
+                style={{
+                  background: '#0f172a',
+                  border: '1px solid #334155',
+                  color: '#f8fafc',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.75rem',
+                  fontSize: '0.8rem',
+                }}
+              >
+                <option value="all">Todos los contactados</option>
+                <option value="needs_follow_up">Requieren Follow-up (3+ dias)</option>
+                <option value="waiting">En espera reciente (&lt; 3 dias)</option>
+                <option value="replied">Respondieron / Negociacion</option>
+                <option value="converted">Clientes Ganados</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                style={{
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  color: '#38bdf8',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.85rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Exportar CSV
+              </button>
+
+              <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                Mostrando: <strong style={{ color: '#f8fafc' }}>{filteredFollowups.length}</strong> / {contactedLeads.length}
+              </span>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Buscar por negocio, ciudad o nota de venta..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                background: '#0f172a',
+                border: '1px solid #334155',
+                color: '#f8fafc',
+                borderRadius: '8px',
+                padding: '0.45rem 0.8rem',
+                fontSize: '0.84rem',
+                minWidth: '260px',
+              }}
+            />
+          </div>
+
+          {/* Follow-ups Desktop Table */}
+          <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', overflow: 'hidden' }}>
+            <div className="hidden md:block" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                <thead>
+                  <tr style={{ background: '#0f172a', color: '#94a3b8', textAlign: 'left' }}>
+                    <th style={{ padding: '0.65rem 1rem' }}>Negocio & Instagram</th>
+                    <th style={{ padding: '0.65rem 1rem' }}>Estado Actual</th>
+                    <th style={{ padding: '0.65rem 1rem' }}>Ultimo Contacto</th>
+                    <th style={{ padding: '0.65rem 1rem' }}>Historial Follow-ups</th>
+                    <th style={{ padding: '0.65rem 1rem', width: '280px' }}>Notas de Venta (Click para editar)</th>
+                    <th style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFollowups.map((lead) => {
+                    const followUpInfo = getFollowUpInfo(lead);
+                    const igUsername = getInstagramUsername(lead.instagram);
+                    const waNumber = lead.phoneFormatted ? lead.phoneFormatted.replace('+', '') : null;
+
+                    return (
+                      <tr
+                        key={lead.id}
+                        style={{
+                          borderTop: '1px solid #1e293b',
+                          color: '#e2e8f0',
+                          background: followUpInfo.isEligible ? 'rgba(245, 158, 11, 0.04)' : 'transparent',
+                        }}
+                      >
+                        {/* Business & Instagram */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: '0.88rem' }}>{lead.name}</div>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{lead.city} • {lead.category}</div>
+                          {lead.instagram && (
+                            <a
+                              href={lead.instagram}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: '#f43f5e', fontSize: '0.75rem', textDecoration: 'none' }}
+                            >
+                              @{igUsername || 'instagram'}
+                            </a>
+                          )}
+                        </td>
+
+                        {/* Status Change Dropdown */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          <select
+                            value={lead.status}
+                            onChange={(e) => void updateStatus(lead.id, e.target.value as LeadStatus)}
+                            style={{
+                              background: STATUS_BADGES[lead.status]?.bg || '#1e293b',
+                              color: STATUS_BADGES[lead.status]?.color || '#f8fafc',
+                              border: `1px solid ${STATUS_BADGES[lead.status]?.border || '#334155'}`,
+                              borderRadius: '6px',
+                              padding: '0.25rem 0.5rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <option value="contacted">Contacted</option>
+                            <option value="replied">Replied (En conversacion)</option>
+                            <option value="converted">Client Won! (Convertido)</option>
+                            <option value="discarded">Discarded</option>
+                          </select>
+                        </td>
+
+                        {/* Last Contact */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          {followUpInfo.isEligible ? (
+                            <span
+                              style={{
+                                background: '#451a03',
+                                color: '#f59e0b',
+                                border: '1px solid #b45309',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {followUpInfo.label} (3+d pendiente)
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                              {followUpInfo.label || 'Reciente'}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Follow-up count */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          <span
+                            style={{
+                              background: '#1e293b',
+                              border: '1px solid #334155',
+                              borderRadius: '12px',
+                              padding: '2px 8px',
+                              fontSize: '0.74rem',
+                              color: '#cbd5e1',
+                            }}
+                          >
+                            {followUpInfo.count === 0 ? 'Sin follow-ups aun' : `${followUpInfo.count} enviado${followUpInfo.count > 1 ? 's' : ''}`}
+                          </span>
+                        </td>
+
+                        {/* Inline Sales Notes */}
+                        <td style={{ padding: '0.65rem 1rem' }}>
+                          {editingNoteId === lead.id ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                              <textarea
+                                autoFocus
+                                rows={2}
+                                value={noteDraftText}
+                                onChange={(e) => setNoteDraftText(e.target.value)}
+                                style={{
+                                  background: '#0f172a',
+                                  border: '1px solid #38bdf8',
+                                  color: '#f8fafc',
+                                  borderRadius: '4px',
+                                  padding: '0.3rem',
+                                  fontSize: '0.75rem',
+                                  width: '100%',
+                                  boxSizing: 'border-box',
+                                }}
+                              />
+                              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleSaveNote(lead.id, noteDraftText)}
+                                  style={{
+                                    background: '#0284c7',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '3px',
+                                    padding: '2px 6px',
+                                    fontSize: '0.7rem',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Guardar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingNoteId(null)}
+                                  style={{
+                                    background: 'transparent',
+                                    color: '#94a3b8',
+                                    border: '1px solid #334155',
+                                    borderRadius: '3px',
+                                    padding: '2px 6px',
+                                    fontSize: '0.7rem',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => {
+                                setEditingNoteId(lead.id);
+                                setNoteDraftText(lead.notes || '');
+                              }}
+                              style={{
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                color: lead.notes ? '#cbd5e1' : '#64748b',
+                                background: lead.notes ? 'rgba(255,255,255,0.03)' : 'transparent',
+                                padding: '4px 6px',
+                                borderRadius: '4px',
+                                border: '1px dashed #334155',
+                                lineHeight: '1.3',
+                                maxHeight: '60px',
+                                overflowY: 'auto',
+                                wordBreak: 'break-word',
+                              }}
+                              title="Hacé clic para escribir o editar notas"
+                            >
+                              {lead.notes || '+ Agregar nota de venta...'}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td style={{ padding: '0.65rem 1rem', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
+                            {lead.instagram && (
+                              <button
+                                type="button"
+                                disabled={generatingPitchId === lead.id}
+                                onClick={() => void handleSendFollowUp(lead)}
+                                style={{
+                                  background: followUpInfo.isEligible ? '#d97706' : '#1e293b',
+                                  border: `1px solid ${followUpInfo.isEligible ? '#f59e0b' : '#334155'}`,
+                                  color: followUpInfo.isEligible ? '#ffffff' : '#f59e0b',
+                                  padding: '0.28rem 0.65rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                                title="Genera/copia mensaje de seguimiento amigable, abre Instagram y suma el contador"
+                              >
+                                Follow-up
+                              </button>
+                            )}
+
+                            {waNumber && (
+                              <a
+                                href={`https://wa.me/${waNumber}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  background: '#064e3b',
+                                  border: '1px solid #059669',
+                                  color: '#6ee7b7',
+                                  padding: '0.28rem 0.55rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  textDecoration: 'none',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                WhatsApp
+                              </a>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {filteredFollowups.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                  No hay leads contactados en esta seccion. Al hacer el primer contacto en Prospeccion, apareceran aca automaticamente.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: BIBLIOTECA DE SPEECHES & OFERTAS                                    */}
+      {/* ========================================================================= */}
+      {activeTab === 'speeches' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
+            <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem', color: '#f8fafc' }}>
+              Biblioteca de Speeches & Ofertas
+            </h2>
+            <p style={{ margin: 0, fontSize: '0.84rem', color: '#94a3b8' }}>
+              Elegi y edita los discursos de prospeccion. Al hacer clic en Abrir DM en la tabla, el sistema completara automaticamente las variables dinamicas ({'{name}'}, {'{city}'}, {'{category}'}, {'{demo}'}).
+            </p>
+          </div>
+
+          {/* Preset Cards Grid */}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {speechPresets.map((preset) => {
+              const isActive = selectedSpeechPreset === preset.id;
 
               return (
                 <div
-                  key={lead.id}
-                  className={`p-4 transition ${isSelected ? 'bg-series/5' : 'bg-transparent'}`}
+                  key={preset.id}
+                  style={{
+                    background: '#0b0f19',
+                    border: `1px solid ${isActive ? '#10b981' : '#1e293b'}`,
+                    borderRadius: '12px',
+                    padding: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem',
+                  }}
                 >
-                  {/* Top: Checkbox, Name, Category, Rating */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelectRow(lead.id)}
-                        className="mt-1 size-4 rounded cursor-pointer"
-                      />
-                      <div>
-                        <div className="font-bold text-ink text-base leading-snug">{lead.name}</div>
-                        <div className="text-xs text-muted mt-0.5">{lead.category}</div>
-                        {lead.rating && (
-                          <div className="text-xs text-amber-400 font-semibold mt-0.5">
-                            ★ {lead.rating} <span className="text-muted font-normal">({lead.reviewsCount} reviews)</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Status badge / selector */}
-                    <select
-                      value={lead.status}
-                      onChange={(e) => void updateStatus(lead.id, e.target.value as LeadStatus)}
-                      style={{
-                        background: badge.bg,
-                        color: badge.color,
-                        border: `1px solid ${badge.border}`,
-                      }}
-                      className="rounded-lg px-2 py-1 text-xs font-bold cursor-pointer shrink-0"
-                    >
-                      {Object.entries(STATUS_BADGES).map(([key, item]) => (
-                        <option key={key} value={key} style={{ background: '#0f172a', color: '#f8fafc' }}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Website & Address row */}
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-2.5 text-xs">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      {lead.hasWebsite && lead.website ? (
-                        <a
-                          href={lead.website}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-series hover:underline font-medium inline-flex items-center gap-1"
-                        >
-                          <span>🌐</span> {lead.website.replace(/^https?:\/\/(www\.)?/, '')}
-                        </a>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 font-bold text-red-400 bg-red-950/40 border border-red-900/60 rounded px-1.5 py-0.5 text-[11px]">
-                          NO WEBSITE TARGET 🎯
-                        </span>
-                      )}
+                      <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#f8fafc', fontWeight: 700 }}>
+                        {preset.label}
+                      </h3>
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                        {preset.description}
+                      </p>
                     </div>
-
-                    <a
-                      href={mapsSearchUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-400 hover:underline inline-flex items-center gap-1 text-[11px]"
-                    >
-                      Maps ↗
-                    </a>
-                  </div>
-
-                  {/* Contact info row */}
-                  <div className="mt-2 text-xs text-ink-2 space-y-0.5">
-                    {lead.phone && (
-                      <div className="font-mono text-ink text-xs flex items-center gap-1.5">
-                        <span className="emoji-bw">📞</span> {lead.phone}
-                      </div>
-                    )}
-                    {lead.email && (
-                      <div className="text-emerald-400 text-xs truncate">
-                        <span className="emoji-bw">✉️</span> {lead.email}
-                      </div>
-                    )}
-                    {lead.address && (
-                      <div className="text-muted text-[11px] truncate">
-                        📍 {lead.address}
-                      </div>
+                    {isActive && (
+                      <span
+                        style={{
+                          background: '#064e3b',
+                          color: '#34d399',
+                          border: '1px solid #059669',
+                          borderRadius: '4px',
+                          padding: '2px 6px',
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Predeterminado
+                      </span>
                     )}
                   </div>
 
-                  {/* Primary Action Buttons Bar (WhatsApp, Instagram, Find Socials) */}
-                  <div className="mt-3.5 grid grid-cols-2 gap-2 border-t border-line/60 pt-3">
-                    {waNumber ? (
-                      <a
-                        href={`https://wa.me/${waNumber}?text=${encodeURIComponent(pitchText)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={() => void updateStatus(lead.id, 'contacted')}
-                        className="flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 px-3 py-2 text-xs font-bold text-emerald-300 active:scale-95 transition"
-                      >
-                        <span>💬</span> WhatsApp
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled
-                        className="flex items-center justify-center gap-1 rounded-lg bg-bg border border-line px-3 py-2 text-xs text-muted opacity-50"
-                      >
-                        No phone
-                      </button>
-                    )}
+                  <textarea
+                    rows={6}
+                    value={preset.template}
+                    onChange={(e) => {
+                      const newText = e.target.value;
+                      setSpeechPresets((prev) =>
+                        prev.map((p) => (p.id === preset.id ? { ...p, template: newText } : p))
+                      );
+                    }}
+                    style={{
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      color: '#f8fafc',
+                      padding: '0.6rem',
+                      fontSize: '0.8rem',
+                      lineHeight: '1.4',
+                      resize: 'vertical',
+                      fontFamily: 'inherit',
+                    }}
+                  />
 
-                    {lead.instagram ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenInstagramDM(lead)}
-                        className="flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 px-3 py-2 text-xs font-bold text-white shadow active:scale-95 transition"
-                      >
-                        <span>📸</span> Instagram DM
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void handleEnrich(lead.id)}
-                        disabled={enrichingId === lead.id}
-                        className="flex items-center justify-center gap-1 rounded-lg bg-surface border border-line px-3 py-2 text-xs font-semibold text-ink hover:border-accent active:scale-95 transition"
-                      >
-                        {enrichingId === lead.id ? 'Searching...' : '🔍 Find Socials'}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Secondary options row: Demo link, Find Socials (if IG exists), Delete */}
-                  <div className="mt-2.5 flex items-center justify-between text-xs pt-1">
-                    {lead.suggestedDemo ? (
-                      <a
-                        href={lead.suggestedDemo}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-purple-400 hover:underline font-semibold inline-flex items-center gap-1 text-[11px]"
-                      >
-                        <span>🌐</span> Pitch Demo ↗
-                      </a>
-                    ) : (
-                      <span />
-                    )}
-
-                    <div className="flex items-center gap-3">
-                      {lead.instagram && (
-                        <button
-                          type="button"
-                          onClick={() => void handleEnrich(lead.id)}
-                          disabled={enrichingId === lead.id}
-                          className="text-[11px] text-muted hover:text-ink underline"
-                        >
-                          {enrichingId === lead.id ? 'Searching...' : 'Re-scan socials'}
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => void deleteLead(lead.id)}
-                        className="text-red-400 hover:text-red-300 text-[11px] font-semibold px-1 py-0.5"
-                      >
-                        Delete ✕
-                      </button>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSpeechPreset(preset.id);
+                      setCopiedToast(`Preset "${preset.label}" seleccionado como predeterminado`);
+                      setTimeout(() => setCopiedToast(null), 3000);
+                    }}
+                    style={{
+                      background: isActive ? '#059669' : '#1e293b',
+                      border: `1px solid ${isActive ? '#10b981' : '#334155'}`,
+                      color: isActive ? '#ffffff' : '#94a3b8',
+                      padding: '0.45rem',
+                      borderRadius: '6px',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isActive ? 'Preset Activo' : 'Usar como Predeterminado'}
+                  </button>
                 </div>
               );
-            })
-          )}
+            })}
+          </div>
+
+          {/* Live Preview Section */}
+          <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.8rem', marginBottom: '0.75rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#f8fafc', fontWeight: 700 }}>
+                  Vista Previa en Vivo (Como llega al portapapeles)
+                </h3>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Simulacion con datos reales del lead seleccionado.
+                </p>
+              </div>
+
+              {leads.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Lead de prueba:</span>
+                  <select
+                    value={activePreviewLead?.id || ''}
+                    onChange={(e) => setPreviewLeadId(e.target.value)}
+                    style={{
+                      background: '#0f172a',
+                      border: '1px solid #334155',
+                      color: '#f8fafc',
+                      borderRadius: '6px',
+                      padding: '0.35rem 0.6rem',
+                      fontSize: '0.78rem',
+                    }}
+                  >
+                    {leads.slice(0, 20).map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name} ({l.city})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {activePreviewLead ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <div
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    padding: '0.85rem',
+                    fontSize: '0.85rem',
+                    color: '#e2e8f0',
+                    lineHeight: '1.5',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {getPitchForLead(activePreviewLead, selectedSpeechPreset)}
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = getPitchForLead(activePreviewLead, selectedSpeechPreset);
+                      navigator.clipboard.writeText(text);
+                      setCopiedToast('Mensaje de prueba copiado al portapapeles');
+                      setTimeout(() => setCopiedToast(null), 3000);
+                    }}
+                    style={{
+                      background: '#0284c7',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '0.45rem 0.9rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Copiar Mensaje de Prueba
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: '#64748b', fontSize: '0.82rem' }}>
+                No hay leads cargados para simular la vista previa. Ejecuta una busqueda primero.
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-
-      {/* WhatsApp Gateway Connection Modal */}
+      {/* WhatsApp Modal */}
       {waModalOpen && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 100,
+            background: 'rgba(0,0,0,0.7)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            zIndex: 1000,
             padding: '1rem',
           }}
         >
           <div
             style={{
               background: '#0f172a',
-              border: '1px solid #1e293b',
-              borderRadius: '16px',
-              width: '100%',
+              border: '1px solid #334155',
+              borderRadius: '12px',
+              padding: '1.5rem',
               maxWidth: '440px',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              padding: '1.25rem',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              width: '100%',
               display: 'flex',
               flexDirection: 'column',
-              gap: '1.25rem',
+              gap: '1rem',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <span style={{ fontSize: '1.4rem' }}>📱</span>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc', fontWeight: 700 }}>
-                    Conectar WhatsApp
-                  </h3>
-                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8' }}>
-                    Vinculá tu línea secundaria de WhatsApp Business
-                  </p>
-                </div>
-              </div>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc' }}>
+                Conexion WhatsApp Web
+              </h3>
               <button
                 type="button"
                 onClick={() => setWaModalOpen(false)}
@@ -1776,444 +2226,69 @@ export function LeadsPage() {
                   background: 'transparent',
                   border: 'none',
                   color: '#94a3b8',
-                  fontSize: '1.2rem',
+                  fontSize: '1.1rem',
                   cursor: 'pointer',
-                  padding: '0.2rem',
                 }}
               >
                 ✕
               </button>
             </div>
 
-            {waStatus.state === 'connected' ? (
-              <div style={{
-                background: '#064e3b20',
-                border: '1px solid #059669',
-                borderRadius: '12px',
-                padding: '1.25rem',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '0.75rem',
-                textAlign: 'center',
-              }}>
-                <span style={{ fontSize: '2rem' }}>✅</span>
-                <div>
-                  <div style={{ color: '#34d399', fontWeight: 700, fontSize: '1rem' }}>
-                    ¡WhatsApp Conectado y Listo!
-                  </div>
-                  <div style={{ color: '#cbd5e1', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                    Línea vinculada: <strong>{waStatus.phoneNumber}</strong> {waStatus.userName ? `(${waStatus.userName})` : ''}
-                  </div>
-                  <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '0.5rem 0 0' }}>
-                    Las campañas se despacharán automáticamente desde este número. Las respuestas te llegarán directamente a tu WhatsApp Business en el celular.
-                  </p>
-                </div>
+            <div style={{ fontSize: '0.84rem', color: '#cbd5e1' }}>
+              Estado actual: <strong style={{ color: waStatus.state === 'connected' ? '#34d399' : '#facc15' }}>{waStatus.state}</strong>
+            </div>
 
-                <button
-                  type="button"
-                  onClick={() => void handleDisconnectWhatsApp()}
-                  disabled={waLoading}
-                  style={{
-                    marginTop: '0.5rem',
-                    background: '#450a0a',
-                    border: '1px solid #991b1b',
-                    color: '#f87171',
-                    borderRadius: '8px',
-                    padding: '0.45rem 1rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {waLoading ? 'Desconectando...' : 'Desconectar esta línea'}
-                </button>
+            {waStatus.qrDataUrl && waStatus.state === 'waiting_qr' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem' }}>
+                <img src={waStatus.qrDataUrl} alt="WhatsApp QR" style={{ width: '220px', height: '220px', borderRadius: '8px' }} />
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Escanea el codigo desde WhatsApp en tu telefono (Dispositivos vinculados).
+                </span>
               </div>
-            ) : waStatus.state === 'waiting_qr' && waStatus.qrDataUrl ? (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '1rem',
-                textAlign: 'center',
-              }}>
-                <p style={{ margin: 0, fontSize: '0.8rem', color: '#cbd5e1' }}>
-                  Abrí WhatsApp Business en tu celular &rarr; <strong>Dispositivos vinculados</strong> &rarr; <strong>Vincular dispositivo</strong> y escaneá este código:
-                </p>
+            )}
 
-                <div style={{
-                  background: '#ffffff',
-                  padding: '12px',
-                  borderRadius: '12px',
-                  display: 'inline-block',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                }}>
-                  <img
-                    src={waStatus.qrDataUrl}
-                    alt="WhatsApp QR Code"
-                    style={{ width: '220px', height: '220px', display: 'block' }}
-                  />
-                </div>
-
-                <div style={{ fontSize: '0.75rem', color: '#facc15' }}>
-                  ⏳ Esperando escaneo... (el código se actualiza automáticamente)
-                </div>
-              </div>
-            ) : (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '1rem',
-                textAlign: 'center',
-                padding: '1rem 0',
-              }}>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1' }}>
-                  Para enviar mensajes de forma 100% automática, vinculá la sesión escaneando un código QR con tu WhatsApp Business.
-                </p>
-
+            <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.5rem' }}>
+              {waStatus.state !== 'connected' ? (
                 <button
                   type="button"
                   onClick={() => void handleConnectWhatsApp()}
                   disabled={waLoading}
                   style={{
+                    flex: 1,
                     background: '#059669',
                     border: 'none',
-                    color: '#ffffff',
-                    borderRadius: '8px',
-                    padding: '0.6rem 1.25rem',
-                    fontSize: '0.88rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                  }}
-                >
-                  {waLoading ? 'Iniciando sesión...' : '📲 Generar Código QR de Conexión'}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Automated Outreach Assistant Modal */}
-      {outreachOpen && currentOutreachLead && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 1000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1rem',
-          }}
-        >
-          <div
-            style={{
-              background: '#0f172a',
-              border: '1px solid #334155',
-              borderRadius: '14px',
-              maxWidth: '650px',
-              width: '100%',
-              maxHeight: '92vh',
-              overflowY: 'auto',
-              padding: '1.25rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.2rem',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <span style={{ fontSize: '0.78rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase' }}>
-                  Semi-Automated Outreach Assistant
-                </span>
-                <h3 style={{ margin: '0.2rem 0 0', fontSize: '1.25rem', color: '#f8fafc' }}>
-                  Target {outreachIndex + 1} of {outreachQueue.length}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOutreachOpen(false)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#94a3b8',
-                  fontSize: '1.2rem',
-                  cursor: 'pointer',
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Target Details Card */}
-            <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '10px', padding: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc' }}>{currentOutreachLead.name}</h4>
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                    {currentOutreachLead.category} • {currentOutreachLead.address}
-                  </div>
-                </div>
-
-                {!currentOutreachLead.hasWebsite ? (
-                  <span style={{ background: '#450a0a', color: '#f87171', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 700 }}>
-                    NO WEBSITE TARGET
-                  </span>
-                ) : (
-                  <span style={{ background: '#052e16', color: '#4ade80', padding: '0.2rem 0.55rem', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 700 }}>
-                    HAS WEBSITE
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '0.75rem', fontSize: '0.82rem' }}>
-                {currentOutreachLead.phone && (
-                  <div>
-                    <span style={{ color: '#64748b' }}>Phone: </span>
-                    <strong style={{ color: '#93c5fd', fontFamily: 'monospace' }}>{currentOutreachLead.phone}</strong>
-                  </div>
-                )}
-                {currentOutreachLead.rating && (
-                  <div>
-                    <span style={{ color: '#64748b' }}>Rating: </span>
-                    <strong style={{ color: '#eab308' }}>★ {currentOutreachLead.rating} ({currentOutreachLead.reviewsCount} reviews)</strong>
-                  </div>
-                )}
-                {currentOutreachLead.suggestedDemo && (
-                  <div>
-                    <span style={{ color: '#64748b' }}>Demo: </span>
-                    <a
-                      href={currentOutreachLead.suggestedDemo}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: '#a78bfa', textDecoration: 'none', fontWeight: 600 }}
-                    >
-                      {currentOutreachLead.suggestedDemo.replace('https://', '')} ↗
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Pitch Message Preview */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>
-                  Tailored WhatsApp Message Pitch:
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowPitchEditor(!showPitchEditor)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#60a5fa',
-                    fontSize: '0.76rem',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  {showPitchEditor ? 'Done editing template' : 'Edit pitch template'}
-                </button>
-              </div>
-
-              {showPitchEditor ? (
-                <textarea
-                  rows={4}
-                  value={pitchTemplate}
-                  onChange={(e) => setPitchTemplate(e.target.value)}
-                  style={{
-                    background: '#0b0f19',
-                    border: '1px solid #3b82f6',
-                    borderRadius: '8px',
-                    color: '#f8fafc',
-                    padding: '0.6rem',
-                    fontSize: '0.82rem',
-                    fontFamily: 'inherit',
-                  }}
-                />
-              ) : (
-                <div>
-                  <div
-                    style={{
-                      background: '#0b0f19',
-                      border: '1px solid #1e293b',
-                      borderRadius: '8px',
-                      padding: '0.75rem',
-                      color: '#e2e8f0',
-                      fontSize: '0.84rem',
-                      lineHeight: '1.4',
-                    }}
-                  >
-                    {aiPitchOverride || buildPitch(currentOutreachLead)}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.4rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => void handleGenerateAiPitch(currentOutreachLead)}
-                      disabled={generatingPitchId === currentOutreachLead.id}
-                      style={{
-                        background: '#1e3a8a',
-                        border: '1px solid #2563eb',
-                        color: '#bfdbfe',
-                        borderRadius: '6px',
-                        padding: '0.3rem 0.7rem',
-                        fontSize: '0.78rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.35rem',
-                      }}
-                    >
-                      {generatingPitchId === currentOutreachLead.id ? '⏳ Redactando...' : '✨ Regenerar Pitch con IA'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem', paddingTop: '0.5rem', borderTop: '1px solid #1e293b' }}>
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setOutreachIndex((i) => Math.max(0, i - 1))}
-                  disabled={outreachIndex === 0}
-                  style={{
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    color: outreachIndex === 0 ? '#475569' : '#cbd5e1',
+                    color: '#fff',
                     borderRadius: '6px',
-                    padding: '0.4rem 0.75rem',
-                    fontSize: '0.8rem',
-                    cursor: outreachIndex === 0 ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  &larr; Prev
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (outreachIndex + 1 < outreachQueue.length) setOutreachIndex((i) => i + 1);
-                  }}
-                  disabled={outreachIndex + 1 >= outreachQueue.length}
-                  style={{
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    color: outreachIndex + 1 >= outreachQueue.length ? '#475569' : '#cbd5e1',
-                    borderRadius: '6px',
-                    padding: '0.4rem 0.75rem',
-                    fontSize: '0.8rem',
-                    cursor: outreachIndex + 1 >= outreachQueue.length ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  Skip &rarr;
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.6rem' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void updateStatus(currentOutreachLead.id, 'contacted');
-                    if (outreachIndex + 1 < outreachQueue.length) setOutreachIndex((i) => i + 1);
-                  }}
-                  style={{
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    color: '#93c5fd',
-                    borderRadius: '8px',
-                    padding: '0.45rem 0.85rem',
+                    padding: '0.5rem',
                     fontSize: '0.82rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: waLoading ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  Mark Contacted (Skip tab)
+                  {waLoading ? 'Iniciando...' : 'Generar Codigo QR'}
                 </button>
-
+              ) : (
                 <button
                   type="button"
-                  onClick={() => handleOpenWhatsAppAndAdvance(currentOutreachLead)}
+                  onClick={() => void handleDisconnectWhatsApp()}
+                  disabled={waLoading}
                   style={{
-                    background: '#059669',
+                    flex: 1,
+                    background: '#dc2626',
                     border: 'none',
-                    color: '#ffffff',
-                    borderRadius: '8px',
-                    padding: '0.5rem 1.1rem',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
+                    color: '#fff',
+                    borderRadius: '6px',
+                    padding: '0.5rem',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: waLoading ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  WhatsApp & Next &rarr;
+                  {waLoading ? 'Desconectando...' : 'Desconectar WhatsApp'}
                 </button>
-
-                {currentOutreachLead.instagram && (
-                  <button
-                    type="button"
-                    onClick={() => handleOpenInstagramDM(currentOutreachLead)}
-                    title="Abre el chat de Instagram del negocio y copia el pitch listo para pegar"
-                    style={{
-                      background: 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
-                      border: 'none',
-                      color: '#ffffff',
-                      borderRadius: '8px',
-                      padding: '0.5rem 1rem',
-                      fontSize: '0.85rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      boxShadow: '0 4px 6px -1px rgba(219, 39, 119, 0.2)',
-                    }}
-                  >
-                    <span>📸</span> Abrir Instagram DM &rarr;
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
-      {/* Copied to clipboard toast */}
-      {copiedToast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            zIndex: 9999,
-            background: '#0f172a',
-            border: '1px solid #db2777',
-            color: '#f472b6',
-            borderRadius: '10px',
-            padding: '0.75rem 1.25rem',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            animation: 'fadeIn 0.2s ease-in',
-          }}
-        >
-          {copiedToast}
         </div>
       )}
     </div>

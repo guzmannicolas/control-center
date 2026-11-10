@@ -23,7 +23,7 @@ export const COLD_PITCH_VARIANTS = [
     `Te cuento: soy desarrollador y esto lo hago como un plus mientras tanto para darle una mano a negocios y que tengan más exposición en Google. ` +
     `Vi que todavía no tienen página web propia, así que les armé una demo de muestra para su rubro: ` +
     `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
-    `Como la idea es ayudarlos el costo es mínimo: unos 45 o 50 mil pesos al año nada más para cubrir el hosting y mantenerla activa. ` +
+    `Como la idea es ayudarlos el costo es súper accesible, nada más para cubrir el hosting y mantenerla activa. ` +
     `Mírenla tranquilos y si les sirve o quieren adaptarla con sus fotos y servicios me avisan, cero compromiso!`,
 
   (ctx: PitchVariableContext) =>
@@ -31,7 +31,7 @@ export const COLD_PITCH_VARIANTS = [
     `Te cuento: trabajo como desarrollador y en mis tiempos libres aprovecho para darles una mano a comercios de acá para que tengan presencia en Google. ` +
     `Vi que no tienen web oficial y les armé una maqueta interactiva de muestra: ` +
     `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
-    `Hago esto como un plus y el costo es ínfimo (alrededor de 45 o 50 mil pesos al año nada más por el hosting). ` +
+    `Hago esto como un plus y el costo es mínimo, nada más para mantenerla online. ` +
     `Mírenla sin compromiso y si les interesa me avisan!`,
 
   (ctx: PitchVariableContext) =>
@@ -39,7 +39,7 @@ export const COLD_PITCH_VARIANTS = [
     `Soy desarrollador y me gusta ayudar a comercios y locales a ganar exposición online con una web propia. ` +
     `Les preparé esta demo de ejemplo rápida para su rubro: ` +
     `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
-    `Es un plus que hago para dar una mano, por eso solo cobro lo básico del hosting anual (unos 40/50k al año). ` +
+    `Es un plus que hago para dar una mano, por eso solo cobro lo básico del hosting anual. ` +
     `Si les copa avísenme y la adaptamos con lo que necesiten!`,
 
   (ctx: PitchVariableContext) =>
@@ -47,8 +47,18 @@ export const COLD_PITCH_VARIANTS = [
     `Trabajo de programador y esto lo hago como un plus mientras tanto para ayudar a comercios a sumar clientes desde Google. ` +
     `Les armé una demo interactiva de cómo quedaría su página: ` +
     `${ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/'} ` +
-    `El costo es solo para mantenerla online (unos 45/50k anuales). ` +
+    `El costo es solo para mantenerla online. ` +
     `Chusméenla tranquilos y si les sirve me escriben, ninguna presión!`,
+];
+
+// Pitch templates for businesses that already have a website (e.g. real estate, clinics, dealerships)
+export const AUTOMATION_PITCH_VARIANTS = [
+  (ctx: PitchVariableContext) =>
+    `Buenas! Che te escribo por acá porque vi lo que hacen en ${ctx.name} y la presencia que manejan. ` +
+    `Te cuento: soy desarrollador y trabajo armando automatizaciones para negocios. ` +
+    `Se que muchas veces se pierde tiempo respondiendo siempre las mismas consultas por DM o WhatsApp (precios, horarios, disponibilidad). ` +
+    `Armé un sistema para responder y filtrar consultas 24/7 sin que tengan que estar encima. ` +
+    `Si les interesa ver cómo funciona avísenme y se los muestro, cero compromiso!`,
 ];
 
 // Follow-up pitch variants (for leads contacted 3+ days ago without reply)
@@ -96,7 +106,7 @@ Puntos clave:
 1. Saludo natural de persona a negocio local.
 2. Contar con total transparencia que sos desarrollador y que esto lo hacés como un plus mientras tanto para ayudar y darle una mano a negocios locales a tener más exposición en Google.
 3. Mencionar que viste que no tienen web propia y les armaste una maqueta interactiva de muestra: ${ctx.suggestedDemo ?? ''}
-4. Dejar claro que como la idea es ayudarlos, el costo es mínimo: unos 45 o 50 mil pesos al año nada más para cubrir el hosting y mantenerla activa.
+4. Dejar claro que como la idea es ayudarlos, el costo es súper accesible, nada más para cubrir el hosting y mantenerla activa.
 5. Cierre sin presión (que la miren tranquilos y si les sirve o quieren adaptarla con sus fotos te avisan).
 Tono: 100% humano argentino, voseo natural (che, te armé, avísame). CERO emojis. Prohibido sonar a IA o a vendedor corporativo.`;
 
