@@ -1,17 +1,13 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname, relative } from 'node:path';
+import type { KnowledgeDocMeta, KnowledgeDocDetail } from '@cc/shared';
 
-export interface KnowledgeDocMeta {
-  slug: string;
-  category: string;
-  title: string;
-  relativePath: string;
-  sizeBytes: number;
-  lastModified: string;
-}
+export type { KnowledgeDocMeta, KnowledgeDocDetail };
 
 const CANDIDATE_ROOTS = [
   process.env.KNOWLEDGE_DIR,
+  resolve(import.meta.dirname, '../../../../knowledge'),
+  resolve(import.meta.dirname, '../../../knowledge'),
   resolve(process.cwd(), 'knowledge'),
   resolve(process.cwd(), '../../knowledge'),
   resolve(process.cwd(), '../knowledge'),
@@ -100,7 +96,7 @@ export function listKnowledgeDocs(): KnowledgeDocMeta[] {
   });
 }
 
-export function readKnowledgeDoc(rawSlug: string): { slug: string; content: string; meta: KnowledgeDocMeta } {
+export function readKnowledgeDoc(rawSlug: string): KnowledgeDocDetail {
   const slug = sanitizeSlug(rawSlug);
   const baseDir = getKnowledgeBaseDir();
   const filePath = join(baseDir, `${slug}.md`);
