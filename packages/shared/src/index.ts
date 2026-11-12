@@ -7,6 +7,41 @@ export type TargetType = z.infer<typeof TargetType>;
 // What each target type stores in its `config` column.
 export const DomainConfig = z.object({ domain: z.string().min(3) });
 export const UrlConfig = z.object({ url: z.url() });
+
+export interface TargetLike {
+  type?: string;
+  config: unknown;
+}
+
+export const urlOf = (target: TargetLike): URL => {
+  return new URL(UrlConfig.parse(target.config).url);
+};
+
+export const hostOf = (target: TargetLike): string => {
+  if (target.type === 'domain') {
+    return DomainConfig.parse(target.config).domain;
+  }
+  return urlOf(target).hostname;
+};
+
+export const safeHostOf = (target: TargetLike | { url?: string } | unknown): string | null => {
+  if (!target || typeof target !== 'object') return null;
+  const t = target as Record<string, unknown>;
+  if (t.type === 'domain') {
+    const d = DomainConfig.safeParse(t.config);
+    return d.success ? d.data.domain : null;
+  }
+  const cfg = t.config !== undefined ? t.config : t;
+  const u = UrlConfig.safeParse(cfg);
+  if (u.success) {
+    try {
+      return new URL(u.data.url).hostname;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
 // A database is reached through a URL kept in an environment variable (never in the database itself).
 // The name must start with MONITOR_ so a checker can never be pointed at another secret, like DATABASE_URL.
 export const DATABASE_ENGINES = ['postgres', 'redis'] as const;

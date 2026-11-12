@@ -1,5 +1,16 @@
 import type { z } from 'zod';
-import { DomainConfig, UrlConfig, type CheckOutcomeInput, type CheckStatus, type TargetType } from '@cc/shared';
+import {
+  DomainConfig,
+  UrlConfig,
+  urlOf,
+  hostOf,
+  safeHostOf,
+  type CheckOutcomeInput,
+  type CheckStatus,
+  type TargetType,
+} from '@cc/shared';
+
+export { urlOf, hostOf, safeHostOf };
 
 export interface CheckTarget {
   id: string;
@@ -26,11 +37,6 @@ export interface Checker<S extends z.ZodType = z.ZodType> {
 export const defineChecker = <S extends z.ZodType>(checker: Checker<S>): Checker<S> => checker;
 
 export const USER_AGENT = 'control-center/1.0 (+https://github.com/guzmannicolas/control-center)';
-
-export const urlOf = (target: CheckTarget) => new URL(UrlConfig.parse(target.config).url);
-
-export const hostOf = (target: CheckTarget) =>
-  target.type === 'domain' ? DomainConfig.parse(target.config).domain : urlOf(target).hostname;
 
 // Connection URLs for watched databases live in the environment, under MONITOR_* names only.
 export function monitorUrl(envName: string): string {

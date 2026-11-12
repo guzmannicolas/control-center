@@ -12,7 +12,7 @@ import { handleMcpRequest, type McpJsonRpcRequest } from '../knowledge/mcp.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
-  CHECK_STATUSES, DatabaseConfig, ImprovementInput, ImprovementPatch, ModuleId, PRIORITIES, statusRank, worstStatus,
+  CHECK_STATUSES, DatabaseConfig, ImprovementInput, ImprovementPatch, ModuleId, PRIORITIES, safeHostOf, statusRank, worstStatus,
   type ImprovementView, type LearningProgressView,
   type CheckSnapshot, type CheckStatus, type DatabaseView, type DomainDetails, type DomainView, type IncidentView, type MonitorView, type Overview, type OverviewTelemetry,
   type ResultPoint, type TargetView, type CloudflareOverview, type CloudflareDnsItem,
@@ -317,12 +317,9 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
     }),
       fetchCloudflareDnsRecords(process.env.CLOUDFLARE_API_TOKEN),
     ]);
-    const hostOf = (config: unknown) => {
-      const url = (config as { url?: string }).url;
-      return url ? new URL(url).hostname : null;
-    };
     const sites = targets.flatMap((t) => {
-      const host = hostOf(t.config);
+      if (t.type !== 'website') return [];
+      const host = safeHostOf(t);
       if (!host) return [];
       const known = t.monitors.flatMap((m) => (m.lastStatus ? [m.lastStatus] : []));
       return [{ id: t.id, name: t.name, url: (t.config as { url: string }).url, host, status: known.length ? worstStatus(known) : null }];
