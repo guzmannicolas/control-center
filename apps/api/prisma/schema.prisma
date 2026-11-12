@@ -326,3 +326,28 @@ model AdCampaign {
   @@index([brandId, status])
   @@map("ad_campaigns")
 }
+
+// --- Observability Telemetry ------------------------------------------------------------------------
+
+model LlmTrace {
+  id               String   @id @default(uuid()) @db.Uuid
+  provider         String   @default("gemini")
+  model            String
+  caller           String   @default("agent")
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  costUsd          Float    @default(0) @map("cost_usd")
+  durationMs       Int      @map("duration_ms")
+  status           String   @default("ok")
+  errorMessage     String?  @db.Text @map("error_message")
+  promptPreview    String?  @db.Text @map("prompt_preview")
+  responsePreview  String?  @db.Text @map("response_preview")
+  metadata         Json     @default("{}")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([provider, model])
+  @@index([status])
+  @@map("llm_traces")
+}

@@ -18,6 +18,7 @@ import {
   FilesIcon,
   MarketingIcon,
   DealsIcon,
+  ObservabilityIcon,
 } from './components/Icons.tsx';
 import { DatabasesPage } from './pages/Databases.tsx';
 import { DomainsPage } from './pages/Domains.tsx';
@@ -37,6 +38,7 @@ import { FilesPage } from './pages/Files.tsx';
 import { VaultPage } from './pages/Vault.tsx';
 import { MarketingPage } from './pages/Marketing.tsx';
 import { DealsPage } from './pages/Deals.tsx';
+import { ObservabilityPage } from './pages/Observability.tsx';
 
 export interface Section {
   path: string;
@@ -53,6 +55,7 @@ export const SECTIONS: Section[] = [
   { path: '/leads', label: 'Sales', Icon: LeadsIcon, Page: LeadsPage },
   { path: '/marketing', label: 'Marketing', Icon: MarketingIcon, Page: MarketingPage },
   { path: '/vps', label: 'VPS', Icon: VpsIcon, Page: VpsPage },
+  { path: '/observability', label: 'Observability', Icon: ObservabilityIcon, Page: ObservabilityPage },
   { path: '/files', label: 'Files', Icon: FilesIcon, Page: FilesPage },
   { path: '/vault', label: 'Vault', Icon: VaultIcon, Page: VaultPage },
   { path: '/deploys', label: 'Deploys', Icon: DeployIcon, Page: DeploysPage },

@@ -989,3 +989,82 @@ export interface FunctionsCatalogResult {
   };
   functions: ProjectFunctionItem[];
 }
+
+// --- Observability Telemetry ------------------------------------------------------------------------
+
+export interface LlmTraceView {
+  id: string;
+  provider: string;
+  model: string;
+  caller: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  durationMs: number;
+  status: 'ok' | 'error' | 'fallback';
+  errorMessage: string | null;
+  promptPreview: string | null;
+  responsePreview: string | null;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface LlmTelemetrySummary {
+  totalCalls: number;
+  totalTokens: number;
+  totalCostUsd: number;
+  avgDurationMs: number;
+  errorRatePercent: number;
+  byModel: Array<{ model: string; calls: number; tokens: number; costUsd: number }>;
+}
+
+export interface ApiMetricsView {
+  totalRequests: number;
+  requestsPerMinute: number;
+  statusCodes: {
+    status2xx: number;
+    status4xx: number;
+    status5xx: number;
+  };
+  latency: {
+    avgMs: number;
+    p50Ms: number;
+    p95Ms: number;
+    p99Ms: number;
+  };
+  topSlowRoutes: Array<{
+    route: string;
+    method: string;
+    calls: number;
+    avgDurationMs: number;
+    maxDurationMs: number;
+  }>;
+}
+
+export interface QueueJobView {
+  id: string;
+  name: string;
+  data: unknown;
+  failedReason?: string;
+  timestamp: number;
+  attemptsMade: number;
+}
+
+export interface QueueMetricsView {
+  name: string;
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+  paused: boolean;
+  failedJobs?: QueueJobView[];
+}
+
+export interface ObservabilityOverview {
+  llm: LlmTelemetrySummary;
+  api: ApiMetricsView;
+  queues: QueueMetricsView[];
+  recentTraces: LlmTraceView[];
+}

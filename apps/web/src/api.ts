@@ -43,6 +43,10 @@ import type {
   MarketingSchedulerStatus,
   PromotionsOverview,
   ArgentinePromo,
+  ObservabilityOverview,
+  LlmTraceView,
+  ApiMetricsView,
+  QueueMetricsView,
   PriceGlitchOverview,
   PriceGlitchItem,
   LeadView,
@@ -681,5 +685,22 @@ export const api = {
     request<{ ok: boolean }>('/api/leads/outreach/queue', {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+
+  // Observability Telemetry & APM
+  observabilityOverview: () => request<ObservabilityOverview>('/api/observability/overview'),
+  observabilityTraces: (params?: { model?: string; status?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.model) qs.set('model', params.model);
+    if (params?.status) qs.set('status', params.status);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString();
+    return request<LlmTraceView[]>(`/api/observability/traces${query ? `?${query}` : ''}`);
+  },
+  observabilityApm: () => request<ApiMetricsView>('/api/observability/apm'),
+  observabilityQueues: () => request<QueueMetricsView[]>('/api/observability/queues'),
+  observabilityRetryQueue: (name: string) =>
+    request<{ retried: number }>(`/api/observability/queues/${encodeURIComponent(name)}/retry`, {
+      method: 'POST',
     }),
 };

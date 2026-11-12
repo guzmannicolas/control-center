@@ -10,7 +10,9 @@ import { infraRoutes } from './infra.js';
 import { vaultFilesRoutes } from './vault-files.js';
 import { knowledgeRoutes } from './knowledge.js';
 import { promocionesRoutes } from './promociones.js';
+import { observabilityRoutes } from './observability.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Redis } from 'ioredis';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -36,7 +38,10 @@ function hasValidMcpToken(headers: Record<string, string | string[] | undefined>
   return constantTimeEquals(candidate, expected);
 }
 
-export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
+export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient; redis?: Redis }> = async (
+  app,
+  { prisma, redis }
+) => {
   // Every route in this plugin requires a logged-in user, and knows who it is.
   app.decorateRequest('user', null);
   app.addHook('preHandler', async (req, reply) => {
@@ -65,11 +70,12 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
   app.register(marketingRoutes, { prefix: '/marketing', prisma });
   app.register(monitoringRoutes, { prisma });
-  app.register(agentRoutes);
+  app.register(agentRoutes, { prisma });
   app.register(opsRoutes, { prisma });
   app.register(leadsRoutes, { prisma });
   app.register(infraRoutes);
   app.register(vaultFilesRoutes);
   app.register(knowledgeRoutes);
   app.register(promocionesRoutes);
+  app.register(observabilityRoutes, { prisma, redis });
 };

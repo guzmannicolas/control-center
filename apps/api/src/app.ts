@@ -7,6 +7,7 @@ import { authRoutes } from './auth/routes.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { withTimeout } from './lib/timeout.js';
 import { apiRoutes } from './routes/api.js';
+import { apm } from './observability/apm.js';
 
 export interface AppDeps {
   prisma: PrismaClient;
@@ -45,6 +46,12 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}) {
     if (req.url.startsWith('/api/') || req.url.startsWith('/auth/')) reply.header('cache-control', 'no-store');
   });
 
+  // APM Telemetry: capture request latency, status code, and route stats in memory.
+  app.addHook('onResponse', async (req, reply) => {
+    const route = req.routeOptions?.url ?? req.url.split('?')[0] ?? '/';
+    apm.record(req.method, route, reply.statusCode, reply.elapsedTime);
+  });
+
   // A health check that hangs is worse than one that fails: callers cannot tell slow from dead.
   app.get('/health', async (_req, reply) => {
     const ms = deps.healthTimeoutMs ?? 2000;
@@ -61,7 +68,7 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}) {
   });
 
   app.register(authRoutes, { prisma: deps.prisma, cookieSecure: deps.cookieSecure });
-  app.register(apiRoutes, { prefix: '/api', prisma: deps.prisma });
+  app.register(apiRoutes, { prefix: '/api', prisma: deps.prisma, redis: deps.rateLimitRedis });
 
   return app;
 }

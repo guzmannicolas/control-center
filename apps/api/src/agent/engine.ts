@@ -1,5 +1,7 @@
 import { GoogleGenAI, type Content, type FunctionDeclaration, Type } from '@google/genai';
 import { executeTool, ensureRepoCloned, GENERAL_CONTEXT, type AgentToolCall } from './tools.js';
+import type { PrismaClient } from '../generated/prisma/client.js';
+import { recordLlmTrace } from '../observability/telemetry.js';
 
 export interface AgentStepEvent {
   type: 'thought' | 'tool_call' | 'tool_result' | 'final' | 'error';
@@ -21,6 +23,7 @@ export interface RunAgentOptions {
   provider?: 'gemini' | 'openrouter';
   modelName?: string;
   priorHistory?: ChatTurnMessage[];
+  prisma?: PrismaClient;
 }
 
 const FALLBACK_MODEL_POOL = [
@@ -330,7 +333,8 @@ async function* runGeminiLoop(
   apiKey: string,
   modelName: string,
   priorHistory: ChatTurnMessage[],
-  systemInstruction: string
+  systemInstruction: string,
+  prisma?: PrismaClient
 ): AsyncGenerator<AgentStepEvent> {
   const ai = new GoogleGenAI({ apiKey });
 
@@ -363,6 +367,7 @@ async function* runGeminiLoop(
 
     for (let attempt = 0; attempt < modelPool.length + 2; attempt++) {
       const currentModel = modelPool[activeModelIdx % modelPool.length]!;
+      const startTime = Date.now();
       try {
         response = await ai.models.generateContent({
           model: currentModel,
@@ -373,8 +378,24 @@ async function* runGeminiLoop(
             temperature: 0.2,
           },
         });
+        const durationMs = Date.now() - startTime;
+        if (prisma) {
+          void recordLlmTrace(prisma, {
+            provider: 'gemini',
+            model: currentModel,
+            caller: 'agent',
+            promptTokens: response.usageMetadata?.promptTokenCount ?? 0,
+            completionTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+            durationMs,
+            status: 'ok',
+            promptPreview: instruction.slice(0, 500),
+            responsePreview: response.text ? response.text.slice(0, 500) : null,
+            metadata: { repo, turn: turns },
+          });
+        }
         break;
       } catch (err: unknown) {
+        const durationMs = Date.now() - startTime;
         const msg = err instanceof Error ? err.message : String(err);
         lastError = msg;
         const isQuotaOrOverload =
@@ -384,13 +405,26 @@ async function* runGeminiLoop(
           msg.includes('UNAVAILABLE') ||
           msg.includes('quota');
 
+        if (prisma) {
+          void recordLlmTrace(prisma, {
+            provider: 'gemini',
+            model: currentModel,
+            caller: 'agent',
+            durationMs,
+            status: isQuotaOrOverload ? 'fallback' : 'error',
+            errorMessage: msg,
+            promptPreview: instruction.slice(0, 500),
+            metadata: { repo, turn: turns, attempt },
+          });
+        }
+
         if (isQuotaOrOverload) {
           activeModelIdx++;
           const nextModel = modelPool[activeModelIdx % modelPool.length]!;
           if (attempt >= modelPool.length - 1) {
             yield {
               type: 'thought',
-              content: `⏳ Límite de solicitudes por minuto alcanzado; esperando 10s y rotando a ${nextModel}...`,
+              content: `[Rate Limit] Limite de solicitudes alcanzado; esperando 10s y rotando a ${nextModel}...`,
             };
             await sleep(10_000);
           }
@@ -473,6 +507,7 @@ export async function* runAgentLoop(options: RunAgentOptions): AsyncGenerator<Ag
     provider = 'gemini',
     modelName = 'auto',
     priorHistory = [],
+    prisma,
   } = options;
 
   const isGeneral = !repo || repo === GENERAL_CONTEXT;
@@ -484,7 +519,7 @@ export async function* runAgentLoop(options: RunAgentOptions): AsyncGenerator<Ag
       return;
     }
     if (cloneStatus.cloned) {
-      yield { type: 'thought', content: `☁️ Repositorio 'guzmannicolas/${repo}' clonado desde GitHub al VPS.` };
+      yield { type: 'thought', content: `[Git] Repositorio 'guzmannicolas/${repo}' clonado desde GitHub al VPS.` };
     }
   }
 
@@ -498,6 +533,6 @@ export async function* runAgentLoop(options: RunAgentOptions): AsyncGenerator<Ag
   if (provider === 'openrouter') {
     yield* runOpenRouterLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction);
   } else {
-    yield* runGeminiLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction);
+    yield* runGeminiLoop(repo, instruction, apiKey, modelName, priorHistory, systemInstruction, prisma);
   }
 }

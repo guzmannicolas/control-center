@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import type { PrismaClient } from '../generated/prisma/client.js';
 import { runAgentLoop, type ChatTurnMessage } from '../agent/engine.js';
 import {
   GENERAL_CONTEXT,
@@ -9,7 +10,8 @@ import {
   type StoredChatSession,
 } from '../agent/tools.js';
 
-export const agentRoutes: FastifyPluginAsync = async (app) => {
+export const agentRoutes: FastifyPluginAsync<{ prisma?: PrismaClient }> = async (app, opts) => {
+  const { prisma } = opts;
   app.get('/agent/repos', async () => {
     const repos = await listAvailableRepos();
     return { repos };
@@ -91,6 +93,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         provider,
         modelName: body.model || 'auto',
         priorHistory: history,
+        prisma,
       })) {
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
       }

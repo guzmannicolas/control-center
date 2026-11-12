@@ -80,7 +80,7 @@ const SECTION_GROUPS: { title: string; paths: string[] }[] = [
   },
   {
     title: 'Infrastructure & Cloud',
-    paths: ['/vps', '/files', '/vault', '/deploys', '/vercel', '/cloudflare', '/backups', '/domains', '/databases'],
+    paths: ['/vps', '/observability', '/files', '/vault', '/deploys', '/vercel', '/cloudflare', '/backups', '/domains', '/databases'],
   },
   {
     title: 'Dev & AI Tools',
