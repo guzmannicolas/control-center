@@ -1,4 +1,5 @@
 import { RepoGraphView } from '../components/RepoGraphView.tsx';
+import { ProjectFunctionsView } from '../components/ProjectFunctionsView.tsx';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { KnowledgeDocMeta, KnowledgeDocDetail } from '@cc/shared';
@@ -201,7 +202,7 @@ function MarkdownRenderer({ content }: { content: string }) {
 
 export function KnowledgePage() {
   const queryClient = useQueryClient();
-  const [activeKnowledgeTab, setActiveKnowledgeTab] = useState<'docs' | 'graph'>('docs');
+  const [activeKnowledgeTab, setActiveKnowledgeTab] = useState<'docs' | 'graph' | 'functions'>('docs');
   const [activeSlug, setActiveSlug] = useState<string>('index');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
@@ -381,10 +382,35 @@ export function KnowledgePage() {
             Daily Auto-Scan
           </span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveKnowledgeTab('functions')}
+          style={{
+            background: activeKnowledgeTab === 'functions' ? '#1e293b' : 'transparent',
+            border: `1px solid ${activeKnowledgeTab === 'functions' ? '#a855f7' : 'transparent'}`,
+            color: activeKnowledgeTab === 'functions' ? '#f8fafc' : '#94a3b8',
+            borderRadius: '8px',
+            padding: '0.5rem 1rem',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          <span>Funciones & Endpoints</span>
+          <span style={{ fontSize: '0.72rem', background: '#3b0764', border: '1px solid #7e22ce', padding: '0.1rem 0.4rem', borderRadius: '4px', color: '#e9d5ff' }}>
+            626 AST
+          </span>
+        </button>
       </div>
 
       {activeKnowledgeTab === 'graph' ? (
         <RepoGraphView />
+      ) : activeKnowledgeTab === 'functions' ? (
+        <ProjectFunctionsView />
       ) : (
         <>
 

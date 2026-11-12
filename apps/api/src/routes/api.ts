@@ -1,4 +1,4 @@
-import { getOrRunDailyRepoGraph } from '../knowledge/analyzer.js';
+import { getOrRunDailyRepoGraph, getFunctionsCatalog } from '../knowledge/analyzer.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -1569,6 +1569,10 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (ap
 
   app.post('/knowledge/graph/analyze', async () => {
     return getOrRunDailyRepoGraph(true);
+  });
+
+  app.get('/knowledge/functions', async () => {
+    return getFunctionsCatalog();
   });
 
   // Knowledge Base & Agent Context routes

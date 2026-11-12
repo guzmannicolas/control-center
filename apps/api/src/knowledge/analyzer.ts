@@ -5,6 +5,7 @@ import type {
   RepoAnalysisResult,
   RepoGraphNode,
   RepoGraphEdge,
+  FunctionsCatalogResult,
 } from '@cc/shared';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -531,4 +532,28 @@ export function getOrRunDailyRepoGraph(forceRefresh = false): RepoAnalysisResult
   }
 
   return fresh;
+}
+
+export function getFunctionsCatalog(): FunctionsCatalogResult {
+  const knowledgeDir = getKnowledgeBaseDir();
+  const catalogPath = join(knowledgeDir, 'functions-catalog.json');
+
+  if (existsSync(catalogPath)) {
+    try {
+      const raw = readFileSync(catalogPath, 'utf8');
+      return JSON.parse(raw) as FunctionsCatalogResult;
+    } catch {
+      // parse failed, fallback below
+    }
+  }
+
+  return {
+    analyzedAt: new Date().toISOString(),
+    total: 0,
+    summary: {
+      byModule: {},
+      byCategory: {},
+    },
+    functions: [],
+  };
 }

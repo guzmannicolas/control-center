@@ -23,6 +23,7 @@ import type {
   KnowledgeDocMeta,
   KnowledgeDocDetail,
   RepoAnalysisResult,
+  FunctionsCatalogResult,
   MarketingOverview,
   SocialDraftView,
   SocialDraftStatus,
@@ -402,6 +403,7 @@ export const api = {
     request<{ topic: string; context: string }>(topics ? `/api/agent/context?topic=${encodeURIComponent(topics)}&format=json` : '/api/agent/context?format=json'),
   knowledgeGraph: () => request<RepoAnalysisResult>('/api/knowledge/graph'),
   knowledgeGraphAnalyze: () => request<RepoAnalysisResult>('/api/knowledge/graph/analyze', { method: 'POST' }),
+  knowledgeFunctions: () => request<FunctionsCatalogResult>('/api/knowledge/functions'),
 
   // Growth & Marketing Engine
   marketingOverview: (brandSlug?: string) =>

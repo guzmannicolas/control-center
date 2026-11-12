@@ -966,3 +966,26 @@ export interface RepoAnalysisResult {
     steps: string[];
   }>;
 }
+
+export interface ProjectFunctionItem {
+  name: string;
+  file: string;
+  line: number;
+  module: string;
+  category: string;
+  exported: boolean;
+  async: boolean;
+  params: string;
+  kind: 'function' | 'arrow' | 'function-expr' | 'method' | 'route-handler';
+  isTest?: boolean;
+}
+
+export interface FunctionsCatalogResult {
+  analyzedAt: string;
+  total: number;
+  summary: {
+    byModule: Record<string, number>;
+    byCategory: Record<string, number>;
+  };
+  functions: ProjectFunctionItem[];
+}
