@@ -28,6 +28,7 @@ interface VercelResponse {
  configured: boolean;
  projects: VercelProjectSummary[];
  fetchedAt: string;
+ error?: string;
 }
 
 function formatRelative(iso: string | null | undefined) {
@@ -224,9 +225,15 @@ export function VercelPage() {
  </div>
  )}
 
+ {data?.error && (
+ <div style={{ background: '#450a0a', border: '1px solid #991b1b', color: '#fecaca', padding: '0.9rem 1rem', borderRadius: '10px' }}>
+ [Error de Vercel API] {data.error}
+ </div>
+ )}
+
  {!loading && data && !data.configured && (
  <div style={{ background: '#422006', border: '1px solid #854d0e', color: '#fde68a', padding: '1rem', borderRadius: '10px' }}>
- <span className="emoji-bw">⚠️</span> <code>VERCEL_TOKEN</code> is not configured on the API server.
+ <strong>[!]</strong> <code>VERCEL_TOKEN</code> is not configured on the API server.
  </div>
  )}
 
