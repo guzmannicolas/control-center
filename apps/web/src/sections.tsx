@@ -19,6 +19,7 @@ import {
   MarketingIcon,
   DealsIcon,
   ObservabilityIcon,
+  McpIcon,
 } from './components/Icons.tsx';
 import { DatabasesPage } from './pages/Databases.tsx';
 import { DomainsPage } from './pages/Domains.tsx';
@@ -39,6 +40,7 @@ import { VaultPage } from './pages/Vault.tsx';
 import { MarketingPage } from './pages/Marketing.tsx';
 import { DealsPage } from './pages/Deals.tsx';
 import { ObservabilityPage } from './pages/Observability.tsx';
+import { McpPage } from './pages/Mcp.tsx';
 
 export interface Section {
   path: string;
@@ -65,6 +67,7 @@ export const SECTIONS: Section[] = [
   { path: '/domains', label: 'Domains', Icon: DomainIcon, Page: DomainsPage },
   { path: '/databases', label: 'Databases', Icon: DatabaseIcon, Page: DatabasesPage },
   { path: '/agents', label: 'Agents', Icon: AgentIcon, Page: AgentsPage },
+  { path: '/mcp', label: 'MCP Hub', Icon: McpIcon, Page: McpPage },
   { path: '/terminal', label: 'Terminal', Icon: TerminalIcon, Page: TerminalPage },
   { path: '/knowledge', label: 'Knowledge Base', Icon: KnowledgeIcon, Page: KnowledgePage },
   { path: '/improvements', label: 'Improvements', Icon: ImprovementIcon, Page: ImprovementsPage },

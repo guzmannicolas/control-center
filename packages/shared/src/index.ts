@@ -1068,3 +1068,84 @@ export interface ObservabilityOverview {
   queues: QueueMetricsView[];
   recentTraces: LlmTraceView[];
 }
+
+// --- MCP Hub & Observability ------------------------------------------------------------------------
+
+export type McpTransportType = 'http-jsonrpc' | 'sse' | 'stdio';
+
+export interface McpToolSchema {
+  name: string;
+  description: string;
+  inputSchema?: {
+    type?: string;
+    properties?: Record<string, {
+      type?: string;
+      description?: string;
+      enum?: string[];
+      items?: unknown;
+    }>;
+    required?: string[];
+  };
+}
+
+export interface McpResourceSchema {
+  uri: string;
+  name: string;
+  description?: string;
+  mimeType?: string;
+}
+
+export interface McpServerRecord {
+  id: string;
+  name: string;
+  description: string;
+  type: McpTransportType;
+  url?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+  enabled: boolean;
+  isBuiltIn?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type McpServerStatus = 'online' | 'degraded' | 'offline' | 'checking';
+
+export interface McpServerLiveView extends McpServerRecord {
+  status: McpServerStatus;
+  latencyMs: number | null;
+  protocolVersion?: string;
+  serverInfo?: {
+    name: string;
+    version: string;
+  };
+  tools: McpToolSchema[];
+  resources: McpResourceSchema[];
+  lastCheckedAt: string | null;
+  errorMessage?: string | null;
+}
+
+export interface McpToolCallLog {
+  id: string;
+  serverId: string;
+  serverName: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+  responsePreview: string;
+  isError: boolean;
+  latencyMs: number;
+  calledAt: string;
+}
+
+export interface McpTelemetryOverview {
+  totalServers: number;
+  activeServers: number;
+  totalTools: number;
+  totalCalls: number;
+  errorRatePercent: number;
+  avgLatencyMs: number;
+  recentCalls: McpToolCallLog[];
+}
+

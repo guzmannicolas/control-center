@@ -84,7 +84,7 @@ const SECTION_GROUPS: { title: string; paths: string[] }[] = [
   },
   {
     title: 'Dev & AI Tools',
-    paths: ['/agents', '/terminal', '/knowledge'],
+    paths: ['/agents', '/mcp', '/terminal', '/knowledge'],
   },
   {
     title: 'Tracking & Learning',

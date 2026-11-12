@@ -35,7 +35,8 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}) {
       pathname.startsWith('/api/webhooks/') ||
       pathname.startsWith('/api/marketing/webhooks/') ||
       pathname.startsWith('/api/marketing/drafts/public/') ||
-      pathname === '/api/mcp'
+      pathname === '/api/mcp' ||
+      pathname.startsWith('/api/mcp/')
     )
       return;
     if (req.headers.origin !== deps.dashboardOrigin) return reply.code(403).send({ error: 'Forbidden origin' });

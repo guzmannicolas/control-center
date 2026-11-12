@@ -11,6 +11,7 @@ import { vaultFilesRoutes } from './vault-files.js';
 import { knowledgeRoutes } from './knowledge.js';
 import { promocionesRoutes } from './promociones.js';
 import { observabilityRoutes } from './observability.js';
+import { mcpHubRoutes } from './mcp-hub.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { Redis } from 'ioredis';
 
@@ -53,7 +54,7 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient; redis?: Redis
     )
       return;
 
-    if (pathname === '/api/agent/context' || pathname === '/api/mcp') {
+    if (pathname === '/api/agent/context' || pathname === '/api/mcp' || pathname.startsWith('/api/mcp/')) {
       if (hasValidMcpToken(req.headers)) return;
       const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
       if (user) {
@@ -78,4 +79,5 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient; redis?: Redis
   app.register(knowledgeRoutes);
   app.register(promocionesRoutes);
   app.register(observabilityRoutes, { prisma, redis });
+  app.register(mcpHubRoutes);
 };

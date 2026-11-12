@@ -51,6 +51,10 @@ import type {
   PriceGlitchItem,
   LeadView,
   VpsSecurityAudit,
+  McpServerLiveView,
+  McpTelemetryOverview,
+  McpServerRecord,
+  McpToolCallLog,
 } from '@cc/shared';
 
 export interface VpsStatusView {
@@ -703,4 +707,31 @@ export const api = {
     request<{ retried: number }>(`/api/observability/queues/${encodeURIComponent(name)}/retry`, {
       method: 'POST',
     }),
+
+  // MCP Servers Hub & Observability
+  mcpOverview: () =>
+    request<{ servers: McpServerLiveView[]; summary: McpTelemetryOverview }>('/api/mcp/servers'),
+  mcpConfigs: () =>
+    request<{
+      cursor: Record<string, unknown>;
+      claude: Record<string, unknown>;
+      antigravity: Record<string, unknown>;
+      vscode: Record<string, unknown>;
+    }>('/api/mcp/configs'),
+  mcpPingServer: (id: string) =>
+    request<McpServerLiveView>(`/api/mcp/servers/${encodeURIComponent(id)}/ping`, { method: 'POST' }),
+  mcpCallTool: (id: string, payload: { toolName: string; arguments?: Record<string, unknown> }) =>
+    request<{ ok: boolean; result?: unknown; error?: string; latencyMs: number }>(
+      `/api/mcp/servers/${encodeURIComponent(id)}/call`,
+      { method: 'POST', body: JSON.stringify(payload) }
+    ),
+  mcpCreateServer: (payload: Partial<McpServerRecord>) =>
+    request<McpServerLiveView>('/api/mcp/servers', { method: 'POST', body: JSON.stringify(payload) }),
+  mcpUpdateServer: (id: string, payload: Partial<McpServerRecord>) =>
+    request<McpServerLiveView>(`/api/mcp/servers/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+  mcpDeleteServer: (id: string) =>
+    request<{ ok: boolean; id: string }>(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
