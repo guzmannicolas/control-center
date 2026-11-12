@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { LeadView, LeadStatus } from '@cc/shared';
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
+import { api } from '../api.ts';
 
 const STATUS_BADGES: Record<LeadStatus, { label: string; bg: string; color: string; border: string }> = {
   discovered: { label: 'Discovered', bg: '#1e293b', color: '#94a3b8', border: '#334155' },
@@ -134,9 +133,7 @@ export function LeadsPage() {
   const loadLeads = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/leads`, { credentials: 'include' });
-      if (!res.ok) throw new Error('Error loading leads');
-      const data = (await res.json()) as { leads: LeadView[] };
+      const data = await api.leads();
       setLeads(data.leads ?? []);
     } catch (err) {
       console.error(err);
@@ -158,15 +155,8 @@ export function LeadsPage() {
 
     setScraping(true);
     try {
-      const res = await fetch(`${API_BASE}/api/leads/scrape`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: finalCategory, city: finalCity, limit }),
-      });
-      if (res.ok) {
-        await loadLeads();
-      }
+      await api.leadScrape({ category: finalCategory, city: finalCity, limit });
+      await loadLeads();
     } catch (err) {
       console.error(err);
     } finally {
@@ -177,14 +167,8 @@ export function LeadsPage() {
   const handleEnrich = async (id: string) => {
     setEnrichingId(id);
     try {
-      const res = await fetch(`${API_BASE}/api/leads/${id}/enrich`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { lead: LeadView };
-        setLeads((prev) => prev.map((l) => (l.id === id ? data.lead : l)));
-      }
+      const data = await api.leadEnrich(id);
+      setLeads((prev) => prev.map((l) => (l.id === id ? data.lead : l)));
     } catch (err) {
       console.error(err);
     } finally {
@@ -195,16 +179,10 @@ export function LeadsPage() {
   const handleVerifyInstagram = async (leadId: string) => {
     setVerifyingIgId(leadId);
     try {
-      const res = await fetch(`${API_BASE}/api/leads/${leadId}/verify-instagram`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setLeads((prev) => prev.map((l) => (l.id === leadId ? data.lead : l)));
-        setCopiedToast(data.verification.valid ? 'Instagram verificado (200 OK)' : 'Perfil no disponible (404)');
-        setTimeout(() => setCopiedToast(null), 3000);
-      }
+      const data = await api.leadVerifyInstagram(leadId);
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? data.lead : l)));
+      setCopiedToast(data.verification.valid ? 'Instagram verificado (200 OK)' : 'Perfil no disponible (404)');
+      setTimeout(() => setCopiedToast(null), 3000);
     } catch (err) {
       console.error(err);
     } finally {
@@ -215,16 +193,10 @@ export function LeadsPage() {
   const handleVerifyAllInstagram = async () => {
     setVerifyingAllIg(true);
     try {
-      const res = await fetch(`${API_BASE}/api/leads/verify-all-instagram`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        await loadLeads();
-        setCopiedToast(`Verificacion completa: ${data.verifiedCount} perfiles validos (200 OK).`);
-        setTimeout(() => setCopiedToast(null), 4000);
-      }
+      const data = await api.leadVerifyAllInstagram();
+      await loadLeads();
+      setCopiedToast(`Verificacion completa: ${data.verifiedCount} perfiles validos (200 OK).`);
+      setTimeout(() => setCopiedToast(null), 4000);
     } catch (err) {
       console.error(err);
     } finally {
@@ -234,15 +206,8 @@ export function LeadsPage() {
 
   const updateStatus = async (id: string, newStatus: LeadStatus) => {
     try {
-      const res = await fetch(`${API_BASE}/api/leads/${id}`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) {
-        setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)));
-      }
+      await api.leadUpdate(id, { status: newStatus });
+      setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l)));
     } catch (err) {
       console.error(err);
     }
@@ -253,14 +218,7 @@ export function LeadsPage() {
     setBatchActionRunning(true);
     try {
       await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          fetch(`${API_BASE}/api/leads/${id}`, {
-            method: 'PATCH',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus }),
-          })
-        )
+        Array.from(selectedIds).map((id) => api.leadUpdate(id, { status: newStatus }))
       );
       setLeads((prev) => prev.map((l) => (selectedIds.has(l.id) ? { ...l, status: newStatus } : l)));
       setSelectedIds(new Set());
@@ -274,18 +232,13 @@ export function LeadsPage() {
   const deleteLead = async (id: string) => {
     if (!confirm('Eliminar lead de la base de datos?')) return;
     try {
-      const res = await fetch(`${API_BASE}/api/leads/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
+      await api.leadDelete(id);
+      setLeads((prev) => prev.filter((l) => l.id !== id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
       });
-      if (res.ok) {
-        setLeads((prev) => prev.filter((l) => l.id !== id));
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
     } catch (err) {
       console.error(err);
     }
@@ -297,12 +250,7 @@ export function LeadsPage() {
     setBatchActionRunning(true);
     try {
       await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          fetch(`${API_BASE}/api/leads/${id}`, {
-            method: 'DELETE',
-            credentials: 'include',
-          })
-        )
+        Array.from(selectedIds).map((id) => api.leadDelete(id))
       );
       setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
       setSelectedIds(new Set());
@@ -318,12 +266,7 @@ export function LeadsPage() {
     if (!confirm('Eliminar TODOS los leads de la base de datos?')) return;
     try {
       await Promise.all(
-        leads.map((l) =>
-          fetch(`${API_BASE}/api/leads/${l.id}`, {
-            method: 'DELETE',
-            credentials: 'include',
-          })
-        )
+        leads.map((l) => api.leadDelete(l.id))
       );
       setLeads([]);
       setSelectedIds(new Set());
@@ -359,13 +302,7 @@ export function LeadsPage() {
   const handleSendFollowUp = async (lead: LeadView) => {
     try {
       setGeneratingPitchId(lead.id);
-      const res = await fetch(`${API_BASE}/api/leads/${lead.id}/generate-pitch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ isFollowUp: true }),
-      });
-      const data = await res.json();
+      const data = await api.leadGeneratePitch(lead.id, { isFollowUp: true });
       const pitch =
         data.pitch ||
         `Hola ${lead.name}! ¿Pudieron ver la propuesta y la demo interactiva que les armé el otro día (${lead.suggestedDemo ?? ''})? Cualquier duda me avisan!`;
@@ -384,19 +321,14 @@ export function LeadsPage() {
       const nextCount = currentCount + 1;
       const nowIso = new Date().toISOString();
 
-      await fetch(`${API_BASE}/api/leads/${lead.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          status: 'contacted',
-          contactedAt: nowIso,
-          metadata: {
-            ...lead.metadata,
-            followUpCount: nextCount,
-            lastFollowUpSentAt: nowIso,
-          },
-        }),
+      await api.leadUpdate(lead.id, {
+        status: 'contacted',
+        contactedAt: nowIso,
+        metadata: {
+          ...lead.metadata,
+          followUpCount: nextCount,
+          lastFollowUpSentAt: nowIso,
+        },
       });
 
       setLeads((prev) =>
@@ -419,12 +351,7 @@ export function LeadsPage() {
 
   const handleSaveNote = async (leadId: string, noteText: string) => {
     try {
-      await fetch(`${API_BASE}/api/leads/${leadId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ notes: noteText }),
-      });
+      await api.leadUpdate(leadId, { notes: noteText });
       setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, notes: noteText } : l)));
       setEditingNoteId(null);
       setCopiedToast('Nota guardada');
@@ -435,7 +362,7 @@ export function LeadsPage() {
   };
 
   const handleExportCsv = () => {
-    window.open(`${API_BASE}/api/leads/export/csv`, '_blank');
+    window.open(api.leadExportCsvUrl(), '_blank');
   };
 
   // --- Dynamic Pitch Resolution ---
@@ -544,11 +471,8 @@ export function LeadsPage() {
 
   const loadWhatsAppStatus = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/whatsapp/status`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setWaStatus(data.status);
-      }
+      const data = await api.whatsappStatus();
+      setWaStatus(data.status);
     } catch {
       // ignore
     }
@@ -557,14 +481,8 @@ export function LeadsPage() {
   const handleConnectWhatsApp = async () => {
     setWaLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/whatsapp/connect`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setWaStatus(data.status);
-      }
+      const data = await api.whatsappConnect();
+      setWaStatus(data.status);
     } catch (err) {
       console.error(err);
     } finally {
@@ -575,14 +493,8 @@ export function LeadsPage() {
   const handleDisconnectWhatsApp = async () => {
     setWaLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/whatsapp/disconnect`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setWaStatus(data.status);
-      }
+      const data = await api.whatsappDisconnect();
+      setWaStatus(data.status);
     } catch (err) {
       console.error(err);
     } finally {
@@ -598,11 +510,8 @@ export function LeadsPage() {
 
   const loadQueueStatus = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/leads/outreach/status`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setQueueStatus(data.status);
-      }
+      const data = await api.outreachStatus();
+      setQueueStatus(data.status);
     } catch {
       // ignore
     }
@@ -617,16 +526,8 @@ export function LeadsPage() {
   const handleGenerateAiPitch = async (lead: LeadView) => {
     setGeneratingPitchId(lead.id);
     try {
-      const res = await fetch(`${API_BASE}/api/leads/${lead.id}/generate-pitch`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isFollowUp: lead.status === 'contacted' }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.pitch) setAiPitchOverride(data.pitch);
-      }
+      const data = await api.leadGeneratePitch(lead.id, { isFollowUp: lead.status === 'contacted' });
+      if (data.pitch) setAiPitchOverride(data.pitch);
     } catch (err) {
       console.error(err);
     } finally {
@@ -638,22 +539,14 @@ export function LeadsPage() {
     if (queuingCampaign || leadIds.length === 0) return;
     setQueuingCampaign(true);
     try {
-      const res = await fetch(`${API_BASE}/api/leads/outreach/queue`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadIds }),
-      });
+      const res = await api.outreachQueue({ leadIds });
       if (res.ok) {
         await loadQueueStatus();
         await loadLeads();
         alert(`Campana iniciada: se encolaron ${leadIds.length} mensajes con despacho espaciado en segundo plano.`);
-      } else {
-        const errJson = await res.json();
-        alert(`Error: ${errJson.error || 'No se pudo iniciar la campana'}`);
       }
     } catch (err) {
-      console.error(err);
+      alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setQueuingCampaign(false);
     }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { api } from '../api.ts';
 
 interface BackupFileEntry {
   name: string;
@@ -108,8 +109,6 @@ interface VerifyResult {
   details: string[];
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
-
 export function BackupsPage() {
   const [data, setData] = useState<BackupsOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -148,9 +147,7 @@ export function BackupsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/backups`, { credentials: 'include' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as BackupsOverview;
+      const json = await api.backups();
       setData(json);
 
       if (json.config) {
@@ -188,15 +185,7 @@ export function BackupsPage() {
         },
       };
 
-      const res = await fetch(`${API_BASE}/api/backups/config`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as { ok: boolean; config: BackupConfig };
+      const json = await api.backupSaveConfig(payload);
       if (json.ok) {
         setConfigSavedNotice('Configuration saved to backup.config.json on VPS!');
         setTimeout(() => setConfigSavedNotice(null), 4000);
@@ -219,13 +208,7 @@ export function BackupsPage() {
         cloudSync,
       };
 
-      const res = await fetch(`${API_BASE}/api/backups/run`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const json = (await res.json()) as { ok: boolean; output: string };
+      const json = await api.backupRun(body);
       setRunResult(json);
       await loadBackups();
     } catch (err) {
@@ -240,11 +223,7 @@ export function BackupsPage() {
     setInspectLoading(true);
     setInspectData(null);
     try {
-      const res = await fetch(`${API_BASE}/api/backups/inspect/${encodeURIComponent(filename)}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as InspectResult;
+      const json = await api.backupInspect(filename);
       setInspectData(json);
     } catch (err) {
       setInspectData({
@@ -262,11 +241,7 @@ export function BackupsPage() {
   const verifyArchive = async (filename: string) => {
     setVerifyingMap((prev) => ({ ...prev, [filename]: true }));
     try {
-      const res = await fetch(`${API_BASE}/api/backups/verify/${encodeURIComponent(filename)}`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const json = (await res.json()) as VerifyResult;
+      const json = await api.backupVerify(filename);
       setVerifyResults((prev) => ({ ...prev, [filename]: json }));
     } catch (err) {
       setVerifyResults((prev) => ({
@@ -291,16 +266,9 @@ export function BackupsPage() {
 
     setDeleting(true);
     try {
-      const res = await fetch(`${API_BASE}/api/backups/delete`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ names: Array.from(selectedFiles) }),
-      });
-      if (res.ok) {
-        setSelectedFiles(new Set());
-        await loadBackups();
-      }
+      await api.backupDelete(Array.from(selectedFiles));
+      setSelectedFiles(new Set());
+      await loadBackups();
     } catch (err) {
       console.error(err);
     } finally {
@@ -312,20 +280,13 @@ export function BackupsPage() {
     if (!confirm(`Permanently delete "${name}" from VPS backups?`)) return;
     setDeleting(true);
     try {
-      const res = await fetch(`${API_BASE}/api/backups/delete`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ names: [name] }),
+      await api.backupDelete([name]);
+      setSelectedFiles((prev) => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
       });
-      if (res.ok) {
-        setSelectedFiles((prev) => {
-          const next = new Set(prev);
-          next.delete(name);
-          return next;
-        });
-        await loadBackups();
-      }
+      await loadBackups();
     } catch (err) {
       console.error(err);
     } finally {
@@ -1124,7 +1085,7 @@ export function BackupsPage() {
 
                           {/* Direct download */}
                           <a
-                            href={`${API_BASE}/api/backups/download/${encodeURIComponent(f.name)}`}
+                            href={api.backupDownloadUrl(f.name)}
                             download={f.name}
                             title="Download backup file to your computer"
                             style={{
@@ -1359,7 +1320,7 @@ export function BackupsPage() {
             <div style={{ padding: '0.8rem 1.25rem', borderTop: '1px solid #1e293b', display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
               {inspectData && (
                 <a
-                  href={`${API_BASE}/api/backups/download/${encodeURIComponent(inspectData.name)}`}
+                  href={api.backupDownloadUrl(inspectData.name)}
                   download={inspectData.name}
                   style={{
                     background: '#2563eb',

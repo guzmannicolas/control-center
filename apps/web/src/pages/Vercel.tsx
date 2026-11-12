@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { api } from '../api.ts';
 
 interface VercelProjectSummary {
  id: string;
@@ -28,8 +29,6 @@ interface VercelResponse {
  projects: VercelProjectSummary[];
  fetchedAt: string;
 }
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
 
 function formatRelative(iso: string | null | undefined) {
  if (!iso) return '—';
@@ -64,22 +63,18 @@ export function VercelPage() {
  const [filter, setFilter] = useState<'all' | 'ready' | 'error'>('all');
  const [search, setSearch] = useState('');
 
- const loadProjects = async (refresh = false) => {
- setLoading(true);
- setError(null);
- try {
- const res = await fetch(`${API_BASE}/api/vercel/projects${refresh ? '?refresh=1' : ''}`, {
- credentials: 'include',
- });
- if (!res.ok) throw new Error(`HTTP ${res.status}`);
- const json = (await res.json()) as VercelResponse;
- setData(json);
- } catch (err) {
- setError(err instanceof Error ? err.message : String(err));
- } finally {
- setLoading(false);
- }
- };
+  const loadProjects = async (refresh = false) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const json = await api.vercelProjects(refresh);
+      setData(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
  useEffect(() => {
  void loadProjects(false);

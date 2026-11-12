@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SecurityCheckItem, SecurityCheckStatus, VpsSecurityAudit } from '@cc/shared';
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
+import { api } from '../api.ts';
 
 function getStatusBadge(status: SecurityCheckStatus) {
   switch (status) {
@@ -55,9 +54,7 @@ export function VpsSecurity() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/vps/security`, { credentials: 'include' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as VpsSecurityAudit;
+      const data = await api.vpsSecurity();
       setAudit(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ShieldIcon, VpsIcon } from '../components/Icons.tsx';
 import { VpsSecurity } from '../components/VpsSecurity.tsx';
+import { api } from '../api.ts';
 
 interface VpsStatusView {
   hostname: string;
@@ -50,8 +51,6 @@ interface CleanupResult {
   log: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
-
 function ProgressBar({ percent, color }: { percent: number; color: string }) {
   return (
     <div style={{ width: '100%', height: '8px', background: '#1e293b', borderRadius: '999px', overflow: 'hidden', marginTop: '0.5rem' }}>
@@ -72,9 +71,8 @@ export function VpsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/vps/status`, { credentials: 'include' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setData((await res.json()) as VpsStatusView);
+      const statusData = await api.vpsStatus();
+      setData(statusData);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -91,14 +89,7 @@ export function VpsPage() {
     setCleaningTarget(target);
     setCleanupResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/vps/cleanup`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as CleanupResult;
+      const json = await api.vpsCleanup(target);
       setCleanupResult(json);
       await loadStatus();
     } catch (err) {

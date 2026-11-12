@@ -44,9 +44,206 @@ import type {
   ArgentinePromo,
   PriceGlitchOverview,
   PriceGlitchItem,
+  LeadView,
+  VpsSecurityAudit,
 } from '@cc/shared';
 
+export interface VpsStatusView {
+  hostname: string;
+  uptimeHuman: string;
+  loadAvg: [number, number, number];
+  cpuCores: number;
+  memory: {
+    totalGb: number;
+    usedGb: number;
+    availableGb: number;
+    usedPercent: number;
+    swapTotalGb: number;
+    swapUsedGb: number;
+  };
+  disk: {
+    filesystem: string;
+    totalGb: number;
+    usedGb: number;
+    availableGb: number;
+    usedPercent: number;
+  };
+  dockerStorage: Array<{
+    type: string;
+    totalCount: string;
+    active: string;
+    size: string;
+    reclaimable: string;
+  }>;
+  topDirectories: Array<{
+    path: string;
+    sizeHuman: string;
+  }>;
+  containers: Array<{
+    name: string;
+    image: string;
+    status: string;
+    state: string;
+  }>;
+}
+
+export interface CleanupResult {
+  ok: boolean;
+  target: string;
+  beforeUsedGb: number;
+  afterUsedGb: number;
+  freedGb: number;
+  log: string;
+}
+
+export interface VercelProjectSummary {
+  id: string;
+  name: string;
+  framework: string | null;
+  nodeVersion: string | null;
+  updatedAt: string;
+  repo: string | null;
+  productionUrl: string | null;
+  domains: string[];
+  latestDeployment: {
+    id: string;
+    url: string;
+    state: 'READY' | 'ERROR' | 'BUILDING' | 'QUEUED' | 'CANCELED' | string;
+    target: string | null;
+    createdAt: string;
+    readyAt: string | null;
+    commitMessage: string | null;
+    commitSha: string | null;
+    branch: string | null;
+    errorMessage: string | null;
+  } | null;
+}
+
+export interface VercelResponse {
+  configured: boolean;
+  projects: VercelProjectSummary[];
+  fetchedAt: string;
+}
+
+export interface BackupFileEntry {
+  name: string;
+  sizeBytes: number;
+  sizeHuman: string;
+  modifiedAt: string;
+  ageHours: number;
+  kind: 'full-tar' | 'postgres-sql' | 'meta-json' | 'other';
+}
+
+export interface CloudBackupInfo {
+  provider: string;
+  remote: string;
+  targetFolder: string;
+  encryption: string;
+  retentionDays: number;
+  status: 'connected' | 'warning' | 'error';
+  fileCount: number | null;
+  totalSizeBytes: number | null;
+  totalSizeHuman: string | null;
+  lastSyncAt: string | null;
+  lastSyncFile: string | null;
+  notice: string | null;
+}
+
+export interface BackupTargetConfig {
+  cms_postgres: boolean;
+  control_center_postgres: boolean;
+  cms_uploads: boolean;
+  secrets: boolean;
+}
+
+export interface BackupConfig {
+  version: number;
+  updatedAt: string;
+  targets: BackupTargetConfig;
+  cloudSync: boolean;
+  retention: {
+    keepLocalDays: number;
+    keepRemoteDays: number;
+  };
+}
+
+export interface DiscoveredDatabaseTarget {
+  id: string;
+  name: string;
+  engine: string;
+  purpose: string;
+  project: string | null;
+  key: string;
+  isIncluded: boolean;
+  status: 'healthy' | 'unknown';
+}
+
+export interface BackupsOverview {
+  backupDir: string;
+  scriptPath: string;
+  scriptExists: boolean;
+  schedule: string;
+  destination: string;
+  status: 'ok' | 'warning' | 'critical';
+  latestBackupAt: string | null;
+  latestAgeHours: number | null;
+  totalSizeHuman: string;
+  rcloneNotice: string | null;
+  files: BackupFileEntry[];
+  recentLogLines: string[];
+  cloud?: CloudBackupInfo;
+  config: BackupConfig;
+  databases: DiscoveredDatabaseTarget[];
+}
+
+export interface ArchiveFileEntry {
+  path: string;
+  sizeBytes: number;
+  sizeHuman: string;
+  modified: string;
+  permissions: string;
+}
+
+export interface InspectResult {
+  ok: boolean;
+  name: string;
+  sizeHuman: string;
+  files: ArchiveFileEntry[];
+  manifest?: {
+    version: number;
+    timestamp: string;
+    createdAt: string;
+    archive: string;
+    hostname: string;
+    targets: string[];
+    cloudSync: boolean;
+    retention: {
+      keepLocalDays: number;
+      keepRemoteDays: number;
+    };
+  } | null;
+  error?: string;
+}
+
+export interface VerifyResult {
+  ok: boolean;
+  filename: string;
+  passed: boolean;
+  message: string;
+  details: string[];
+}
+
+export interface WhatsAppStatus {
+  state: 'disconnected' | 'connecting' | 'qr_ready' | 'connected' | string;
+  qrDataUrl: string | null;
+  phoneNumber: string | null;
+  userName: string | null;
+  error?: string | null;
+}
+
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4101';
+
+export const getApiBaseUrl = () => BASE;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -402,4 +599,85 @@ export const api = {
     request<ArgentinePromo>(`/api/promociones/${id}/verify-url`, { method: 'POST' }),
   verifyPriceGlitch: (id: string) =>
     request<PriceGlitchItem>(`/api/promociones/glitches/${id}/verify`, { method: 'POST' }),
+
+  // VPS Telemetry, Security & Cleanup
+  vpsStatus: () => request<VpsStatusView>('/api/vps/status'),
+  vpsCleanup: (target: 'docker' | 'vscode' | 'caches' | 'all') =>
+    request<CleanupResult>('/api/vps/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ target }),
+    }),
+  vpsSecurity: () => request<VpsSecurityAudit>('/api/vps/security'),
+
+  // Vercel Projects
+  vercelProjects: (refresh = false) =>
+    request<VercelResponse>(`/api/vercel/projects${refresh ? '?refresh=1' : ''}`),
+
+  // Backups Engine
+  backups: () => request<BackupsOverview>('/api/backups'),
+  backupSaveConfig: (payload: Partial<BackupConfig>) =>
+    request<{ ok: boolean; config: BackupConfig }>('/api/backups/config', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  backupRun: (payload: { targets: BackupTargetConfig; cloudSync: boolean }) =>
+    request<{ ok: boolean; output: string }>('/api/backups/run', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  backupInspect: (filename: string) =>
+    request<InspectResult>(`/api/backups/inspect/${encodeURIComponent(filename)}`),
+  backupVerify: (filename: string) =>
+    request<VerifyResult>(`/api/backups/verify/${encodeURIComponent(filename)}`, {
+      method: 'POST',
+    }),
+  backupDelete: (names: string[]) =>
+    request<{ ok: boolean }>('/api/backups/delete', {
+      method: 'POST',
+      body: JSON.stringify({ names }),
+    }),
+  backupDownloadUrl: (filename: string) =>
+    `${BASE}/api/backups/download/${encodeURIComponent(filename)}`,
+
+  // Leads, WhatsApp & Outreach CRM
+  leads: () => request<{ leads: LeadView[] }>('/api/leads'),
+  leadScrape: (payload: { category: string; city: string; limit?: number }) =>
+    request<{ ok: boolean }>('/api/leads/scrape', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  leadEnrich: (id: string) =>
+    request<{ lead: LeadView }>(`/api/leads/${id}/enrich`, { method: 'POST' }),
+  leadVerifyInstagram: (id: string) =>
+    request<{ lead: LeadView; verification: { valid: boolean; reason?: string } }>(
+      `/api/leads/${id}/verify-instagram`,
+      { method: 'POST' }
+    ),
+  leadVerifyAllInstagram: () =>
+    request<{ ok: boolean; verifiedCount: number }>('/api/leads/verify-all-instagram', {
+      method: 'POST',
+    }),
+  leadUpdate: (id: string, patch: Record<string, unknown>) =>
+    request<{ ok: boolean; lead?: LeadView }>(`/api/leads/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  leadDelete: (id: string) =>
+    request<{ ok: boolean }>(`/api/leads/${id}`, { method: 'DELETE' }),
+  leadGeneratePitch: (id: string, payload?: { isFollowUp?: boolean }) =>
+    request<{ pitch?: string }>(`/api/leads/${id}/generate-pitch`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    }),
+  leadExportCsvUrl: () => `${BASE}/api/leads/export/csv`,
+
+  whatsappStatus: () => request<{ status: WhatsAppStatus }>('/api/whatsapp/status'),
+  whatsappConnect: () => request<{ status: WhatsAppStatus }>('/api/whatsapp/connect', { method: 'POST' }),
+  whatsappDisconnect: () => request<{ status: WhatsAppStatus }>('/api/whatsapp/disconnect', { method: 'POST' }),
+  outreachStatus: () => request<{ status: any }>('/api/leads/outreach/status'),
+  outreachQueue: (payload: { leadIds: string[] }) =>
+    request<{ ok: boolean }>('/api/leads/outreach/queue', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
