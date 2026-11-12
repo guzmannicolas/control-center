@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.ts';
+import { useTableSelection } from '../hooks/useTableSelection.ts';
 
 interface BackupFileEntry {
   name: string;
@@ -139,7 +140,13 @@ export function BackupsPage() {
   const [verifyResults, setVerifyResults] = useState<Record<string, VerifyResult>>({});
 
   // File selection state for bulk deletion
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const {
+    selected: selectedFiles,
+    toggle: toggleSelectRow,
+    toggleAll: selectFilesAll,
+    clear: clearSelectedFiles,
+    setSelected: setSelectedFiles,
+  } = useTableSelection<string>();
   const [deleting, setDeleting] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'pre' | 'tar' | 'sql'>('all');
 
@@ -267,7 +274,7 @@ export function BackupsPage() {
     setDeleting(true);
     try {
       await api.backupDelete(Array.from(selectedFiles));
-      setSelectedFiles(new Set());
+      clearSelectedFiles();
       await loadBackups();
     } catch (err) {
       console.error(err);
@@ -301,15 +308,6 @@ export function BackupsPage() {
     setSelectedFiles(new Set(preNames));
   };
 
-  const toggleSelectRow = (name: string) => {
-    setSelectedFiles((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  };
-
   const filteredFiles = (data?.files ?? []).filter((f) => {
     if (filterType === 'pre') return f.name.startsWith('pre-') || f.name.startsWith('before-');
     if (filterType === 'tar') return f.kind === 'full-tar';
@@ -318,11 +316,7 @@ export function BackupsPage() {
   });
 
   const toggleSelectAllFiltered = () => {
-    if (filteredFiles.length > 0 && selectedFiles.size === filteredFiles.length) {
-      setSelectedFiles(new Set());
-    } else {
-      setSelectedFiles(new Set(filteredFiles.map((f) => f.name)));
-    }
+    selectFilesAll(filteredFiles.map((f) => f.name));
   };
 
   const preSnapshotsCount = (data?.files ?? []).filter(

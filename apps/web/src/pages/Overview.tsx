@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CheckStatus, IncidentView, TargetView } from '@cc/shared';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api.ts';
+import { useCopyLlmContext } from '../hooks/useCopyLlmContext.ts';
 import { PageHeader } from '../components/PageHeader.tsx';
 import { ago, checkerLabel, dateTime, duration } from '../format.ts';
 import { StatusIcon } from '../components/Status.tsx';
@@ -50,34 +51,20 @@ export function OverviewPage() {
 
   const [activeCategory, setActiveCategory] = useState<'all' | 'core' | 'demos' | 'issues'>('all');
   const [searchTarget, setSearchTarget] = useState<string>('');
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const { copyContext: handleCopyLlmContext, feedback: copyFeedback } = useCopyLlmContext();
   const [backupTriggering, setBackupTriggering] = useState<boolean>(false);
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
 
   const openIncidents = incidents.data?.filter((i) => i.resolvedAt === null) ?? [];
   const pastIncidents = incidents.data?.filter((i) => i.resolvedAt !== null) ?? [];
 
-  const handleCopyLlmContext = async () => {
-    try {
-      const res = await api.agentContext('all');
-      const text = typeof res === 'string' ? res : res.context;
-      await navigator.clipboard.writeText(text);
-      setCopyFeedback('System Context Copied!');
-      setTimeout(() => setCopyFeedback(null), 2500);
-    } catch {
-      setCopyFeedback('Failed to copy context');
-      setTimeout(() => setCopyFeedback(null), 2500);
-    }
-  };
-
   const handleTriggerBackup = async () => {
     setBackupTriggering(true);
     setBackupNotice('Triggering dual backup...');
     try {
-      const res = await fetch('/api/backups/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cloudSync: true }),
+      const res = await api.backupRun({
+        cloudSync: true,
+        targets: { cms_postgres: true, control_center_postgres: true, cms_uploads: true, secrets: true },
       });
       if (res.ok) {
         setBackupNotice('Backup initiated successfully (local + Google Drive sync).');

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { SecurityCheckItem, SecurityCheckStatus, VpsSecurityAudit } from '@cc/shared';
 import { api } from '../api.ts';
+import { useClipboard } from '../hooks/useClipboard.ts';
 
 function getStatusBadge(status: SecurityCheckStatus) {
   switch (status) {
@@ -47,7 +48,7 @@ export function VpsSecurity() {
   const [audit, setAudit] = useState<VpsSecurityAudit | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { copiedId, copy: handleCopy } = useClipboard();
   const [filter, setFilter] = useState<'all' | 'issues' | 'ssh' | 'network' | 'docker' | 'system'>('all');
 
   const fetchSecurityAudit = async () => {
@@ -66,12 +67,6 @@ export function VpsSecurity() {
   useEffect(() => {
     void fetchSecurityAudit();
   }, []);
-
-  const handleCopy = (id: string, text: string) => {
-    void navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2500);
-  };
 
   const filteredChecks = (audit?.checks ?? []).filter((c) => {
     if (filter === 'issues') return c.status === 'fail' || c.status === 'warn';

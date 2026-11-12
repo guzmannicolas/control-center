@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LeadView, LeadStatus } from '@cc/shared';
 import { api } from '../api.ts';
+import { useTableSelection } from '../hooks/useTableSelection.ts';
 
 const STATUS_BADGES: Record<LeadStatus, { label: string; bg: string; color: string; border: string }> = {
   discovered: { label: 'Discovered', bg: '#1e293b', color: '#94a3b8', border: '#334155' },
@@ -97,7 +98,13 @@ export function LeadsPage() {
   const [filterIgVerifiedOnly, setFilterIgVerifiedOnly] = useState<boolean>(false);
 
   // Selection state for bulk operations
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const {
+    selected: selectedIds,
+    toggle: toggleSelectRow,
+    toggleAll: selectProspectingAll,
+    clear: clearSelectedLeads,
+    setSelected: setSelectedIds,
+  } = useTableSelection<string>();
   const [batchActionRunning, setBatchActionRunning] = useState(false);
 
   // Outreach Assistant State
@@ -221,7 +228,7 @@ export function LeadsPage() {
         Array.from(selectedIds).map((id) => api.leadUpdate(id, { status: newStatus }))
       );
       setLeads((prev) => prev.map((l) => (selectedIds.has(l.id) ? { ...l, status: newStatus } : l)));
-      setSelectedIds(new Set());
+      clearSelectedLeads();
     } catch (err) {
       console.error(err);
     } finally {
@@ -253,7 +260,7 @@ export function LeadsPage() {
         Array.from(selectedIds).map((id) => api.leadDelete(id))
       );
       setLeads((prev) => prev.filter((l) => !selectedIds.has(l.id)));
-      setSelectedIds(new Set());
+      clearSelectedLeads();
     } catch (err) {
       console.error(err);
     } finally {
@@ -269,19 +276,10 @@ export function LeadsPage() {
         leads.map((l) => api.leadDelete(l.id))
       );
       setLeads([]);
-      setSelectedIds(new Set());
+      clearSelectedLeads();
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const toggleSelectRow = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   };
 
   const getFollowUpInfo = (lead: LeadView) => {
@@ -462,11 +460,7 @@ export function LeadsPage() {
   const currentOutreachLead = outreachQueue[outreachIndex];
 
   const toggleSelectAllProspecting = () => {
-    if (selectedIds.size === filteredProspecting.length && filteredProspecting.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredProspecting.map((l) => l.id)));
-    }
+    selectProspectingAll(filteredProspecting.map((l) => l.id));
   };
 
   const loadWhatsAppStatus = async () => {

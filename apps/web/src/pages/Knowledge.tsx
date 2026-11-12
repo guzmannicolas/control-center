@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { KnowledgeDocMeta, KnowledgeDocDetail } from '@cc/shared';
 import { api } from '../api.ts';
+import { useCopyLlmContext } from '../hooks/useCopyLlmContext.ts';
 
 // Markdown simple renderer for preview
 function MarkdownRenderer({ content }: { content: string }) {
@@ -210,7 +211,7 @@ export function KnowledgePage() {
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [mcpModalOpen, setMcpModalOpen] = useState<boolean>(false);
-  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const { copyContext: handleCopyLlmContext, feedback: copyFeedback, setFeedback: setCopyFeedback } = useCopyLlmContext(() => editableContent);
 
   // Load document metadata tree
   const { data: docs = [], isLoading: isListLoading } = useQuery<KnowledgeDocMeta[]>({
@@ -255,23 +256,6 @@ export function KnowledgePage() {
   const handleSave = () => {
     if (!activeSlug) return;
     saveMutation.mutate({ slug: activeSlug, content: editableContent });
-  };
-
-  const handleCopyLlmContext = async () => {
-    try {
-      const res = await api.agentContext('all');
-      const text = typeof res === 'string' ? res : res.context;
-      await navigator.clipboard.writeText(text);
-      setCopyFeedback('Full LLM Context Copied!');
-      setTimeout(() => setCopyFeedback(null), 2500);
-    } catch {
-      // Fallback to active document content
-      if (editableContent) {
-        await navigator.clipboard.writeText(editableContent);
-        setCopyFeedback('Active Document Copied!');
-        setTimeout(() => setCopyFeedback(null), 2500);
-      }
-    }
   };
 
   const handleCopyCurrentMarkdown = () => {
