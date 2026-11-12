@@ -1,7 +1,7 @@
 import type { DomainView } from '@cc/shared';
 import { useQuery } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
 import { api } from '../api.ts';
+import { Fact } from '../components/Fact.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
 import { StatusIcon, statusLabel } from '../components/Status.tsx';
 import { ago } from '../format.ts';
@@ -14,15 +14,6 @@ function since(iso: string) {
   if (months < 12) return `${months} months ago`;
   const y = Math.floor(months / 12);
   return `${y} year${y > 1 ? 's' : ''}${months % 12 ? ` ${months % 12} mo` : ''} ago`;
-}
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-0.5 text-sm">{children}</dd>
-    </div>
-  );
 }
 
 function DomainCard({ domain }: { domain: DomainView }) {

@@ -12,6 +12,7 @@ import type {
   VaultProjectConfig,
 } from '@cc/shared';
 import { api } from '../api.ts';
+import { useClipboard } from '../hooks/useClipboard.ts';
 
 export function VaultPage() {
   const queryClient = useQueryClient();
@@ -19,7 +20,7 @@ export function VaultPage() {
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { copiedId, copy } = useClipboard(2000);
 
   // Add / Edit Secret Modal
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
@@ -163,12 +164,6 @@ export function VaultPage() {
       else next.add(id);
       return next;
     });
-  };
-
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
   };
 
   const openAddModal = (projectPrefill = 'global') => {
@@ -698,7 +693,7 @@ export function VaultPage() {
 
                         <button
                           type="button"
-                          onClick={() => copyToClipboard(item.value, item.id)}
+                          onClick={() => copy(item.id, item.value)}
                           className="btn btn-secondary text-xs px-2.5 py-1.5 flex items-center gap-1"
                           title="Copy value"
                         >

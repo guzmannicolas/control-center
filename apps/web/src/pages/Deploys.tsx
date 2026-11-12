@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DeploymentOverview, DeploymentRecord } from '@cc/shared';
 import { api } from '../api.ts';
+import { useClipboard } from '../hooks/useClipboard.ts';
 
 export function DeploysPage() {
   const [data, setData] = useState<DeploymentOverview | null>(null);
@@ -15,7 +16,8 @@ export function DeploysPage() {
 
   // Log View Modal
   const [viewingRecord, setViewingRecord] = useState<DeploymentRecord | null>(null);
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const { copiedId, copy } = useClipboard(2000);
+  const copiedWebhook = copiedId === 'webhook';
 
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -57,12 +59,6 @@ export function DeploysPage() {
     } finally {
       setTriggering(false);
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    void navigator.clipboard.writeText(text);
-    setCopiedWebhook(true);
-    setTimeout(() => setCopiedWebhook(false), 2000);
   };
 
   const getStatusBadge = (status: DeploymentRecord['status']) => {
@@ -154,7 +150,7 @@ export function DeploysPage() {
 
             <button
               type="button"
-              onClick={() => copyToClipboard(`${data.webhookUrl}/<repo-name>`)}
+              onClick={() => copy('webhook', `${data.webhookUrl}/<repo-name>`)}
               style={{
                 background: '#1e293b',
                 border: '1px solid #334155',
@@ -367,10 +363,10 @@ export function DeploysPage() {
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <button
                   type="button"
-                  onClick={() => copyToClipboard(viewingRecord.log)}
+                  onClick={() => copy('log', viewingRecord.log)}
                   style={{ background: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', borderRadius: '6px', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
                 >
-                  {copiedWebhook ? '✔ Copied' : 'Copy Log'}
+                  {copiedId === 'log' ? '✔ Copied' : 'Copy Log'}
                 </button>
                 <button
                   type="button"

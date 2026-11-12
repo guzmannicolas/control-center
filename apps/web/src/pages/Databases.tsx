@@ -1,20 +1,11 @@
 import type { CheckSnapshot, DatabaseView } from '@cc/shared';
 import { useQuery } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
 import { api } from '../api.ts';
+import { Fact } from '../components/Fact.tsx';
 import { PageHeader } from '../components/PageHeader.tsx';
 import { StatusIcon, statusLabel } from '../components/Status.tsx';
 import { ago, bytes, uptime } from '../format.ts';
 import { type ProjectGroup, groupByProject, needsAttention } from '../projects.ts';
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-0.5 text-sm tabular-nums">{children}</dd>
-    </div>
-  );
-}
 
 const str = (v: unknown) => (typeof v === 'string' ? v : null);
 
