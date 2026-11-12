@@ -72,6 +72,8 @@ services:
     <<: *app
     ports:
       - "127.0.0.1:4100:4100" # only reachable from the VPS itself
+    volumes:
+      - ./knowledge:/app/knowledge
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4100/health >/dev/null || exit 1"]
       interval: 30s

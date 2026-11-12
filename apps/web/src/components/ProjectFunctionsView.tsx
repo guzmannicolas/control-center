@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { FunctionsCatalogResult, ProjectFunctionItem } from '@cc/shared';
+import fallbackCatalog from '../catalog/functions-catalog.json';
 import { api } from '../api.ts';
 import { useClipboard } from '../hooks/useClipboard.ts';
 
@@ -28,6 +29,7 @@ export function ProjectFunctionsView() {
   const { data, isLoading, error } = useQuery<FunctionsCatalogResult>({
     queryKey: ['knowledgeFunctions'],
     queryFn: () => api.knowledgeFunctions(),
+    initialData: fallbackCatalog as unknown as FunctionsCatalogResult,
   });
 
   const allFunctions = data?.functions ?? [];
@@ -373,7 +375,7 @@ export function ProjectFunctionsView() {
         </div>
       )}
 
-      {error && !isLoading && (
+      {error && !isLoading && allFunctions.length === 0 && (
         <div style={{ padding: '1rem', background: '#450a0a', border: '1px solid #dc2626', borderRadius: '8px', color: '#fca5a5', fontSize: '0.85rem' }}>
           Unable to fetch real-time function catalog from API.
         </div>

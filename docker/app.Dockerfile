@@ -29,6 +29,7 @@ WORKDIR /app
 COPY --from=build /prod/api/package.json ./
 COPY --from=build /prod/api/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./dist
+COPY --from=build /app/knowledge ./knowledge
 USER node
 EXPOSE 4100
 CMD ["node", "--enable-source-maps", "dist/server.js"]
