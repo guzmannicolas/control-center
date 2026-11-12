@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync, promises as fs, readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type {
   DiscoveredEnvFile,
@@ -12,9 +12,32 @@ import type {
   VaultProjectConfig,
   VaultSyncStatus,
 } from '@cc/shared';
-import { exportEnvText, getVaultOverview, updateProjectLastSynced, importEnvText } from './vault.js';
+import {
+  BOOTSTRAP_KEYS,
+  VAULT_PROJECT,
+  exportEnvText,
+  getVaultOverview,
+  updateProjectLastSynced,
+  importEnvText,
+} from './vault.js';
 
 const execFileAsync = promisify(execFile);
+
+// Parsed disk content without the variables that bootstrap the vault itself.
+function withoutBootstrapKeys(map: Map<string, string>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [k, v] of map.entries()) {
+    if (!BOOTSTRAP_KEYS.has(k)) out.set(k, v);
+  }
+  return out;
+}
+
+// The only .env the vault is allowed to read from or write to.
+function getVaultEnvPath(): string {
+  const cfg = getVaultOverview().projectConfigs[VAULT_PROJECT];
+  if (!cfg) throw new Error(`Project "${VAULT_PROJECT}" has no configuration registered`);
+  return cfg.filePath;
+}
 
 export function parseEnvContent(raw: string): Map<string, string> {
   const map = new Map<string, string>();
@@ -136,7 +159,7 @@ export async function auditProjectEnv(
       if (isGitTracked) {
         issues.push({
           severity: 'CRITICAL',
-          title: '🚨 Secret file tracked in Git repository!',
+          title: 'Secret file tracked in Git repository',
           description: `This .env file is committed in Git history and visible to anyone with repository access.`,
           recommendation: `Run "git rm --cached ${basename(filePath)}" and commit the deletion, then rotate all exposed secrets.`,
         });
@@ -151,7 +174,7 @@ export async function auditProjectEnv(
 
       // Drift detection
       const rawDisk = readFileSync(filePath, 'utf-8');
-      const diskMap = parseEnvContent(rawDisk);
+      const diskMap = withoutBootstrapKeys(parseEnvContent(rawDisk));
       diskItemCount = diskMap.size;
 
       const vaultMap = new Map<string, string>();
@@ -229,6 +252,7 @@ export async function runSecurityAudit(): Promise<VaultAuditSummary> {
   const audits: VaultFileAudit[] = [];
 
   let criticalCount = 0;
+  let gitExposureCount = 0;
   let driftCount = 0;
   let insecurePermsCount = 0;
 
@@ -239,6 +263,10 @@ export async function runSecurityAudit(): Promise<VaultAuditSummary> {
 
     if (audit.isGitTracked || audit.issues.some((i) => i.severity === 'CRITICAL')) {
       criticalCount++;
+    }
+    // Real exposure only: the secret file is committed to Git (drift is reported separately).
+    if (audit.isGitTracked) {
+      gitExposureCount++;
     }
     if (audit.syncStatus === 'drift_detected') {
       driftCount++;
@@ -259,14 +287,15 @@ export async function runSecurityAudit(): Promise<VaultAuditSummary> {
     totalVariables: overview.items.length,
     totalProjects: audits.length,
     globalRiskLevel,
-    criticalExposureCount: criticalCount,
+    criticalExposureCount: gitExposureCount,
     driftCount,
     insecurePermissionsCount: insecurePermsCount,
     audits,
   };
 }
 
-export async function computeVaultDiff(projectName: string): Promise<VaultDiffResult> {
+export async function computeVaultDiff(_projectName?: string): Promise<VaultDiffResult> {
+  const projectName = VAULT_PROJECT;
   const overview = getVaultOverview();
   const config = overview.projectConfigs[projectName];
   const filePath = config ? config.filePath : '';
@@ -282,7 +311,7 @@ export async function computeVaultDiff(projectName: string): Promise<VaultDiffRe
 
   if (filePath && existsSync(filePath)) {
     diskContent = readFileSync(filePath, 'utf-8');
-    const parsed = parseEnvContent(diskContent);
+    const parsed = withoutBootstrapKeys(parseEnvContent(diskContent));
     for (const [k, v] of parsed.entries()) {
       diskMap.set(k, v);
     }
@@ -323,34 +352,57 @@ export async function computeVaultDiff(projectName: string): Promise<VaultDiffRe
   };
 }
 
-export async function deployVaultToDisk(projectName: string): Promise<{
+
+// Keeps the bootstrap variables (VAULT_SECRET, ...) from the current file so a deploy never drops them.
+function extractBootstrapLines(rawDisk: string): string[] {
+  const kept: string[] = [];
+  for (const line of rawDisk.split(/\r?\n/)) {
+    const match = line.trim().match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    if (match?.[1] && BOOTSTRAP_KEYS.has(match[1])) kept.push(line.trim());
+  }
+  return kept;
+}
+
+export async function deployVaultToDisk(_projectName?: string): Promise<{
   success: boolean;
   filePath: string;
   backupPath: string | null;
 }> {
+  const projectName = VAULT_PROJECT;
   const overview = getVaultOverview();
-  const config = overview.projectConfigs[projectName];
-  if (!config) {
-    throw new Error(`Project "${projectName}" has no configuration registered`);
+  if (overview.items.length === 0) {
+    // The vault is the source of truth: deploying an empty one would wipe the real .env.
+    throw new Error('The vault is empty. Import the current .env first; refusing to overwrite it with nothing.');
   }
 
-  const filePath = config.filePath;
+  const filePath = getVaultEnvPath();
   const parentDir = dirname(filePath);
   if (!existsSync(parentDir)) {
     await fs.mkdir(parentDir, { recursive: true });
   }
 
   let backupPath: string | null = null;
+  let bootstrapLines: string[] = [];
   if (existsSync(filePath)) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     backupPath = `${filePath}.backup.${timestamp}`;
     await fs.copyFile(filePath, backupPath);
+    if (process.platform !== 'win32') {
+      await fs.chmod(backupPath, 0o600).catch(() => undefined);
+    }
+    bootstrapLines = extractBootstrapLines(readFileSync(filePath, 'utf-8'));
   }
 
-  const envContent = exportEnvText(projectName);
-  await fs.writeFile(filePath, envContent, 'utf-8');
+  let envContent = exportEnvText(projectName);
+  if (bootstrapLines.length > 0) {
+    envContent += `\n# Vault bootstrap (preserved from the previous file, never stored in the vault)\n${bootstrapLines.join('\n')}\n`;
+  }
 
-  // Set restrictive POSIX permissions (chmod 600)
+  // Atomic replace: write a private temp file, then rename over the target.
+  const tmpPath = `${filePath}.tmp-${process.pid}`;
+  await fs.writeFile(tmpPath, envContent, { encoding: 'utf-8', mode: 0o600 });
+  await fs.rename(tmpPath, filePath);
+
   if (process.platform !== 'win32') {
     try {
       await fs.chmod(filePath, 0o600);
@@ -368,109 +420,71 @@ export async function deployVaultToDisk(projectName: string): Promise<{
   };
 }
 
+// Only .env-style files inside the Control Center repository can be read into the vault.
+function isInsideVaultRepo(filePath: string): boolean {
+  const repoDir = resolve(dirname(getVaultEnvPath()));
+  const target = resolve(filePath);
+  const rel = relative(repoDir, target);
+  return rel !== '' && !isAbsolute(rel) && !rel.startsWith('..') && !rel.split(/[\\/]/).includes('node_modules');
+}
+
 export function importEnvFromDiskFile(
   filePath: string,
-  targetProject?: string,
+  _targetProject?: string,
 ): { importedCount: number; project: string } {
+  if (!isInsideVaultRepo(filePath)) {
+    throw new Error(`The vault only imports files inside the "${VAULT_PROJECT}" repository.`);
+  }
   if (!existsSync(filePath)) {
     throw new Error(`File not found: ${filePath}`);
   }
   const raw = readFileSync(filePath, 'utf-8');
-  let project = targetProject?.trim();
-  if (!project) {
-    const parent = basename(dirname(filePath));
-    project = parent === 'repositories' || !parent ? 'global' : parent;
-  }
-  const res = importEnvText(project, raw);
-  return { importedCount: res.importedCount, project };
+  const res = importEnvText(VAULT_PROJECT, raw);
+  return { importedCount: res.importedCount, project: VAULT_PROJECT };
 }
 
-export function discoverVpsEnvFiles(customPath?: string): DiscoveredEnvFile[] {
+export function discoverVpsEnvFiles(_customPath?: string): DiscoveredEnvFile[] {
   const overview = getVaultOverview();
-  const configuredPaths = new Set(
-    Object.values(overview.projectConfigs).map((c) => resolve(c.filePath).toLowerCase()),
-  );
+  const configuredPath = resolve(overview.projectConfigs[VAULT_PROJECT]?.filePath ?? '').toLowerCase();
+  const repoDir = dirname(overview.projectConfigs[VAULT_PROJECT]?.filePath ?? '');
 
   const results: DiscoveredEnvFile[] = [];
-  const rootsToScan: string[] = [];
+  if (!repoDir || !existsSync(repoDir)) return results;
 
-  if (customPath && existsSync(customPath)) {
-    rootsToScan.push(resolve(customPath));
-  } else {
-    // Primary VPS locations
-    if (existsSync('/home/adminnico/repositories')) {
-      rootsToScan.push('/home/adminnico/repositories');
-    }
-    if (existsSync('/home/adminnico')) {
-      rootsToScan.push('/home/adminnico');
-    }
-    if (existsSync('/host/home/adminnico')) {
-      rootsToScan.push('/host/home/adminnico');
-    }
-    // Local / Container workdir fallbacks
-    rootsToScan.push(process.cwd());
-    const parentDir = resolve(process.cwd(), '..');
-    if (existsSync(parentDir) && !rootsToScan.includes(parentDir)) {
-      rootsToScan.push(parentDir);
-    }
-  }
+  const IGNORED_DIRS = new Set(['node_modules', '.git', '.cache', 'dist', 'build', '.pnpm', 'tmp', 'data', 'knowledge']);
 
-  const seenPaths = new Set<string>();
-  const IGNORED_DIRS = new Set([
-    'node_modules', '.git', '.cache', 'dist', 'build', '.pnpm', 'tmp', '.next', '.nuxt',
-  ]);
-
-  function scanDir(dir: string, depth = 0) {
-    if (depth > 5) return;
+  function scanDir(dir: string, depth: number) {
+    if (depth > 2) return;
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
         if (entry.isDirectory()) {
-          // Allow exploring repositories and normal directories, ignore build/git/node_modules
-          if (!IGNORED_DIRS.has(entry.name) && (!entry.name.startsWith('.') || entry.name === '.env')) {
-            scanDir(join(dir, entry.name), depth + 1);
-          }
-        } else if (entry.isFile()) {
-          const lowerName = entry.name.toLowerCase();
-          const isEnvMatch =
-            lowerName === '.env' ||
-            lowerName.startsWith('.env.') ||
-            lowerName.endsWith('.env');
-
-          if (isEnvMatch) {
-            const fullPath = join(dir, entry.name);
-            const normalized = resolve(fullPath).toLowerCase();
-            if (seenPaths.has(normalized)) continue;
-            seenPaths.add(normalized);
-
-            const already = configuredPaths.has(normalized);
-
-            let varCount = 0;
-            try {
-              const raw = readFileSync(fullPath, 'utf-8');
-              varCount = parseEnvContent(raw).size;
-            } catch {
-              varCount = 0;
-            }
-
-            const folderName = basename(dir);
-            results.push({
-              path: fullPath,
-              projectName: folderName === 'repositories' ? 'root' : folderName,
-              variableCount: varCount,
-              alreadyConfigured: already,
-            });
-          }
+          if (!IGNORED_DIRS.has(entry.name) && !entry.name.startsWith('.')) scanDir(full, depth + 1);
+          continue;
         }
+        if (!entry.isFile()) continue;
+        const lower = entry.name.toLowerCase();
+        const isEnvMatch = lower === '.env' || lower.startsWith('.env.') || lower.endsWith('.env');
+        if (!isEnvMatch || lower.includes('.backup.') || lower.includes('.tmp-')) continue;
+
+        let varCount = 0;
+        try {
+          varCount = withoutBootstrapKeys(parseEnvContent(readFileSync(full, 'utf-8'))).size;
+        } catch {
+          varCount = 0;
+        }
+        results.push({
+          path: full,
+          projectName: VAULT_PROJECT,
+          variableCount: varCount,
+          alreadyConfigured: resolve(full).toLowerCase() === configuredPath,
+        });
       }
     } catch {
       // Skip unreadable directories
     }
   }
 
-  for (const root of rootsToScan) {
-    scanDir(root, 0);
-  }
-
+  scanDir(repoDir, 0);
   return results;
 }

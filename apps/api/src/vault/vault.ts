@@ -5,9 +5,23 @@ import type { VaultAuditSummary, VaultItem, VaultOverview, VaultProjectConfig } 
 
 const STORAGE_PATH = process.env.VAULT_STORAGE_FILE || join(process.cwd(), 'data', 'vault.json');
 
+// The vault indexes exactly one project: the Control Center itself.
+export const VAULT_PROJECT = 'control-center';
+
+// Variables that bootstrap the vault. They live only in the .env file on disk, never inside the vault
+// (the key cannot be stored in the store it encrypts). Deploys preserve them from the existing file.
+export const BOOTSTRAP_KEYS: ReadonlySet<string> = new Set(['VAULT_SECRET', 'VAULT_STORAGE_FILE']);
+
 const MASTER_SECRET = process.env.VAULT_SECRET || process.env.SESSION_SECRET || 'cc-vault-master-secret-key-2026';
 const ALGORITHM = 'aes-256-gcm';
 const KEY = scryptSync(MASTER_SECRET, 'cc-vault-salt-unique', 32);
+
+// A source of truth must not be encrypted with a key that is public in the source code.
+function assertVaultKeyConfigured(): void {
+  if (!process.env.VAULT_SECRET) {
+    throw new Error('VAULT_SECRET is not configured: refusing to write secrets with the built-in fallback key.');
+  }
+}
 
 export interface StoredVaultRecord {
   id: string;
@@ -25,44 +39,12 @@ interface StoredVaultFile {
 }
 
 export const DEFAULT_PROJECT_CONFIGS: Record<string, VaultProjectConfig> = {
-  'control-center': {
-    projectName: 'control-center',
+  [VAULT_PROJECT]: {
+    projectName: VAULT_PROJECT,
     filePath: '/home/adminnico/repositories/control-center/.env',
-    dockerService: 'control-center-api,control-center-web',
+    dockerService: 'api,worker',
     environment: 'production',
     criticality: 'CRITICAL',
-    lastSyncedAt: null,
-  },
-  'minijuegos': {
-    projectName: 'minijuegos',
-    filePath: '/home/adminnico/repositories/minijuegos/.env',
-    dockerService: 'minijuegos-app',
-    environment: 'production',
-    criticality: 'HIGH',
-    lastSyncedAt: null,
-  },
-  'susterart': {
-    projectName: 'susterart',
-    filePath: '/home/adminnico/repositories/susterart/.env',
-    dockerService: 'susterart-web',
-    environment: 'production',
-    criticality: 'MEDIUM',
-    lastSyncedAt: null,
-  },
-  'nikipepperstattoo': {
-    projectName: 'nikipepperstattoo',
-    filePath: '/home/adminnico/repositories/nikipepperstattoo/.env',
-    dockerService: 'tattoos-web',
-    environment: 'production',
-    criticality: 'MEDIUM',
-    lastSyncedAt: null,
-  },
-  'resume.nicoguzmandev': {
-    projectName: 'resume.nicoguzmandev',
-    filePath: '/home/adminnico/repositories/resume.nicoguzmandev/.env',
-    dockerService: 'resume-web',
-    environment: 'production',
-    criticality: 'LOW',
     lastSyncedAt: null,
   },
 };
@@ -110,10 +92,13 @@ export function loadStoredData(): {
     }
     const raw = readFileSync(STORAGE_PATH, 'utf-8');
     const data = JSON.parse(raw) as StoredVaultFile;
-    const items = Array.isArray(data.items) ? data.items : [];
-    const projectConfigs = {
-      ...DEFAULT_PROJECT_CONFIGS,
-      ...(data.projectConfigs || {}),
+    // Only the Control Center project is indexed: anything else found in the file is ignored.
+    const items = (Array.isArray(data.items) ? data.items : []).filter(
+      (r) => (r.project || '').toLowerCase() === VAULT_PROJECT && !BOOTSTRAP_KEYS.has(r.key),
+    );
+    const stored = data.projectConfigs?.[VAULT_PROJECT];
+    const projectConfigs: Record<string, VaultProjectConfig> = {
+      [VAULT_PROJECT]: { ...DEFAULT_PROJECT_CONFIGS[VAULT_PROJECT]!, ...(stored || {}), projectName: VAULT_PROJECT },
     };
     return { items, projectConfigs };
   } catch {
@@ -144,30 +129,7 @@ export function getVaultOverview(customAudit?: VaultAuditSummary): VaultOverview
     updatedAt: r.updatedAt,
   }));
 
-  const projectSet = new Set<string>();
-  for (const p of Object.keys(projectConfigs)) {
-    projectSet.add(p);
-  }
-  for (const item of items) {
-    if (item.project) projectSet.add(item.project);
-  }
-  const projects = Array.from(projectSet).sort();
-  if (!projects.includes('global')) {
-    projects.unshift('global');
-  }
-
-  // Ensure default config exists for any project in items
-  for (const p of projects) {
-    if (!projectConfigs[p]) {
-      projectConfigs[p] = {
-        projectName: p,
-        filePath: `/home/adminnico/repositories/${p}/.env`,
-        environment: 'production',
-        criticality: 'MEDIUM',
-        lastSyncedAt: null,
-      };
-    }
-  }
+  const projects = [VAULT_PROJECT];
 
   // Sort items: by project, then by key
   items.sort((a, b) => {
@@ -189,10 +151,14 @@ export function getVaultOverview(customAudit?: VaultAuditSummary): VaultOverview
 }
 
 export function upsertProjectConfig(config: VaultProjectConfig): VaultProjectConfig {
+  if (config.projectName.toLowerCase() !== VAULT_PROJECT) {
+    throw new Error(`The vault only indexes the "${VAULT_PROJECT}" project.`);
+  }
   const data = loadStoredData();
-  data.projectConfigs[config.projectName] = config;
+  const next = { ...config, projectName: VAULT_PROJECT };
+  data.projectConfigs[VAULT_PROJECT] = next;
   saveStoredData(data);
-  return config;
+  return next;
 }
 
 export function updateProjectLastSynced(projectName: string): void {
@@ -212,10 +178,14 @@ export function upsertVaultItem(input: {
   description?: string;
   isSecret?: boolean;
 }): VaultItem {
+  assertVaultKeyConfigured();
   const data = loadStoredData();
   const id = input.id || randomUUID();
-  const project = (input.project || 'global').trim();
+  const project = VAULT_PROJECT; // single-project vault: any other value is ignored
   const key = input.key.trim();
+  if (BOOTSTRAP_KEYS.has(key)) {
+    throw new Error(`${key} is a bootstrap variable and cannot be stored in the vault.`);
+  }
   const description = input.description?.trim() || '';
   const isSecret = input.isSecret !== false;
   const updatedAt = new Date().toISOString();
@@ -270,9 +240,10 @@ export function deleteVaultItem(id: string): boolean {
 }
 
 export function importEnvText(
-  project: string,
+  _project: string,
   rawEnv: string,
 ): { importedCount: number; items: VaultItem[] } {
+  const project = VAULT_PROJECT;
   const lines = rawEnv.split(/\r?\n/);
   const results: VaultItem[] = [];
 
@@ -297,7 +268,7 @@ export function importEnvText(
       val = val.substring(1, val.length - 1);
     }
 
-    if (!key) continue;
+    if (!key || BOOTSTRAP_KEYS.has(key)) continue;
 
     const upperKey = key.toUpperCase();
     const isSecret =
@@ -322,7 +293,8 @@ export function importEnvText(
   return { importedCount: results.length, items: results };
 }
 
-export function exportEnvText(project: string): string {
+export function exportEnvText(_project?: string): string {
+  const project = VAULT_PROJECT;
   const { items } = getVaultOverview();
   const projectItems = items.filter((i) => i.project.toLowerCase() === project.toLowerCase());
 

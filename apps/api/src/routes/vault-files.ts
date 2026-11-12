@@ -132,8 +132,11 @@ export const vaultFilesRoutes: FastifyPluginAsync = async (app) => {
     const parsed = ProjectConfigInput.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Invalid project config payload' });
 
-    const updated = upsertProjectConfig(parsed.data);
-    return updated;
+    try {
+      return upsertProjectConfig(parsed.data);
+    } catch (err: any) {
+      return reply.code(400).send({ error: err.message || 'Failed to save project config' });
+    }
   });
 
   app.get('/vault/diff', async (req, reply): Promise<VaultDiffResult | void> => {
@@ -195,8 +198,11 @@ export const vaultFilesRoutes: FastifyPluginAsync = async (app) => {
     const parsed = VaultInput.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Invalid vault item payload' });
 
-    const item = upsertVaultItem(parsed.data);
-    return item;
+    try {
+      return upsertVaultItem(parsed.data);
+    } catch (err: any) {
+      return reply.code(400).send({ error: err.message || 'Failed to save secret' });
+    }
   });
 
   app.delete('/vault/:id', async (req, reply) => {
@@ -214,8 +220,11 @@ export const vaultFilesRoutes: FastifyPluginAsync = async (app) => {
     const parsed = ImportInput.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Invalid import payload' });
 
-    const res = importEnvText(parsed.data.project, parsed.data.envText);
-    return res;
+    try {
+      return importEnvText(parsed.data.project, parsed.data.envText);
+    } catch (err: any) {
+      return reply.code(400).send({ error: err.message || 'Failed to import variables' });
+    }
   });
 
   app.get('/vault/export', async (req) => {
