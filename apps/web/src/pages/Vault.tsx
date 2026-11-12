@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   DiscoveredEnvFile,
@@ -12,6 +12,27 @@ import type {
   VaultProjectConfig,
 } from '@cc/shared';
 import { api } from '../api.ts';
+import {
+  KeyIcon,
+  SearchIcon,
+  PlusIcon,
+  ImportIcon,
+  ExportIcon,
+  DiffIcon,
+  GearIcon,
+  LockIcon,
+  EyeIcon,
+  EyeOffIcon,
+  ClipboardIcon,
+  CheckIcon,
+  EditIcon,
+  TrashIcon,
+  RefreshIcon,
+  FolderIcon,
+  AlertTriangleIcon,
+  ShieldIcon,
+  DeployIcon,
+} from '../components/Icons.tsx';
 import { useClipboard } from '../hooks/useClipboard.ts';
 
 export function VaultPage() {
@@ -266,7 +287,7 @@ export function VaultPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-ink flex items-center gap-2">
-            <span className="emoji-bw">ðŸ”‘</span> Env Vault & Security Auditor
+            <KeyIcon size={20} /><span>Env Vault & Security Auditor</span>
           </h1>
           <p className="text-xs text-ink-2 mt-0.5">
             Centralized encrypted secrets vault, disk drifting detection, and VPS security auditor
@@ -281,7 +302,7 @@ export function VaultPage() {
             className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
             title="Scan VPS filesystem for drifting, permissions, and git exposure"
           >
-            <span className="emoji-bw">{auditMutation.isPending ? 'â³' : 'ðŸ›¡ï¸'}</span>
+            {auditMutation.isPending ? <RefreshIcon size={14} className="animate-spin" /> : <ShieldIcon size={14} />}
             {auditMutation.isPending ? 'Auditing...' : 'Scan & Audit VPS'}
           </button>
           <button
@@ -289,14 +310,14 @@ export function VaultPage() {
             onClick={() => setIsDiscoverModalOpen(true)}
             className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
           >
-            <span className="emoji-bw">ðŸ”</span> Discover .env
+            <SearchIcon size={14} /><span>Discover .env</span>
           </button>
           <button
             type="button"
             onClick={() => openAddModal()}
             className="btn btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
           >
-            <span className="emoji-bw">âž•</span> Add Secret
+            <PlusIcon size={14} /><span>Add Secret</span>
           </button>
           <button
             type="button"
@@ -306,14 +327,14 @@ export function VaultPage() {
             }}
             className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
           >
-            <span className="emoji-bw">ðŸ“¥</span> Import
+            <ImportIcon size={14} /><span>Import</span>
           </button>
           <button
             type="button"
             onClick={() => openExportModal(selectedProject !== 'all' ? selectedProject : 'control-center')}
             className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
           >
-            <span className="emoji-bw">ðŸ“¤</span> Export
+            <ExportIcon size={14} /><span>Export</span>
           </button>
         </div>
       </div>
@@ -364,8 +385,8 @@ export function VaultPage() {
           </span>
           <span className="text-[10px] text-ink-2 mt-0.5 block">
             {(auditSummary?.criticalExposureCount ?? 0) > 0
-              ? 'ðŸš¨ Tracked in Git history!'
-              : 'âœ“ None committed to Git'}
+              ? 'Tracked in Git history!'
+              : 'Clean: None committed to Git'}
           </span>
         </div>
 
@@ -378,7 +399,7 @@ export function VaultPage() {
             {auditSummary?.driftCount ?? 0}
           </span>
           <span className="text-[10px] text-ink-2 mt-0.5 block">
-            {(auditSummary?.driftCount ?? 0) > 0 ? 'Mismatch with VPS disk' : 'âœ“ Synced with VPS disk'}
+            {(auditSummary?.driftCount ?? 0) > 0 ? 'Mismatch with VPS disk' : 'Synced with VPS disk'}
           </span>
         </div>
       </div>
@@ -394,7 +415,7 @@ export function VaultPage() {
               : 'text-ink-2 hover:text-ink hover:bg-subtle'
           }`}
         >
-          <span className="emoji-bw">ðŸ“‹</span> Projects Inventory & Audit ({auditSummary?.audits.length ?? 0})
+          <FolderIcon size={14} /><span>Projects Inventory & Audit</span> ({auditSummary?.audits.length ?? 0})
         </button>
         <button
           type="button"
@@ -405,7 +426,7 @@ export function VaultPage() {
               : 'text-ink-2 hover:text-ink hover:bg-subtle'
           }`}
         >
-          <span className="emoji-bw">ðŸ”</span> Secret Variables ({vault?.items.length ?? 0})
+          <LockIcon size={14} /><span>Secret Variables</span> ({vault?.items.length ?? 0})
         </button>
       </div>
 
@@ -448,7 +469,7 @@ export function VaultPage() {
                       )}
                     </div>
                     <span className="text-[11px] text-muted block font-mono">
-                      {audit.vaultItemCount} vars in vault Â· {audit.diskItemCount} on disk
+                      {audit.vaultItemCount} vars in vault · {audit.diskItemCount} on disk
                     </span>
                   </div>
 
@@ -466,9 +487,9 @@ export function VaultPage() {
                     <div className="flex items-center gap-2 text-[11px] text-muted">
                       <span>Perms: <strong className="font-mono text-ink-2">{audit.permissionsOctal}</strong></span>
                       {audit.existsOnDisk ? (
-                        <span className="text-emerald-400">â— On Disk</span>
+                        <span className="text-emerald-400">On Disk</span>
                       ) : (
-                        <span className="text-muted">â—‹ Missing</span>
+                        <span className="text-muted">○ Missing</span>
                       )}
                     </div>
                   </div>
@@ -477,11 +498,11 @@ export function VaultPage() {
                   <div className="col-span-2 mt-2 md:mt-0 space-y-1">
                     {audit.syncStatus === 'in_sync' ? (
                       <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
-                        âœ“ In Sync
+                        In Sync
                       </span>
                     ) : audit.syncStatus === 'drift_detected' ? (
                       <span className="text-[11px] text-amber-400 flex items-center gap-1 font-medium">
-                        âš ï¸ Drift Detected
+                        <span className="flex items-center gap-1"><AlertTriangleIcon size={12} className="text-amber-400" /> Drift Detected</span>
                       </span>
                     ) : (
                       <span className="text-[11px] text-muted flex items-center gap-1">
@@ -491,15 +512,15 @@ export function VaultPage() {
 
                     {hasCriticalIssues ? (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-danger/20 text-danger font-bold block w-fit">
-                        ðŸš¨ Critical Risk
+                        Critical Risk
                       </span>
                     ) : hasWarnings ? (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-semibold block w-fit">
-                        âš ï¸ Review Needed
+                        Review Needed
                       </span>
                     ) : (
                       <span className="text-[10px] text-emerald-400 block">
-                        ðŸ›¡ï¸ Protected
+                      <span className="text-[10px] text-emerald-400 flex items-center gap-1"><ShieldIcon /> Protected</span>
                       </span>
                     )}
                   </div>
@@ -512,7 +533,7 @@ export function VaultPage() {
                       className="btn btn-secondary text-xs px-2 py-1 flex items-center gap-1"
                       title="Compare Vault values with Disk"
                     >
-                      <span className="emoji-bw">ðŸ”</span> Diff
+                      <DiffIcon size={13} /><span>Diff</span>
                     </button>
                     <button
                       type="button"
@@ -520,7 +541,7 @@ export function VaultPage() {
                       className="btn btn-secondary text-xs px-2 py-1 flex items-center gap-1"
                       title="Push Vault secrets to VPS disk file"
                     >
-                      <span className="emoji-bw">ðŸš€</span> Deploy
+                      <DeployIcon size={13} /><span>Deploy</span>
                     </button>
                     <button
                       type="button"
@@ -528,11 +549,7 @@ export function VaultPage() {
                       className="btn btn-secondary text-xs px-2 py-1"
                       title="Edit project configuration"
                     >
-                      <span className="emoji-bw">âš™ï¸</span>
-                    </button>
-                  </div>
-
-                  {/* Issues expandable box if any */}
+                      <GearIcon size={13} /></button></div>{/* Issues expandable box if any */}
                   {audit.issues.length > 0 && (
                     <div className="col-span-12 mt-2 pt-2 border-t border-line/60 space-y-1">
                       {audit.issues.map((issue, idx) => (
@@ -551,7 +568,7 @@ export function VaultPage() {
                             <p className="text-[11px] mt-0.5 opacity-90">{issue.description}</p>
                             {issue.recommendation && (
                               <p className="text-[10px] mt-1 font-mono opacity-80">
-                                â†³ Fix: {issue.recommendation}
+                                Fix: {issue.recommendation}
                               </p>
                             )}
                           </div>
@@ -623,7 +640,7 @@ export function VaultPage() {
           {/* Variables List */}
           {filteredItems.length === 0 ? (
             <div className="card p-8 text-center space-y-2 border border-line">
-              <div className="emoji-bw text-2xl">ðŸ”’</div>
+              <div className="text-muted flex justify-center"><LockIcon size={32} /></div>
               <p className="text-sm font-medium text-ink">No secrets found</p>
               <p className="text-xs text-ink-2 max-w-sm mx-auto">
                 {searchQuery
@@ -636,7 +653,7 @@ export function VaultPage() {
                   onClick={() => openAddModal()}
                   className="btn btn-primary text-xs px-3 py-1.5 mt-2 inline-flex items-center gap-1.5"
                 >
-                  <span className="emoji-bw">âž•</span> Add First Secret
+                  <PlusIcon size={14} /><span>Add First Secret</span>
                 </button>
               )}
             </div>
@@ -674,7 +691,7 @@ export function VaultPage() {
                       {/* Masked / Plain Value Display */}
                       <div className="flex items-center gap-2 bg-page px-3 py-1.5 rounded-md border border-line font-mono text-xs min-w-[200px] max-w-full sm:max-w-xs overflow-hidden">
                         <span className="truncate select-all text-ink">
-                          {isRevealed ? item.value : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢'}
+                          {isRevealed ? item.value : '••••••••••••••••'}
                         </span>
                       </div>
 
@@ -687,7 +704,7 @@ export function VaultPage() {
                             className="btn btn-secondary text-xs px-2.5 py-1.5"
                             title={isRevealed ? 'Hide value' : 'Reveal value'}
                           >
-                            <span className="emoji-bw">{isRevealed ? 'ðŸ™ˆ' : 'ðŸ‘ï¸'}</span>
+                            {isRevealed ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
                           </button>
                         )}
 
@@ -697,7 +714,7 @@ export function VaultPage() {
                           className="btn btn-secondary text-xs px-2.5 py-1.5 flex items-center gap-1"
                           title="Copy value"
                         >
-                          <span className="emoji-bw">{isCopied ? 'âœ“' : 'ðŸ“‹'}</span>
+                          {isCopied ? <CheckIcon size={14} className="text-emerald-400" /> : <ClipboardIcon size={14} />}
                           <span className="text-[11px] hidden sm:inline">{isCopied ? 'Copied' : 'Copy'}</span>
                         </button>
 
@@ -707,22 +724,11 @@ export function VaultPage() {
                           className="btn btn-secondary text-xs px-2.5 py-1.5"
                           title="Edit secret"
                         >
-                          <span className="emoji-bw">âœï¸</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setItemToDelete(item)}
+                          <EditIcon size={14} /></button><button type="button" onClick={() => setItemToDelete(item)}
                           className="p-1.5 text-muted hover:text-danger transition rounded"
                           title="Delete secret"
                         >
-                          <span className="emoji-bw">ðŸ—‘ï¸</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                          <TrashIcon size={14} /></button></div></div></div>);})}
             </div>
           )}
         </div>
@@ -737,7 +743,7 @@ export function VaultPage() {
             <div className="px-4 py-3 border-b border-line flex items-center justify-between bg-subtle/30 flex-shrink-0">
               <div className="min-w-0">
                 <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-                  <span className="emoji-bw">ðŸ”</span> Diff: {diffProject}
+                  <DiffIcon size={13} /><span>Diff</span>: {diffProject}
                 </h3>
                 <p className="text-[11px] text-muted font-mono mt-0.5 truncate">
                   {diffQuery.data?.filePath || 'Path not configured'}
@@ -828,7 +834,7 @@ export function VaultPage() {
                 }}
                 className="btn btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
               >
-                <span className="emoji-bw">ðŸš€</span> Push Vault to Disk
+                <DeployIcon size={14} /><span>Push Vault to Disk</span>
               </button>
 
               <button
@@ -850,13 +856,13 @@ export function VaultPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-card border border-line rounded-xl shadow-2xl w-full max-w-md p-5 space-y-4">
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <span className="emoji-bw">ðŸš€</span> Deploy Secrets to VPS Disk
+              <DeployIcon size={13} /><span>Deploy</span> Secrets to VPS Disk
             </h3>
 
             {deployResult ? (
               <div className="space-y-3">
                 <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs">
-                  âœ“ Successfully deployed variables to VPS disk with chmod 600 permissions!
+                  Successfully deployed variables to VPS disk with chmod 600 permissions!
                 </div>
                 {deployResult.backupPath && (
                   <p className="text-[11px] text-muted font-mono">
@@ -921,7 +927,7 @@ export function VaultPage() {
             <div className="px-4 py-3 border-b border-line flex items-center justify-between bg-subtle/30 flex-shrink-0">
               <div>
                 <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-                  <span className="emoji-bw">ðŸ”</span> Discovered .env Files on VPS
+                  <SearchIcon size={16} /><span>Discovered .env Files on VPS</span>
                 </h3>
                 <p className="text-[11px] text-muted">
                   Auto-detect environment configs across repositories and import them into the Vault in 1 click
@@ -954,8 +960,7 @@ export function VaultPage() {
                 onClick={() => void discoverQuery.refetch()}
                 className="btn btn-secondary text-xs px-3 py-1 flex items-center gap-1.5"
               >
-                <span className="emoji-bw">ðŸ”„</span>
-                {discoverQuery.isFetching ? 'Scanning...' : 'Scan Path'}
+                {discoverQuery.isFetching ? <RefreshIcon size={14} className="animate-spin" /> : <RefreshIcon size={14} />}<span>{discoverQuery.isFetching ? "Scanning..." : "Scan Path"}</span>
               </button>
             </div>
 
@@ -964,7 +969,7 @@ export function VaultPage() {
                 <div className="p-8 text-center text-xs text-ink-2">Scanning VPS filesystem...</div>
               ) : discoverQuery.data?.length === 0 ? (
                 <div className="p-6 text-center space-y-2 border border-line/60 rounded-lg bg-page/50">
-                  <span className="emoji-bw text-xl block">ðŸ“‚</span>
+                  <span className="text-muted flex justify-center mb-1"><FolderIcon size={28} /></span>
                   <p className="text-xs font-medium text-ink">No .env files found in current scan path</p>
                   <p className="text-[11px] text-muted max-w-md mx-auto leading-relaxed">
                     This is completely normal if repositories keep their <code>.env</code> files gitignored or if files are in a different directory. You can specify a custom VPS path above (e.g. <code>/home/adminnico/repositories</code>) or manually paste your variables using <strong>Import .env</strong>.
@@ -992,7 +997,7 @@ export function VaultPage() {
                           )}
                           {wasImported && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                              âœ“ Imported into Vault
+                              Imported into Vault
                             </span>
                           )}
                         </div>
@@ -1012,7 +1017,7 @@ export function VaultPage() {
                           className="btn btn-primary text-xs px-2.5 py-1.5 flex items-center gap-1"
                           title="Read this file and encrypt all its variables into the Vault"
                         >
-                          <span className="emoji-bw">ðŸ“¥</span> Import into Vault
+                          <ImportIcon size={14} /><span>Import</span> into Vault
                         </button>
 
                         {!file.alreadyConfigured && (
@@ -1049,7 +1054,7 @@ export function VaultPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-card border border-line rounded-xl shadow-2xl w-full max-w-md p-5 space-y-4">
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <span className="emoji-bw">âš™ï¸</span> Configure {editingConfig.projectName}
+              <GearIcon size={16} /><span>Configure {editingConfig.projectName}</span>
             </h3>
 
             <div className="space-y-3 text-xs">
@@ -1140,7 +1145,7 @@ export function VaultPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-card border border-line rounded-xl shadow-2xl w-full max-w-md p-4 sm:p-5 space-y-4">
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <span className="emoji-bw">{editingItem ? 'âœï¸' : 'âž•'}</span>
+              {editingItem ? <EditIcon size={16} /> : <PlusIcon size={16} />}
               {editingItem ? 'Edit Secret' : 'Add New Secret'}
             </h3>
 
@@ -1245,7 +1250,7 @@ export function VaultPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-card border border-line rounded-xl shadow-2xl w-full max-w-lg p-4 sm:p-5 space-y-4">
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <span className="emoji-bw">ðŸ“¥</span> Import from .env File
+              <ImportIcon size={14} /><span>Import</span> from .env File
             </h3>
             <p className="text-xs text-ink-2">
               Paste raw contents of a <span className="font-mono">.env</span> file. Each line will be securely encrypted into the vault.
@@ -1312,7 +1317,7 @@ export function VaultPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-card border border-line rounded-xl shadow-2xl w-full max-w-lg p-4 sm:p-5 space-y-4">
             <h3 className="text-sm font-semibold text-ink flex items-center gap-2">
-              <span className="emoji-bw">ðŸ“¤</span> Export .env ({exportProject})
+              <ExportIcon size={14} /><span>Export</span> .env ({exportProject})
             </h3>
 
             <div>
@@ -1331,7 +1336,7 @@ export function VaultPage() {
                 onClick={() => downloadEnvFile(exportProject, exportText)}
                 className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
               >
-                <span className="emoji-bw">ðŸ’¾</span> Download .env
+                <ExportIcon size={14} /><span>Download .env</span>
               </button>
 
               <div className="flex items-center gap-2">
@@ -1344,7 +1349,7 @@ export function VaultPage() {
                   }}
                   className="btn btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
                 >
-                  <span className="emoji-bw">{copiedExport ? 'âœ“' : 'ðŸ“‹'}</span>
+                  {copiedExport ? <CheckIcon size={14} className="text-emerald-400" /> : <ClipboardIcon size={14} />}
                   {copiedExport ? 'Copied!' : 'Copy to Clipboard'}
                 </button>
                 <button
@@ -1365,7 +1370,7 @@ export function VaultPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-card border border-line rounded-xl shadow-2xl w-full max-w-sm p-4 space-y-4">
             <h3 className="text-sm font-semibold text-danger flex items-center gap-2">
-              <span className="emoji-bw">âš ï¸</span> Delete Secret
+              <AlertTriangleIcon size={16} /><span>Delete Secret</span>
             </h3>
 
             <p className="text-xs text-ink-2">
