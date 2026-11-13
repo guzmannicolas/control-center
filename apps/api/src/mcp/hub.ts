@@ -72,9 +72,10 @@ export function loadServers(): McpServerRecord[] {
     } else {
       // Keep builtin server token in sync with current env
       const idx = parsed.findIndex((s) => s.id === BUILTIN_SERVER_ID);
-      if (idx !== -1 && process.env.MCP_API_TOKEN) {
-        parsed[idx].headers = {
-          ...(parsed[idx].headers || {}),
+      const bServer = parsed[idx];
+      if (idx !== -1 && process.env.MCP_API_TOKEN && bServer) {
+        bServer.headers = {
+          ...(bServer.headers || {}),
           Authorization: `Bearer ${process.env.MCP_API_TOKEN}`,
         };
       }
@@ -129,7 +130,7 @@ export async function probeServer(server: McpServerRecord): Promise<McpServerLiv
     try {
       // 1. Initialize check
       const initPayload = {
-        jsonrpc: '2.0',
+        jsonrpc: '2.0' as const,
         id: 1,
         method: 'initialize',
         params: {
@@ -172,7 +173,7 @@ export async function probeServer(server: McpServerRecord): Promise<McpServerLiv
       baseView.serverInfo = initResult?.serverInfo;
 
       // 2. Fetch Tools List
-      const toolsPayload = { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} };
+      const toolsPayload = { jsonrpc: '2.0' as const, id: 2, method: 'tools/list', params: {} };
       let toolsRes: McpJsonRpcResponse;
       if (isBuiltIn && !process.env.FORCE_MCP_REMOTE_PROBE) {
         toolsRes = handleMcpRequest(toolsPayload);
@@ -195,7 +196,7 @@ export async function probeServer(server: McpServerRecord): Promise<McpServerLiv
 
       // 3. Fetch Resources List (optional)
       try {
-        const resPayload = { jsonrpc: '2.0', id: 3, method: 'resources/list', params: {} };
+        const resPayload = { jsonrpc: '2.0' as const, id: 3, method: 'resources/list', params: {} };
         let resRes: McpJsonRpcResponse;
         if (isBuiltIn && !process.env.FORCE_MCP_REMOTE_PROBE) {
           resRes = handleMcpRequest(resPayload);
@@ -286,7 +287,7 @@ export async function executeMcpTool(
   try {
     const isBuiltIn = server.id === BUILTIN_SERVER_ID;
     const rpcPayload = {
-      jsonrpc: '2.0',
+      jsonrpc: '2.0' as const,
       id: Date.now(),
       method: 'tools/call',
       params: {

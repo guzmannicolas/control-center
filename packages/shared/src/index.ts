@@ -1149,3 +1149,31 @@ export interface McpTelemetryOverview {
   recentCalls: McpToolCallLog[];
 }
 
+export interface McpClientTokenView {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  role: 'admin' | 'collaborator' | 'read-only';
+  enabled: boolean;
+  rateLimitPerMinute: number;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface McpAccessLogView {
+  id: string;
+  timestamp: string;
+  clientId: string;
+  clientName: string;
+  ip: string;
+  method: string;
+  toolName?: string;
+  status: 'ok' | 'error' | 'rejected' | 'rate_limited';
+  durationMs: number;
+}
+
+export interface McpAuditOverview {
+  recentLogs: McpAccessLogView[];
+  clientStats: Array<{ clientName: string; totalCalls: number; lastSeen: string | null }>;
+}
+

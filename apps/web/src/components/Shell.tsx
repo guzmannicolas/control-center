@@ -12,6 +12,7 @@ import {
   OverviewIcon,
   VpsIcon,
 } from './Icons.tsx';
+import { MenuSearch } from './MenuSearch.tsx';
 
 
 const MARKETING_SUBMENU = [
@@ -141,6 +142,7 @@ export function Shell({ user }: { user: User }) {
         </div>
 
         <div className="flex items-center gap-2">
+          <MenuSearch compact className="size-8" />
           {current && (
             <div className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink shadow-sm">
               <current.Icon />
@@ -192,6 +194,10 @@ export function Shell({ user }: { user: User }) {
           >
             <CloseIcon />
           </button>
+        </div>
+
+        <div className="px-3 pt-3">
+          <MenuSearch onOpenStateChange={(open) => { if (open) setMobileMenuOpen(false); }} />
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
@@ -273,12 +279,16 @@ export function Shell({ user }: { user: User }) {
                 isMarketing ? 'md:w-16 items-center' : 'md:w-56'
               }`}
             >
-              <div className={`flex items-center gap-2 pt-6 pb-4 w-full ${isMarketing ? 'justify-center px-0' : 'px-5'}`}>
+              <div className={`flex items-center gap-2 pt-6 pb-3 w-full ${isMarketing ? 'justify-center px-0' : 'px-5'}`}>
                 <span
                   aria-hidden
                   className="size-2.5 rounded-full bg-good shadow-[0_0_8px_rgba(12,163,12,0.6)]"
                 />
                 {!isMarketing && <span className="font-semibold text-sm">Control Center</span>}
+              </div>
+
+              <div className={`w-full pb-2 ${isMarketing ? 'px-2 flex justify-center' : 'px-3'}`}>
+                <MenuSearch compact={isMarketing} />
               </div>
 
               <div className={`flex-1 overflow-y-auto w-full ${isMarketing ? 'px-2 space-y-2' : 'px-3 py-2 space-y-4'}`}>

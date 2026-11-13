@@ -11,6 +11,7 @@ import { vaultFilesRoutes } from './vault-files.js';
 import { knowledgeRoutes } from './knowledge.js';
 import { promocionesRoutes } from './promociones.js';
 import { observabilityRoutes } from './observability.js';
+import { mcpAuthenticator } from '../mcp/auth.js';
 import { mcpHubRoutes } from './mcp-hub.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { Redis } from 'ioredis';
@@ -55,13 +56,24 @@ export const apiRoutes: FastifyPluginAsync<{ prisma: PrismaClient; redis?: Redis
       return;
 
     if (pathname === '/api/agent/context' || pathname === '/api/mcp' || pathname.startsWith('/api/mcp/')) {
-      if (hasValidMcpToken(req.headers)) return;
+      const mcpClient = await mcpAuthenticator.authenticate(req.headers);
+      if (mcpClient) {
+        (req as any).mcpClient = mcpClient;
+        return;
+      }
       const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);
       if (user) {
         req.user = user;
+        (req as any).mcpClient = {
+          id: user.id,
+          name: `User: ${user.email}`,
+          role: 'admin',
+          enabled: true,
+          rateLimitPerMinute: 300,
+        };
         return;
       }
-      return reply.code(401).send({ error: 'Not logged in or missing valid MCP_API_TOKEN' });
+      return reply.code(401).send({ error: 'Not logged in or missing valid MCP Bearer Token' });
     }
 
     const user = await findSessionUser(prisma, req.cookies[SESSION_COOKIE]);

@@ -47,6 +47,9 @@ import type {
   LlmTraceView,
   ApiMetricsView,
   QueueMetricsView,
+  McpClientTokenView,
+  McpAccessLogView,
+  McpAuditOverview,
   PriceGlitchOverview,
   PriceGlitchItem,
   LeadView,
@@ -734,4 +737,17 @@ export const api = {
     }),
   mcpDeleteServer: (id: string) =>
     request<{ ok: boolean; id: string }>(`/api/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // MCP Security & Collaborator Control
+  mcpTokens: () => request<McpClientTokenView[]>('/api/mcp/tokens'),
+  mcpCreateToken: (payload: { name: string; role?: string; rateLimit?: number }) =>
+    request<{ token: string; record: McpClientTokenView }>('/api/mcp/tokens', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  mcpRevokeToken: (id: string) =>
+    request<{ ok: boolean; revokedId: string }>(`/api/mcp/tokens/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  mcpAudit: () => request<McpAuditOverview>('/api/mcp/audit'),
 };

@@ -9,11 +9,49 @@ import {
   executeMcpTool,
   generateClientConfigs,
 } from '../mcp/hub.js';
+import { mcpAuthenticator } from '../mcp/auth.js';
+import { mcpAuditLogger } from '../mcp/audit.js';
 
 export const mcpHubRoutes: FastifyPluginAsync = async (app) => {
   // Observability & Server List
   app.get('/mcp/servers', async () => {
     return getMcpOverview();
+  });
+
+  // Collaborator Token Management
+  app.get('/mcp/tokens', async () => {
+    return mcpAuthenticator.listTokens();
+  });
+
+  app.post('/mcp/tokens', async (req, reply) => {
+    const body = (req.body || {}) as {
+      name?: string;
+      role?: 'admin' | 'collaborator' | 'read-only';
+      rateLimit?: number;
+    };
+    if (!body.name?.trim()) {
+      return reply.code(400).send({ error: 'Token name is required' });
+    }
+    const result = await mcpAuthenticator.createToken(body.name, body.role, body.rateLimit);
+    return reply.code(201).send(result);
+  });
+
+  app.delete('/mcp/tokens/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const ok = await mcpAuthenticator.revokeToken(id);
+    if (!ok) return reply.code(404).send({ error: 'Token not found' });
+    return { ok: true, revokedId: id };
+  });
+
+  // Real-Time Audit Logs & Client Stats
+  app.get('/mcp/audit', async (req) => {
+    const q = req.query as { limit?: string };
+    const limit = Math.min(100, Math.max(1, parseInt(q.limit ?? '50', 10)));
+    const [recentLogs, clientStats] = await Promise.all([
+      mcpAuditLogger.getRecentLogs(limit),
+      mcpAuditLogger.getClientStats(),
+    ]);
+    return { recentLogs, clientStats };
   });
 
   // Client configuration snippets
@@ -95,9 +133,9 @@ export const mcpHubRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(404).send({ error: `MCP server "${id}" not found` });
     }
 
-    const existing = servers[index];
+    const existing = servers[index]!;
     const updated: McpServerRecord = {
-      ...existing,
+      id: existing.id,
       name: body.name !== undefined ? body.name.trim() : existing.name,
       description: body.description !== undefined ? body.description.trim() : existing.description,
       type: existing.isBuiltIn ? existing.type : (body.type || existing.type),
@@ -107,6 +145,8 @@ export const mcpHubRoutes: FastifyPluginAsync = async (app) => {
       headers: body.headers !== undefined ? body.headers : existing.headers,
       env: body.env !== undefined ? body.env : existing.env,
       enabled: body.enabled !== undefined ? body.enabled : existing.enabled,
+      isBuiltIn: existing.isBuiltIn,
+      createdAt: existing.createdAt,
       updatedAt: new Date().toISOString(),
     };
 

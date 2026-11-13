@@ -6,7 +6,8 @@ import {
   writeKnowledgeDoc,
   getSystemContext,
 } from '../knowledge/manager.js';
-import { handleMcpRequest, type McpJsonRpcRequest } from '../knowledge/mcp.js';
+import { handleMcpRequest } from '../knowledge/mcp.js';
+import { dispatchMcpRequest, type McpJsonRpcRequest } from '../mcp/dispatcher.js';
 
 export const knowledgeRoutes: FastifyPluginAsync = async (app) => {
   // Knowledge Base & Repository Graph routes
@@ -85,10 +86,25 @@ export const knowledgeRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(markdownContext);
   });
 
-  app.post('/mcp', async (req, reply) => {
+  app.post('/mcp', {
+    config: {
+      rateLimit: {
+        max: 120,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (req, reply) => {
     try {
+      const client = (req as any).mcpClient || {
+        id: 'master-token',
+        name: 'Master Admin (.env)',
+        role: 'admin',
+        enabled: true,
+        rateLimitPerMinute: 300,
+      };
+      const ip = req.ip || '127.0.0.1';
       const body = req.body as McpJsonRpcRequest;
-      const response = handleMcpRequest(body);
+      const response = await dispatchMcpRequest(body, { client, ip });
       return response;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
