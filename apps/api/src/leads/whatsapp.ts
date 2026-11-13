@@ -1,6 +1,7 @@
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
+  Browsers,
   type WASocket,
   type ConnectionState,
 } from '@whiskeysockets/baileys';
@@ -53,6 +54,15 @@ function resolveAuthFolder(): string {
   }
 }
 
+export function hasSavedWhatsAppSession(): boolean {
+  try {
+    const authFolder = resolveAuthFolder();
+    return existsSync(resolve(authFolder, 'creds.json'));
+  } catch {
+    return false;
+  }
+}
+
 let sock: WASocket | null = null;
 let currentStatus: WhatsAppServiceStatus = {
   state: 'disconnected',
@@ -61,15 +71,21 @@ let currentStatus: WhatsAppServiceStatus = {
   userName: null,
 };
 let isInitializing = false;
+let reconnectTimeout: NodeJS.Timeout | null = null;
 let globalPrisma: PrismaClient | null = null;
 
-const logger = pino({ level: 'silent' });
+const logger = pino({ level: 'warn' });
 
 export function setPrismaForWhatsApp(prisma: PrismaClient) {
   globalPrisma = prisma;
 }
 
 export function getWhatsAppStatus(): WhatsAppServiceStatus {
+  // If we have saved credentials and are currently disconnected, kick off background connection
+  if (currentStatus.state === 'disconnected' && !isInitializing && hasSavedWhatsAppSession()) {
+    console.log('[WhatsApp] Saved credentials detected on status check, initializing in background...');
+    void initWhatsAppClient(false);
+  }
   return { ...currentStatus };
 }
 
@@ -91,6 +107,11 @@ export async function initWhatsAppClient(forceRefresh = false): Promise<WhatsApp
     return currentStatus;
   }
 
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+
   isInitializing = true;
   currentStatus.state = 'connecting';
   currentStatus.error = null;
@@ -109,6 +130,20 @@ export async function initWhatsAppClient(forceRefresh = false): Promise<WhatsApp
 
   const authFolder = resolveAuthFolder();
 
+  // On forced refresh, purge existing credentials for a clean QR generation
+  if (forceRefresh) {
+    console.log('[WhatsApp] Force refresh requested. Purging credentials in:', authFolder);
+    try {
+      rmSync(authFolder, { recursive: true, force: true });
+      mkdirSync(authFolder, { recursive: true });
+    } catch (err) {
+      console.warn('[WhatsApp] Could not purge auth folder:', err);
+    }
+    currentStatus.qrDataUrl = null;
+    currentStatus.phoneNumber = null;
+    currentStatus.userName = null;
+  }
+
   return new Promise<WhatsAppServiceStatus>((resolvePromise) => {
     let resolved = false;
     const safeResolve = (status: WhatsAppServiceStatus) => {
@@ -118,28 +153,39 @@ export async function initWhatsAppClient(forceRefresh = false): Promise<WhatsApp
       }
     };
 
-    // Timeout: if QR isn't generated in 4.5 seconds, return whatever status we have while background continues
+    // Timeout: if QR or connection isn't complete in 4.5 seconds, return whatever status we have while background continues
     const timer = setTimeout(() => {
       safeResolve(currentStatus);
     }, 4500);
 
     (async () => {
       try {
+        console.log('[WhatsApp] Loading auth state from:', authFolder);
         const { state, saveCreds } = await useMultiFileAuthState(authFolder);
 
         sock = makeWASocket({
           auth: state,
           printQRInTerminal: false,
           logger,
-          browser: ['Control Center Sales', 'Chrome', '1.0.0'],
+          browser: Browsers.ubuntu('Chrome'),
+          syncFullHistory: false,
+          markOnlineOnConnect: false,
+          generateHighQualityLinkPreview: false,
+          defaultQueryTimeoutMs: 60_000,
+          connectTimeoutMs: 60_000,
+          keepAliveIntervalMs: 25_000,
         });
 
-        sock.ev.on('creds.update', saveCreds);
+        sock.ev.on('creds.update', async () => {
+          console.log('[WhatsApp] Creds update event received, saving credentials...');
+          await saveCreds();
+        });
 
         sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
           const { connection, lastDisconnect, qr } = update;
 
           if (qr) {
+            console.log('[WhatsApp] New QR code generated');
             try {
               currentStatus.qrDataUrl = await QRCode.toDataURL(qr);
               currentStatus.state = 'waiting_qr';
@@ -152,27 +198,10 @@ export async function initWhatsAppClient(forceRefresh = false): Promise<WhatsApp
             }
           }
 
-          if (connection === 'close') {
-            const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-            currentStatus.state = 'disconnected';
-            currentStatus.phoneNumber = null;
-            currentStatus.userName = null;
-
-            if (shouldReconnect) {
-              isInitializing = false;
-            } else {
-              // Logged out: clean stored creds
-              currentStatus.qrDataUrl = null;
-              isInitializing = false;
-              try {
-                rmSync(authFolder, { recursive: true, force: true });
-              } catch {
-                // ignore
-              }
-            }
+          if (connection === 'connecting') {
+            console.log('[WhatsApp] Connection state: connecting...');
           } else if (connection === 'open') {
+            console.log('[WhatsApp] Connection state: OPEN');
             currentStatus.state = 'connected';
             currentStatus.qrDataUrl = null;
             currentStatus.error = null;
@@ -182,10 +211,49 @@ export async function initWhatsAppClient(forceRefresh = false): Promise<WhatsApp
               const rawId = user.id.split(':')[0] ?? user.id;
               currentStatus.phoneNumber = `+${rawId}`;
               currentStatus.userName = user.name ?? null;
+              console.log(`[WhatsApp] Authenticated as ${currentStatus.phoneNumber} (${currentStatus.userName || 'No Name'})`);
             }
             isInitializing = false;
+            if (reconnectTimeout) {
+              clearTimeout(reconnectTimeout);
+              reconnectTimeout = null;
+            }
             clearTimeout(timer);
             safeResolve(currentStatus);
+          } else if (connection === 'close') {
+            const err = lastDisconnect?.error as any;
+            const statusCode = err?.output?.statusCode || err?.statusCode;
+            const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+            const shouldReconnect = !isLoggedOut;
+
+            console.log(`[WhatsApp] Connection closed. StatusCode: ${statusCode}, isLoggedOut: ${isLoggedOut}, shouldReconnect: ${shouldReconnect}`);
+
+            if (shouldReconnect) {
+              // Crucial: keep state as connecting so UI displays linking progress instead of reverting to disconnected
+              currentStatus.state = 'connecting';
+              isInitializing = false;
+
+              // Give a short delay to allow saveCreds to flush files before re-creating socket
+              if (reconnectTimeout) clearTimeout(reconnectTimeout);
+              reconnectTimeout = setTimeout(() => {
+                console.log('[WhatsApp] Re-initializing connection after close event...');
+                void initWhatsAppClient(false);
+              }, 1200);
+            } else {
+              // Logged out: session explicitly terminated by WhatsApp
+              currentStatus.state = 'disconnected';
+              currentStatus.qrDataUrl = null;
+              currentStatus.phoneNumber = null;
+              currentStatus.userName = null;
+              currentStatus.error = 'Sesion cerrada en WhatsApp. Genera un nuevo codigo QR.';
+              isInitializing = false;
+              try {
+                rmSync(authFolder, { recursive: true, force: true });
+              } catch {
+                // ignore
+              }
+              safeResolve(currentStatus);
+            }
           }
         });
 

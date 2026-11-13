@@ -2129,7 +2129,7 @@ export function LeadsPage() {
                   : waStatus.state === 'waiting_qr'
                   ? 'Esperando escaneo de QR'
                   : waStatus.state === 'connecting'
-                  ? 'Iniciando conexion...'
+                  ? (waStatus.qrDataUrl ? 'Emparejando dispositivo...' : 'Iniciando conexion...')
                   : 'Desconectado'}
               </strong>
             </div>
@@ -2137,6 +2137,17 @@ export function LeadsPage() {
             {waStatus.error && (
               <div style={{ fontSize: '0.78rem', color: '#fca5a5', background: '#450a0a', border: '1px solid #7f1d1d', padding: '0.6rem', borderRadius: '6px' }}>
                 Error: {waStatus.error}
+              </div>
+            )}
+
+            {waStatus.state === 'connecting' && waStatus.qrDataUrl && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', padding: '1.5rem', background: '#0b192c', borderRadius: '8px', border: '1px solid #1e3a8a' }}>
+                <span style={{ color: '#38bdf8', fontWeight: 600, fontSize: '0.92rem' }}>
+                  Sincronizando con tu telefono...
+                </span>
+                <span style={{ fontSize: '0.8rem', color: '#93c5fd', textAlign: 'center' }}>
+                  QR escaneado correctamente. WhatsApp esta vinculando la sesion en el servidor. Aguarda unos segundos sin cerrar esta ventana.
+                </span>
               </div>
             )}
 
