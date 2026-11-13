@@ -467,8 +467,9 @@ export const leadsRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (
     return { status: getWhatsAppStatus() };
   });
 
-  app.post('/whatsapp/connect', async () => {
-    const status = await initWhatsAppClient();
+  app.post('/whatsapp/connect', async (req) => {
+    const body = (req.body ?? {}) as { force?: boolean };
+    const status = await initWhatsAppClient(Boolean(body.force));
     return { status };
   });
 

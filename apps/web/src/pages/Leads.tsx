@@ -472,10 +472,10 @@ export function LeadsPage() {
     }
   };
 
-  const handleConnectWhatsApp = async () => {
+  const handleConnectWhatsApp = async (force = true) => {
     setWaLoading(true);
     try {
-      const data = await api.whatsappConnect();
+      const data = await api.whatsappConnect(force);
       setWaStatus(data.status);
     } catch (err) {
       console.error(err);
@@ -498,9 +498,10 @@ export function LeadsPage() {
 
   useEffect(() => {
     void loadWhatsAppStatus();
-    const interval = setInterval(loadWhatsAppStatus, 5000);
+    const intervalMs = waModalOpen ? 1500 : 8000;
+    const interval = setInterval(loadWhatsAppStatus, intervalMs);
     return () => clearInterval(interval);
-  }, []);
+  }, [waModalOpen]);
 
   const loadQueueStatus = async () => {
     try {
@@ -2122,14 +2123,49 @@ export function LeadsPage() {
             </div>
 
             <div style={{ fontSize: '0.84rem', color: '#cbd5e1' }}>
-              Estado actual: <strong style={{ color: waStatus.state === 'connected' ? '#34d399' : '#facc15' }}>{waStatus.state}</strong>
+              Estado actual: <strong style={{ color: waStatus.state === 'connected' ? '#34d399' : waStatus.state === 'waiting_qr' ? '#38bdf8' : '#facc15' }}>
+                {waStatus.state === 'connected'
+                  ? 'Conectado'
+                  : waStatus.state === 'waiting_qr'
+                  ? 'Esperando escaneo de QR'
+                  : waStatus.state === 'connecting'
+                  ? 'Iniciando conexion...'
+                  : 'Desconectado'}
+              </strong>
             </div>
+
+            {waStatus.error && (
+              <div style={{ fontSize: '0.78rem', color: '#fca5a5', background: '#450a0a', border: '1px solid #7f1d1d', padding: '0.6rem', borderRadius: '6px' }}>
+                Error: {waStatus.error}
+              </div>
+            )}
+
+            {waStatus.state === 'connecting' && !waStatus.qrDataUrl && (
+              <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.84rem' }}>
+                Iniciando pasarela de WhatsApp y generando codigo QR...
+              </div>
+            )}
 
             {waStatus.qrDataUrl && waStatus.state === 'waiting_qr' && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem' }}>
-                <img src={waStatus.qrDataUrl} alt="WhatsApp QR" style={{ width: '220px', height: '220px', borderRadius: '8px' }} />
-                <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Escanea el codigo desde WhatsApp en tu telefono (Dispositivos vinculados).
+                <img
+                  src={waStatus.qrDataUrl}
+                  alt="WhatsApp QR"
+                  style={{ width: '230px', height: '230px', borderRadius: '8px', background: '#ffffff', padding: '8px' }}
+                />
+                <span style={{ fontSize: '0.78rem', color: '#94a3b8', textAlign: 'center' }}>
+                  Abri WhatsApp en tu telefono &rarr; Dispositivos vinculados &rarr; Vincular dispositivo y escanea este codigo.
+                </span>
+              </div>
+            )}
+
+            {waStatus.state === 'connected' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem', padding: '1rem', background: '#052e16', border: '1px solid #166534', borderRadius: '8px' }}>
+                <span style={{ color: '#4ade80', fontWeight: 700, fontSize: '0.92rem' }}>
+                  Sesion activa de WhatsApp
+                </span>
+                <span style={{ color: '#bbf7d0', fontSize: '0.82rem' }}>
+                  Numero: {waStatus.phoneNumber ?? 'Activo'} {waStatus.userName ? `(${waStatus.userName})` : ''}
                 </span>
               </div>
             )}
@@ -2138,7 +2174,7 @@ export function LeadsPage() {
               {waStatus.state !== 'connected' ? (
                 <button
                   type="button"
-                  onClick={() => void handleConnectWhatsApp()}
+                  onClick={() => void handleConnectWhatsApp(true)}
                   disabled={waLoading}
                   style={{
                     flex: 1,
@@ -2152,7 +2188,7 @@ export function LeadsPage() {
                     cursor: waLoading ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {waLoading ? 'Iniciando...' : 'Generar Codigo QR'}
+                  {waLoading ? 'Generando QR...' : waStatus.state === 'waiting_qr' ? 'Regenerar Codigo QR' : 'Generar Codigo QR'}
                 </button>
               ) : (
                 <button

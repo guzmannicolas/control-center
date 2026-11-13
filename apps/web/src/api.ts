@@ -685,7 +685,7 @@ export const api = {
   leadExportCsvUrl: () => `${BASE}/api/leads/export/csv`,
 
   whatsappStatus: () => request<{ status: WhatsAppStatus }>('/api/whatsapp/status'),
-  whatsappConnect: () => request<{ status: WhatsAppStatus }>('/api/whatsapp/connect', { method: 'POST' }),
+  whatsappConnect: (force?: boolean) => request<{ status: WhatsAppStatus }>('/api/whatsapp/connect', { method: 'POST', body: JSON.stringify({ force }) }),
   whatsappDisconnect: () => request<{ status: WhatsAppStatus }>('/api/whatsapp/disconnect', { method: 'POST' }),
   outreachStatus: () => request<{ status: any }>('/api/leads/outreach/status'),
   outreachQueue: (payload: { leadIds: string[] }) =>
