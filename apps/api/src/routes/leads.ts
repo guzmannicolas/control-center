@@ -7,7 +7,7 @@ import {
 } from '../leads/scraper.js';
 import { verifyInstagramProfile } from '../leads/instagram.js';
 import { generatePersonalizedPitch } from '../leads/pitch.js';
-import { createOutreachQueue, type OutreachJobData } from '../leads/outreach-queue.js';
+import { createOutreachQueue, createOutreachWorker, type OutreachJobData } from '../leads/outreach-queue.js';
 import {
   initWhatsAppClient,
   getWhatsAppStatus,
@@ -25,8 +25,18 @@ const escapeCsv = (val: unknown) => {
 };
 
 export const leadsRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (app, { prisma }) => {
-  const outreachRedis = createRedis(process.env.REDIS_URL || 'redis://redis:6379');
+  const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+  const outreachRedis = createRedis(redisUrl);
+  const outreachWorkerRedis = createRedis(redisUrl);
   const outreachQueue = createOutreachQueue(outreachRedis);
+  const outreachWorker = createOutreachWorker(outreachWorkerRedis, prisma);
+
+  app.addHook('onClose', async () => {
+    await outreachWorker.close();
+    await outreachWorkerRedis.quit();
+    await outreachRedis.quit();
+  });
+
   setPrismaForWhatsApp(prisma);
   void initWhatsAppClient();
 
@@ -423,7 +433,7 @@ export const leadsRoutes: FastifyPluginAsync<{ prisma: PrismaClient }> = async (
     const leads = await prisma.lead.findMany({
       where: {
         id: { in: leadIds },
-        phoneFormatted: { not: null },
+        OR: [{ phoneFormatted: { not: null } }, { phone: { not: null } }],
       },
     });
 

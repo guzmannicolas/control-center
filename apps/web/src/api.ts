@@ -688,11 +688,13 @@ export const api = {
   whatsappConnect: (force?: boolean) => request<{ status: WhatsAppStatus }>('/api/whatsapp/connect', { method: 'POST', body: JSON.stringify({ force }) }),
   whatsappDisconnect: () => request<{ status: WhatsAppStatus }>('/api/whatsapp/disconnect', { method: 'POST' }),
   outreachStatus: () => request<{ status: any }>('/api/leads/outreach/status'),
-  outreachQueue: (payload: { leadIds: string[] }) =>
-    request<{ ok: boolean }>('/api/leads/outreach/queue', {
+  outreachQueue: (payload: { leadIds: string[]; customPitch?: string; isFollowUp?: boolean }) =>
+    request<{ ok: boolean; queuedCount: number }>('/api/leads/outreach/queue', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  outreachPause: () => request<{ ok: boolean; isPaused: boolean }>('/api/leads/outreach/pause', { method: 'POST' }),
+  outreachResume: () => request<{ ok: boolean; isPaused: boolean }>('/api/leads/outreach/resume', { method: 'POST' }),
 
   // Observability Telemetry & APM
   observabilityOverview: () => request<ObservabilityOverview>('/api/observability/overview'),

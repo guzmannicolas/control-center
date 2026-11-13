@@ -55,9 +55,37 @@ export interface SpeechPreset {
 
 export const INITIAL_SPEECH_PRESETS: SpeechPreset[] = [
   {
+    id: 'wa_sin_web_natural',
+    label: 'Directo & Humano - Sin Web ($60k/año)',
+    description: 'Tu version natural y descontracturada aclarando que responde un humano y ofreciendo web por $60.000 ARS al año.',
+    template:
+      'Hola! Si, esto es un mensaje automatizado, pero si me contestas, te va a hablar quien escribio esto, un humano.\nSoy Nicolas, desarrollador, y quiero ayudarte a tener presencia digital, 2026, tenes que tener una web para tu negocio.\nA solo 60 mil pesos argentinos por año.\nConsultame tranqui',
+  },
+  {
+    id: 'wa_sin_web_demo',
+    label: 'Directo & Humano - Sin Web + Demo ($60k/año)',
+    description: 'Mismo tono sincero de $60.000/año sumando el link a la demo interactiva del rubro ({demo}).',
+    template:
+      'Hola! Si, esto es un mensaje automatizado, pero si me contestas, te va a hablar quien escribio esto, un humano.\nSoy Nicolas, desarrollador, y quiero ayudarte a tener presencia digital. En 2026 tenes que tener una web para tu negocio y les arme esta muestra para su rubro: {demo}\nA solo 60 mil pesos argentinos por año.\nConsultame tranqui',
+  },
+  {
+    id: 'wa_con_web_natural',
+    label: 'Directo & Humano - Con Web / Mejora ($60k/año)',
+    description: 'Variante natural para negocios que ya tienen pagina pero pueden sumar automatizacion o renovarla.',
+    template:
+      'Hola! Si, esto es un mensaje automatizado, pero si me contestas, te va a hablar quien escribio esto, un humano.\nSoy Nicolas, desarrollador. Vi que en {name} ya tienen pagina, pero quizas les sirva renovarla o sumar automatizacion de respuestas en WhatsApp e Instagram.\nPor 60 mil pesos argentinos al año les dejo todo armado y funcionando.\nConsultame tranqui',
+  },
+  {
+    id: 'wa_corto_rapido',
+    label: 'Mensaje Corto - Respuesta Rápida ($60k/año)',
+    description: 'Variante breve de 3 lineas ideal para primer toque rapido en WhatsApp o DM.',
+    template:
+      'Hola! Si, es un mensaje automatico, pero si me respondes te hablo yo en persona. Soy Nicolas, desarrollador web: ¿te gustaria tener la pagina de {name} lista y activa por solo 60 mil pesos al año? Consultame tranqui',
+  },
+  {
     id: 'web_local',
-    label: 'Web para Comercios (Sin Web)',
-    description: 'Para comercios locales sin sitio web. Enfasis en desarrollador independiente que ayuda a tener exposicion en Google con demo armada.',
+    label: 'Web para Comercios (Sin Precio Fijo)',
+    description: 'Para comercios locales sin sitio web. Enfasis en desarrollador independiente con demo armada sin mencionar precio en el primer mensaje.',
     template:
       'Buenas! Che te escribo por acá porque vi su negocio en {city} y me gustó mucho lo que hacen. Te cuento: soy desarrollador y esto lo hago como un plus mientras tanto para darle una mano a negocios y que tengan más exposición en Google. Vi que todavía no tienen página web propia, así que les armé una demo de muestra para su rubro: {demo} Como la idea es ayudarlos el costo es súper accesible, nada más para cubrir el hosting y mantenerla activa. Mírenla tranquilos y si les sirve o quieren adaptarla con sus fotos y servicios me avisan, cero compromiso!',
   },
@@ -68,14 +96,9 @@ export const INITIAL_SPEECH_PRESETS: SpeechPreset[] = [
     template:
       'Buenas! Che te escribo por acá porque vi lo que hacen en {name} y la presencia que manejan. Te cuento: soy desarrollador y trabajo armando automatizaciones para negocios. Se que muchas veces se pierde tiempo respondiendo siempre las mismas consultas por DM o WhatsApp (precios, horarios, disponibilidad). Armé un sistema para responder y filtrar consultas 24/7 sin que tengan que estar encima. Si les interesa ver cómo funciona avísenme y se los muestro, cero compromiso!',
   },
-  {
-    id: 'custom',
-    label: 'Personalizado / Libre',
-    description: 'Plantilla abierta para escribir libremente con variables dinamicas {name}, {city}, {category}, {demo}.',
-    template:
-      'Hola {name}! ¿Cómo andan? Les escribo porque vi su negocio en {city}. Me dedico al desarrollo y les preparé esta propuesta interactiva para su rubro: {demo} Si les interesa avísenme y la vemos sin compromiso!',
-  },
 ];
+
+const SPEECH_STORAGE_KEY = 'cc_speech_presets_v2';
 
 export function LeadsPage() {
   const [leads, setLeads] = useState<LeadView[]>([]);
@@ -86,11 +109,30 @@ export function LeadsPage() {
   // Tab State
   const [activeTab, setActiveTab] = useState<'prospecting' | 'followups' | 'speeches'>('prospecting');
 
-  // Speech Presets State
-  const [speechPresets, setSpeechPresets] = useState<SpeechPreset[]>(INITIAL_SPEECH_PRESETS);
-  const [selectedSpeechPreset, setSelectedSpeechPreset] = useState<string>('web_local');
+  // Speech Presets State (persisted in localStorage)
+  const [speechPresets, setSpeechPresets] = useState<SpeechPreset[]>(() => {
+    try {
+      const saved = localStorage.getItem(SPEECH_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as SpeechPreset[];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_SPEECH_PRESETS;
+  });
+  const [selectedSpeechPreset, setSelectedSpeechPreset] = useState<string>('wa_sin_web_natural');
   const [leadPresetOverrides, setLeadPresetOverrides] = useState<Record<string, string>>({});
   const [previewLeadId, setPreviewLeadId] = useState<string>('');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPEECH_STORAGE_KEY, JSON.stringify(speechPresets));
+    } catch {
+      // ignore
+    }
+  }, [speechPresets]);
 
   // Instagram Verification State
   const [verifyingIgId, setVerifyingIgId] = useState<string | null>(null);
@@ -530,20 +572,41 @@ export function LeadsPage() {
     }
   };
 
-  const handleQueueCampaign = async (leadIds: string[]) => {
+  const handleQueueCampaign = async (leadIds: string[], presetIdOverride?: string) => {
     if (queuingCampaign || leadIds.length === 0) return;
+    const effPresetId = presetIdOverride || selectedSpeechPreset;
+    const preset = speechPresets.find((p) => p.id === effPresetId) || speechPresets[0]!;
     setQueuingCampaign(true);
     try {
-      const res = await api.outreachQueue({ leadIds });
+      const res = await api.outreachQueue({ leadIds, customPitch: preset.template });
       if (res.ok) {
         await loadQueueStatus();
         await loadLeads();
-        alert(`Campana iniciada: se encolaron ${leadIds.length} mensajes con despacho espaciado en segundo plano.`);
+        setCopiedToast(`Campaña WhatsApp encolada (${res.queuedCount} contactos, delay 60-120s entre cada envío)`);
+        setTimeout(() => setCopiedToast(null), 5000);
+        clearSelectedLeads();
       }
     } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      alert(`Error al encolar: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setQueuingCampaign(false);
+    }
+  };
+
+  const handleToggleQueuePause = async () => {
+    if (!queueStatus) return;
+    try {
+      if (queueStatus.isPaused) {
+        await api.outreachResume();
+        setCopiedToast('Cola de WhatsApp reanudada');
+      } else {
+        await api.outreachPause();
+        setCopiedToast('Cola de WhatsApp pausada');
+      }
+      setTimeout(() => setCopiedToast(null), 3000);
+      await loadQueueStatus();
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -588,21 +651,39 @@ export function LeadsPage() {
 
         {/* Global Action Tools */}
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {queueStatus && (queueStatus.waiting > 0 || queueStatus.active > 0) && (
+          {queueStatus && (queueStatus.waiting > 0 || queueStatus.active > 0 || queueStatus.isPaused) && (
             <div style={{
               background: '#0f172a',
-              border: '1px solid #0284c7',
-              color: '#38bdf8',
+              border: `1px solid ${queueStatus.isPaused ? '#f59e0b' : '#0284c7'}`,
+              color: queueStatus.isPaused ? '#facc15' : '#38bdf8',
               borderRadius: '8px',
               padding: '0.45rem 0.8rem',
               fontSize: '0.78rem',
               fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
-              gap: '0.4rem',
+              gap: '0.5rem',
             }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#38bdf8' }} />
-              Campana activa: {queueStatus.waiting} en cola ({queueStatus.active} enviando)
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: queueStatus.isPaused ? '#facc15' : '#38bdf8' }} />
+              <span>
+                {queueStatus.isPaused ? 'Cola Pausada' : 'Campaña WhatsApp (Delay 60-120s)'}: {queueStatus.waiting} en espera ({queueStatus.active} enviando)
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleToggleQueuePause()}
+                style={{
+                  background: queueStatus.isPaused ? '#059669' : '#334155',
+                  border: 'none',
+                  color: '#fff',
+                  borderRadius: '4px',
+                  padding: '2px 7px',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {queueStatus.isPaused ? 'Reanudar' : 'Pausar'}
+              </button>
             </div>
           )}
 
@@ -1042,6 +1123,33 @@ export function LeadsPage() {
                 Exportar CSV
               </button>
 
+              {/* Queue All Filtered WhatsApp Button */}
+              <button
+                type="button"
+                disabled={queuingCampaign || filteredProspecting.filter((l) => l.phoneFormatted || l.phone).length === 0}
+                onClick={() => {
+                  const targets = filteredProspecting.filter((l) => l.phoneFormatted || l.phone).map((l) => l.id);
+                  if (targets.length === 0) return;
+                  if (!confirm(`¿Encolar envío automático de WhatsApp para ${targets.length} leads con el speech "${speechPresets.find((p) => p.id === selectedSpeechPreset)?.label}"?\n\nSe enviará 1 mensaje cada 60-120 segundos para proteger tu cuenta.`)) return;
+                  void handleQueueCampaign(targets);
+                }}
+                style={{
+                  background: '#059669',
+                  border: '1px solid #10b981',
+                  color: '#ffffff',
+                  borderRadius: '8px',
+                  padding: '0.42rem 0.85rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: queuingCampaign ? 'not-allowed' : 'pointer',
+                }}
+                title="Encola a todos los leads filtrados que tengan teléfono para envío automático por WhatsApp con delay anti-ban (60-120s)"
+              >
+                {queuingCampaign
+                  ? 'Encolando...'
+                  : `Envío Auto WhatsApp (${filteredProspecting.filter((l) => l.phoneFormatted || l.phone).length})`}
+              </button>
+
               <span style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
                 Mostrando: <strong style={{ color: '#f8fafc' }}>{filteredProspecting.length}</strong> / {prospectingLeads.length}
               </span>
@@ -1100,6 +1208,25 @@ export function LeadsPage() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => void handleQueueCampaign(Array.from(selectedIds))}
+                  disabled={queuingCampaign || batchActionRunning}
+                  style={{
+                    background: '#059669',
+                    border: '1px solid #10b981',
+                    color: '#ffffff',
+                    borderRadius: '6px',
+                    padding: '0.35rem 0.85rem',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    cursor: queuingCampaign ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Envía mensajes automáticamente en segundo plano con un delay de 60 a 120 segundos entre cada uno para cuidar la línea"
+                >
+                  {queuingCampaign ? 'Encolando...' : `Enviar WhatsApp Automático (${selectedIds.size}) — Delay 60-120s`}
+                </button>
+
                 <button
                   type="button"
                   onClick={() => void updateSelectedStatus('contacted')}
@@ -1421,24 +1548,45 @@ export function LeadsPage() {
 
                             {/* WhatsApp Button */}
                             {waNumber && (
-                              <a
-                                href={`https://wa.me/${waNumber}?text=${encodeURIComponent(getPitchForLead(lead, leadPresetId))}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={() => void updateStatus(lead.id, 'contacted')}
-                                style={{
-                                  background: '#064e3b',
-                                  border: '1px solid #059669',
-                                  color: '#6ee7b7',
-                                  padding: '0.28rem 0.6rem',
-                                  borderRadius: '6px',
-                                  fontSize: '0.75rem',
-                                  textDecoration: 'none',
-                                  fontWeight: 600,
-                                }}
-                              >
-                                WhatsApp
-                              </a>
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={queuingCampaign}
+                                  onClick={() => void handleQueueCampaign([lead.id], leadPresetId)}
+                                  style={{
+                                    background: '#059669',
+                                    border: '1px solid #10b981',
+                                    color: '#ffffff',
+                                    padding: '0.28rem 0.55rem',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: queuingCampaign ? 'not-allowed' : 'pointer',
+                                  }}
+                                  title="Envía este mensaje automáticamente desde tu WhatsApp conectado (en cola con protección de cuenta)"
+                                >
+                                  Auto WA
+                                </button>
+                                <a
+                                  href={`https://wa.me/${waNumber}?text=${encodeURIComponent(getPitchForLead(lead, leadPresetId))}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={() => void updateStatus(lead.id, 'contacted')}
+                                  style={{
+                                    background: '#064e3b',
+                                    border: '1px solid #059669',
+                                    color: '#6ee7b7',
+                                    padding: '0.28rem 0.6rem',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    textDecoration: 'none',
+                                    fontWeight: 600,
+                                  }}
+                                  title="Abrir en WhatsApp Web manualmente"
+                                >
+                                  wa.me
+                                </a>
+                              </>
                             )}
 
                             {/* Discard button */}
@@ -1889,13 +2037,67 @@ export function LeadsPage() {
       {/* ========================================================================= */}
       {activeTab === 'speeches' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem' }}>
-            <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem', color: '#f8fafc' }}>
-              Biblioteca de Speeches & Ofertas
-            </h2>
-            <p style={{ margin: 0, fontSize: '0.84rem', color: '#94a3b8' }}>
-              Elegi y edita los discursos de prospeccion. Al hacer clic en Abrir DM en la tabla, el sistema completara automaticamente las variables dinamicas ({'{name}'}, {'{city}'}, {'{category}'}, {'{demo}'}).
-            </p>
+          <div style={{ background: '#0b0f19', border: '1px solid #1e293b', borderRadius: '12px', padding: '1.1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h2 style={{ margin: '0 0 0.35rem', fontSize: '1.1rem', color: '#f8fafc' }}>
+                Biblioteca de Speeches & Ofertas
+              </h2>
+              <p style={{ margin: 0, fontSize: '0.84rem', color: '#94a3b8' }}>
+                Elegí y editá las variantes de prospección para WhatsApp e Instagram. Se usan tanto en el Envío Automático de WhatsApp como en Abrir DM ({'{name}'}, {'{city}'}, {'{category}'}, {'{demo}'}).
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const newId = `custom_${Date.now()}`;
+                  setSpeechPresets((prev) => [
+                    ...prev,
+                    {
+                      id: newId,
+                      label: `Nueva Variante #${prev.length + 1}`,
+                      description: 'Variante personalizada para WhatsApp o Instagram.',
+                      template:
+                        'Hola! Si, esto es un mensaje automatizado, pero si me contestas, te va a hablar quien escribio esto, un humano.\nSoy Nicolas, desarrollador, y quiero ayudarte a tener presencia digital en {city}.\nConsultame tranqui',
+                    },
+                  ]);
+                  setSelectedSpeechPreset(newId);
+                }}
+                style={{
+                  background: '#059669',
+                  border: '1px solid #10b981',
+                  color: '#fff',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.85rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                + Nueva Variante
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirm('¿Restaurar las variantes de speeches predeterminadas?')) return;
+                  setSpeechPresets(INITIAL_SPEECH_PRESETS);
+                  setSelectedSpeechPreset('wa_sin_web_natural');
+                  localStorage.removeItem(SPEECH_STORAGE_KEY);
+                }}
+                style={{
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  color: '#94a3b8',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.85rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Restaurar Originales
+              </button>
+            </div>
           </div>
 
           {/* Preset Cards Grid */}

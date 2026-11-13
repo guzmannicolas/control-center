@@ -54,9 +54,15 @@ export function createOutreachWorker(
       const { leadId, customPitch, isFollowUp, ...ctx } = job.data;
       log.info({ leadId, name: ctx.name, phone: ctx.phone }, 'processing automated outreach job');
 
-      // 1. Generate or use custom pitch
+      // 1. Generate or use custom pitch (interpolating dynamic variables per lead)
       let pitchText = customPitch;
-      if (!pitchText) {
+      if (pitchText) {
+        pitchText = pitchText
+          .replace(/{name}/g, ctx.name)
+          .replace(/{city}/g, ctx.city.split(',')[0] ?? ctx.city)
+          .replace(/{category}/g, ctx.category)
+          .replace(/{demo}/g, ctx.suggestedDemo ?? 'https://templates.nicoguzmandev.com/');
+      } else {
         const generated = await generatePersonalizedPitch(ctx, Boolean(isFollowUp));
         pitchText = generated.pitch;
       }
