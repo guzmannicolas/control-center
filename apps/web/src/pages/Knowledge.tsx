@@ -212,7 +212,40 @@ export function KnowledgePage() {
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [mcpModalOpen, setMcpModalOpen] = useState<boolean>(false);
+  const [mcpModalTab, setMcpModalTab] = useState<'setup' | 'security'>('setup');
+  const [newTokenName, setNewTokenName] = useState<string>('');
+  const [createdTokenResult, setCreatedTokenResult] = useState<string | null>(null);
+
   const { copyContext: handleCopyLlmContext, feedback: copyFeedback, setFeedback: setCopyFeedback } = useCopyLlmContext(() => editableContent);
+
+  const mcpTokensQuery = useQuery({
+    queryKey: ['mcpTokens'],
+    queryFn: api.mcpTokens,
+    enabled: mcpModalOpen && mcpModalTab === 'security',
+  });
+
+  const mcpAuditQuery = useQuery({
+    queryKey: ['mcpAudit'],
+    queryFn: api.mcpAudit,
+    enabled: mcpModalOpen && mcpModalTab === 'security',
+    refetchInterval: 10_000,
+  });
+
+  const createTokenMutation = useMutation({
+    mutationFn: (name: string) => api.mcpCreateToken({ name, role: 'collaborator' }),
+    onSuccess: (data) => {
+      setCreatedTokenResult(data.token);
+      setNewTokenName('');
+      void queryClient.invalidateQueries({ queryKey: ['mcpTokens'] });
+    },
+  });
+
+  const revokeTokenMutation = useMutation({
+    mutationFn: (id: string) => api.mcpRevokeToken(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['mcpTokens'] });
+    },
+  });
 
   // Load document metadata tree
   const { data: docs = [], isLoading: isListLoading } = useQuery<KnowledgeDocMeta[]>({
@@ -741,10 +774,10 @@ export function KnowledgePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#f8fafc' }}>
-                  Model Context Protocol (MCP) Setup
+                  Model Context Protocol (MCP) Hub & Security
                 </h3>
                 <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-                  Connect Cursor AI, Claude Desktop, Antigravity, or Roo Code directly to this Knowledge Base.
+                  Manage external agent connections, collaborator access tokens, and real-time audit logs.
                 </p>
               </div>
               <button
@@ -762,6 +795,44 @@ export function KnowledgePage() {
               </button>
             </div>
 
+            {/* Modal Tabs */}
+            <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setMcpModalTab('setup')}
+                style={{
+                  background: mcpModalTab === 'setup' ? '#1e293b' : 'transparent',
+                  border: `1px solid ${mcpModalTab === 'setup' ? '#3b82f6' : 'transparent'}`,
+                  color: mcpModalTab === 'setup' ? '#f8fafc' : '#94a3b8',
+                  borderRadius: '6px',
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Client Configurations
+              </button>
+              <button
+                type="button"
+                onClick={() => setMcpModalTab('security')}
+                style={{
+                  background: mcpModalTab === 'security' ? '#1e293b' : 'transparent',
+                  border: `1px solid ${mcpModalTab === 'security' ? '#3b82f6' : 'transparent'}`,
+                  color: mcpModalTab === 'security' ? '#f8fafc' : '#94a3b8',
+                  borderRadius: '6px',
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Collaborator Tokens & Audit Logs
+              </button>
+            </div>
+
+            {mcpModalTab === 'setup' ? (
+              <>
             {/* Stdio Configuration (Cursor & Claude Desktop) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#38bdf8' }}>
@@ -870,6 +941,183 @@ export function KnowledgePage() {
                 <div><strong>Raw MCP JSON-RPC:</strong> POST https://control-api.nicoguzmandev.com/api/mcp</div>
               </div>
             </div>
+            </>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {/* Token Generator */}
+                <div style={{ background: '#050811', border: '1px solid #1e293b', borderRadius: '8px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#38bdf8' }}>
+                    Issue New Collaborator Token
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="text"
+                      placeholder="Collaborator Name (e.g. Lucas, Cursor Nico)"
+                      value={newTokenName}
+                      onChange={(e) => setNewTokenName(e.target.value)}
+                      style={{
+                        flex: 1,
+                        background: '#0b0f19',
+                        border: '1px solid #334155',
+                        borderRadius: '6px',
+                        padding: '0.4rem 0.75rem',
+                        fontSize: '0.8rem',
+                        color: '#f8fafc',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={!newTokenName.trim() || createTokenMutation.isPending}
+                      onClick={() => createTokenMutation.mutate(newTokenName)}
+                      style={{
+                        background: '#2563eb',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '0.4rem 0.9rem',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        color: '#ffffff',
+                        cursor: newTokenName.trim() ? 'pointer' : 'not-allowed',
+                        opacity: newTokenName.trim() ? 1 : 0.6,
+                      }}
+                    >
+                      {createTokenMutation.isPending ? 'Generating...' : 'Generate Token'}
+                    </button>
+                  </div>
+
+                  {createdTokenResult && (
+                    <div style={{ background: '#064e3b', border: '1px solid #059669', borderRadius: '6px', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <span style={{ fontSize: '0.78rem', color: '#a7f3d0', fontWeight: 600 }}>
+                        Token Generated (Save it now, it will not be displayed again):
+                      </span>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <code style={{ flex: 1, background: '#022c22', padding: '0.3rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', color: '#6ee7b7', wordBreak: 'break-all' }}>
+                          {createdTokenResult}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(createdTokenResult);
+                            setCopyFeedback('Token Copied!');
+                            setTimeout(() => setCopyFeedback(null), 2000);
+                          }}
+                          style={{
+                            background: '#047857',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '0.3rem 0.6rem',
+                            color: '#ffffff',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Active Collaborator Tokens */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#f8fafc' }}>
+                    Active Collaborator Tokens
+                  </span>
+                  <div style={{ overflowX: 'auto', border: '1px solid #1e293b', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.75rem' }}>
+                      <thead style={{ background: '#0f172a', color: '#94a3b8' }}>
+                        <tr>
+                          <th style={{ padding: '0.5rem 0.75rem' }}>Name</th>
+                          <th style={{ padding: '0.5rem 0.75rem' }}>Prefix</th>
+                          <th style={{ padding: '0.5rem 0.75rem' }}>Role</th>
+                          <th style={{ padding: '0.5rem 0.75rem' }}>Last Used</th>
+                          <th style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(!mcpTokensQuery.data || mcpTokensQuery.data.length === 0) ? (
+                          <tr>
+                            <td colSpan={5} style={{ padding: '1rem', textAlign: 'center', color: '#64748b' }}>
+                              No collaborator tokens issued yet. Default master token in .env is active.
+                            </td>
+                          </tr>
+                        ) : (
+                          mcpTokensQuery.data.map((tok) => (
+                            <tr key={tok.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#f8fafc' }}>{tok.name}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', fontFamily: 'monospace', color: '#94a3b8' }}>{tok.tokenPrefix}…</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: '#38bdf8' }}>{tok.role}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: '#94a3b8' }}>{tok.lastUsedAt ? new Date(tok.lastUsedAt).toLocaleTimeString() : 'Never'}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right' }}>
+                                {tok.enabled ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => revokeTokenMutation.mutate(tok.id)}
+                                    style={{
+                                      background: '#7f1d1d',
+                                      border: 'none',
+                                      color: '#fca5a5',
+                                      borderRadius: '4px',
+                                      padding: '0.2rem 0.5rem',
+                                      fontSize: '0.7rem',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    Revoke
+                                  </button>
+                                ) : (
+                                  <span style={{ color: '#ef4444' }}>Revoked</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Audit Access Logs */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#f8fafc' }}>
+                    Recent Access Logs (Who Requested Services)
+                  </span>
+                  <div style={{ overflowX: 'auto', border: '1px solid #1e293b', borderRadius: '8px', maxHeight: '200px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.74rem' }}>
+                      <thead style={{ background: '#0f172a', color: '#94a3b8', position: 'sticky', top: 0 }}>
+                        <tr>
+                          <th style={{ padding: '0.4rem 0.75rem' }}>Client</th>
+                          <th style={{ padding: '0.4rem 0.75rem' }}>IP</th>
+                          <th style={{ padding: '0.4rem 0.75rem' }}>Tool / Method</th>
+                          <th style={{ padding: '0.4rem 0.75rem' }}>Latency</th>
+                          <th style={{ padding: '0.4rem 0.75rem' }}>Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(!mcpAuditQuery.data?.recentLogs || mcpAuditQuery.data.recentLogs.length === 0) ? (
+                          <tr>
+                            <td colSpan={5} style={{ padding: '1rem', textAlign: 'center', color: '#64748b' }}>
+                              No requests recorded in this session.
+                            </td>
+                          </tr>
+                        ) : (
+                          mcpAuditQuery.data.recentLogs.map((log) => (
+                            <tr key={log.id} style={{ borderBottom: '1px solid #1e293b' }}>
+                              <td style={{ padding: '0.4rem 0.75rem', fontWeight: 600, color: '#f8fafc' }}>{log.clientName}</td>
+                              <td style={{ padding: '0.4rem 0.75rem', fontFamily: 'monospace', color: '#94a3b8' }}>{log.ip}</td>
+                              <td style={{ padding: '0.4rem 0.75rem', color: '#38bdf8' }}>{log.toolName || log.method}</td>
+                              <td style={{ padding: '0.4rem 0.75rem', color: '#cbd5e1' }}>{log.durationMs}ms</td>
+                              <td style={{ padding: '0.4rem 0.75rem', color: '#94a3b8' }}>{new Date(log.timestamp).toLocaleTimeString()}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
               <button
