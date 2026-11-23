@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { api } from '../api.ts';
 import { PageHeader } from '../components/PageHeader.tsx';
 import { MODULES, REPO, type LearningModule } from '../learning/modules.ts';
+import { PythonStudio } from '../learning/PythonStudio.tsx';
+import { RagStudio } from '../learning/RagStudio.tsx';
 import { Link, usePath } from '../router.tsx';
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
@@ -35,7 +37,10 @@ function Badge({ module, earned }: { module: LearningModule; earned?: LearningPr
  );
 }
 
+type LearningTab = 'python' | 'rag' | 'badges';
+
 function Overview() {
+ const [activeTab, setActiveTab] = useState<LearningTab>('python');
  const progress = useProgress();
  const earned = new Map((progress.data ?? []).map((p) => [p.moduleId, p]));
  const done = MODULES.filter((m) => earned.has(m.id)).length;
@@ -43,8 +48,91 @@ function Overview() {
  const pct = Math.round((done / MODULES.length) * 100);
 
  return (
+ <div className="space-y-6">
+ <PageHeader
+ title="Interactive Learning Hub"
+ subtitle="Visual Python masterclass, state-of-the-art RAG pipelines, and system architecture certifications"
+ />
+
+ {/* Main Hub Navigation Tabs */}
+ <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.6rem' }}>
+ <button
+ type="button"
+ onClick={() => setActiveTab('python')}
+ style={{
+ background: activeTab === 'python' ? '#1e293b' : 'transparent',
+ border: `1px solid ${activeTab === 'python' ? '#38bdf8' : 'transparent'}`,
+ color: activeTab === 'python' ? '#f8fafc' : '#94a3b8',
+ borderRadius: '8px',
+ padding: '0.5rem 1rem',
+ fontSize: '0.86rem',
+ fontWeight: 700,
+ cursor: 'pointer',
+ display: 'flex',
+ alignItems: 'center',
+ gap: '0.5rem',
+ }}
+ >
+ <span>Interactive Python</span>
+ <span style={{ fontSize: '0.7rem', background: '#082f49', border: '1px solid #0284c7', padding: '0.1rem 0.4rem', borderRadius: '4px', color: '#38bdf8' }}>
+ Animated Workflows
+ </span>
+ </button>
+
+ <button
+ type="button"
+ onClick={() => setActiveTab('rag')}
+ style={{
+ background: activeTab === 'rag' ? '#1e293b' : 'transparent',
+ border: `1px solid ${activeTab === 'rag' ? '#34d399' : 'transparent'}`,
+ color: activeTab === 'rag' ? '#f8fafc' : '#94a3b8',
+ borderRadius: '8px',
+ padding: '0.5rem 1rem',
+ fontSize: '0.86rem',
+ fontWeight: 700,
+ cursor: 'pointer',
+ display: 'flex',
+ alignItems: 'center',
+ gap: '0.5rem',
+ }}
+ >
+ <span>Modern RAG & AI Pipelines</span>
+ <span style={{ fontSize: '0.7rem', background: '#064e3b', border: '1px solid #10b981', padding: '0.1rem 0.4rem', borderRadius: '4px', color: '#6ee7b7' }}>
+ 2026 Production Spec
+ </span>
+ </button>
+
+ <button
+ type="button"
+ onClick={() => setActiveTab('badges')}
+ style={{
+ background: activeTab === 'badges' ? '#1e293b' : 'transparent',
+ border: `1px solid ${activeTab === 'badges' ? '#a78bfa' : 'transparent'}`,
+ color: activeTab === 'badges' ? '#f8fafc' : '#94a3b8',
+ borderRadius: '8px',
+ padding: '0.5rem 1rem',
+ fontSize: '0.86rem',
+ fontWeight: 700,
+ cursor: 'pointer',
+ display: 'flex',
+ alignItems: 'center',
+ gap: '0.5rem',
+ }}
+ >
+ <span>Stack Badges & Quizzes</span>
+ <span style={{ fontSize: '0.7rem', background: '#2e1065', border: '1px solid #7c3aed', padding: '0.1rem 0.4rem', borderRadius: '4px', color: '#c4b5fd' }}>
+ {done}/{MODULES.length}
+ </span>
+ </button>
+ </div>
+
+ {/* Tab Content */}
+ {activeTab === 'python' && <PythonStudio />}
+
+ {activeTab === 'rag' && <RagStudio />}
+
+ {activeTab === 'badges' && (
  <div>
- <PageHeader title="Learning" subtitle={`${done} of ${MODULES.length} badges`} />
  <section className="mb-6 rounded-xl border border-line bg-surface p-4">
  <div className="flex flex-wrap items-baseline justify-between gap-2">
  <h2 className="font-semibold">Knowledge debt</h2>
@@ -62,6 +150,8 @@ function Overview() {
  <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
  {MODULES.map((m) => <Badge key={m.id} module={m} earned={earned.get(m.id)} />)}
  </div>
+ </div>
+ )}
  </div>
  );
 }
