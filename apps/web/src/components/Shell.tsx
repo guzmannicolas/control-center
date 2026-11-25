@@ -423,11 +423,26 @@ export function Shell({ user }: { user: User }) {
       {/* =========================================================================
           MAIN CONTENT AREA
           ========================================================================= */}
-      <main className="min-w-0 flex-1 px-4 pt-3 pb-28 md:px-8 md:pt-4 md:pb-16">
-        <div className="mx-auto max-w-5xl">
-          <Page />
-        </div>
-      </main>
+      {(() => {
+        const isFullBleedApp = path.startsWith('/agents');
+        return (
+          <main
+            className={
+              isFullBleedApp
+                ? 'min-w-0 flex-1 flex flex-col h-[calc(100dvh-7rem)] md:h-dvh overflow-hidden'
+                : 'min-w-0 flex-1 px-4 pt-3 pb-28 md:px-8 md:pt-4 md:pb-16'
+            }
+          >
+            {isFullBleedApp ? (
+              <Page />
+            ) : (
+              <div className="mx-auto max-w-5xl">
+                <Page />
+              </div>
+            )}
+          </main>
+        );
+      })()}
 
       {/* =========================================================================
           MOBILE BOTTOM NAVIGATION BAR (< md)
