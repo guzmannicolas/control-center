@@ -9,6 +9,12 @@ import {
 
 function handleRequest(req) {
   const { id = null, method, params = {} } = req;
+
+  // JSON-RPC 2.0: Notifications do not have an "id" member and MUST NOT receive a response.
+  if (req.id === undefined || (typeof method === 'string' && method.startsWith('notifications/'))) {
+    return null;
+  }
+
   try {
     switch (method) {
       case 'initialize':
@@ -28,7 +34,6 @@ function handleRequest(req) {
           },
         };
 
-      case 'notifications/initialized':
       case 'ping':
         return { jsonrpc: '2.0', id, result: {} };
 
@@ -136,11 +141,14 @@ const rl = createInterface({
 });
 
 rl.on('line', (line) => {
-  if (!line.trim()) return;
+  const trimmed = line.trim();
+  if (!trimmed) return;
   try {
-    const parsed = JSON.parse(line);
+    const parsed = JSON.parse(trimmed);
     const response = handleRequest(parsed);
-    process.stdout.write(JSON.stringify(response) + '\n');
+    if (response) {
+      process.stdout.write(JSON.stringify(response) + '\n');
+    }
   } catch (err) {
     process.stdout.write(
       JSON.stringify({
