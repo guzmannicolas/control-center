@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../api.ts';
 import { PageHeader } from '../components/PageHeader.tsx';
+import { AnalogyStudio } from '../learning/AnalogyStudio.tsx';
 import { MODULES, REPO, type LearningModule } from '../learning/modules.ts';
 import { PythonStudio } from '../learning/PythonStudio.tsx';
 import { RagStudio } from '../learning/RagStudio.tsx';
@@ -37,10 +38,10 @@ function Badge({ module, earned }: { module: LearningModule; earned?: LearningPr
  );
 }
 
-type LearningTab = 'python' | 'rag' | 'badges';
+type LearningTab = 'analogies' | 'python' | 'rag' | 'badges';
 
 function Overview() {
- const [activeTab, setActiveTab] = useState<LearningTab>('python');
+ const [activeTab, setActiveTab] = useState<LearningTab>('analogies');
  const progress = useProgress();
  const earned = new Map((progress.data ?? []).map((p) => [p.moduleId, p]));
  const done = MODULES.filter((m) => earned.has(m.id)).length;
@@ -51,11 +52,34 @@ function Overview() {
  <div className="space-y-6">
  <PageHeader
  title="Interactive Learning Hub"
- subtitle="Visual Python masterclass, state-of-the-art RAG pipelines, and system architecture certifications"
+ subtitle="Real-world visual software city analogies, interactive Python masterclass, RAG pipelines, and stack certifications"
  />
 
  {/* Main Hub Navigation Tabs */}
- <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.6rem' }}>
+ <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', borderBottom: '1px solid #1e293b', paddingBottom: '0.6rem' }}>
+ <button
+ type="button"
+ onClick={() => setActiveTab('analogies')}
+ style={{
+ background: activeTab === 'analogies' ? '#1e293b' : 'transparent',
+ border: `1px solid ${activeTab === 'analogies' ? '#fbbf24' : 'transparent'}`,
+ color: activeTab === 'analogies' ? '#f8fafc' : '#94a3b8',
+ borderRadius: '8px',
+ padding: '0.5rem 1rem',
+ fontSize: '0.86rem',
+ fontWeight: 700,
+ cursor: 'pointer',
+ display: 'flex',
+ alignItems: 'center',
+ gap: '0.5rem',
+ }}
+ >
+ <span>Software City Analogies</span>
+ <span style={{ fontSize: '0.7rem', background: '#451a03', border: '1px solid #d97706', padding: '0.1rem 0.4rem', borderRadius: '4px', color: '#fbbf24' }}>
+ 100 Visual Metaphors
+ </span>
+ </button>
+
  <button
  type="button"
  onClick={() => setActiveTab('python')}
@@ -127,6 +151,8 @@ function Overview() {
  </div>
 
  {/* Tab Content */}
+ {activeTab === 'analogies' && <AnalogyStudio />}
+
  {activeTab === 'python' && <PythonStudio />}
 
  {activeTab === 'rag' && <RagStudio />}
