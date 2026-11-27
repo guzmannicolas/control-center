@@ -150,6 +150,13 @@ export function getVaultOverview(customAudit?: VaultAuditSummary): VaultOverview
   return { projects, projectConfigs, items, auditSummary: defaultAuditSummary };
 }
 
+export function getVaultSecretValue(key: string): string | undefined {
+  const { items } = getVaultOverview();
+  const found = items.find((i) => i.key === key && i.value && i.value !== '*** DECRYPTION ERROR ***');
+  const val = found?.value?.trim() || process.env[key]?.trim();
+  return val && val.length > 0 ? val : undefined;
+}
+
 export function upsertProjectConfig(config: VaultProjectConfig): VaultProjectConfig {
   if (config.projectName.toLowerCase() !== VAULT_PROJECT) {
     throw new Error(`The vault only indexes the "${VAULT_PROJECT}" project.`);

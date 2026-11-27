@@ -55,13 +55,15 @@ interface ChatSession {
 const GENERAL_CONTEXT = '__general__';
 const STORAGE_KEY = 'cc_agent_sessions_v1';
 const ACTIVE_SESSION_KEY = 'cc_agent_active_session_v1';
-const SETTINGS_KEY = 'cc_agent_settings_v1';
+const LEGACY_SETTINGS_KEY = 'cc_agent_settings_v1';
 const SIDEBAR_STATE_KEY = 'cc_agent_sidebar_open_v1';
 
-interface ProviderSettings {
-  provider: 'gemini' | 'openrouter';
-  geminiApiKey: string;
-  openrouterApiKey: string;
+interface AgentVaultConfig {
+  defaultProvider: 'gemini' | 'openrouter';
+  geminiConfigured: boolean;
+  geminiMasked: string | null;
+  openrouterConfigured: boolean;
+  openrouterMasked: string | null;
 }
 
 const FALLBACK_REPOS: RepoOption[] = [
@@ -148,30 +150,9 @@ function saveLocalSessions(sessions: ChatSession[]) {
   }
 }
 
-function loadSettings(): ProviderSettings {
+function purgeLegacyLocalStorageSecrets() {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        provider: parsed.provider === 'openrouter' ? 'openrouter' : 'gemini',
-        geminiApiKey: parsed.geminiApiKey || '',
-        openrouterApiKey: parsed.openrouterApiKey || '',
-      };
-    }
-  } catch {
-    // ignore
-  }
-  return {
-    provider: 'gemini',
-    geminiApiKey: '',
-    openrouterApiKey: '',
-  };
-}
-
-function saveSettings(settings: ProviderSettings) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    localStorage.removeItem(LEGACY_SETTINGS_KEY);
   } catch {
     // ignore
   }
@@ -383,7 +364,14 @@ function MarkdownMessage({ content }: { content: string }) {
 export function AgentsPage() {
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadLocalSessions());
   const [repos, setRepos] = useState<RepoOption[]>(FALLBACK_REPOS);
-  const [settings, setSettings] = useState<ProviderSettings>(() => loadSettings());
+  const [vaultConfig, setVaultConfig] = useState<AgentVaultConfig>({
+    defaultProvider: 'gemini',
+    geminiConfigured: true,
+    geminiMasked: null,
+    openrouterConfigured: false,
+    openrouterMasked: null,
+  });
+  const [savingSettings, setSavingSettings] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
@@ -410,7 +398,7 @@ export function AgentsPage() {
   const activeSession = sessions.find((s) => s.id === sessionId);
 
   const [provider, setProvider] = useState<'gemini' | 'openrouter'>(
-    activeSession?.provider ?? settings.provider
+    activeSession?.provider ?? 'gemini'
   );
   const [repo, setRepo] = useState<string>(activeSession?.repo ?? GENERAL_CONTEXT);
   const [model, setModel] = useState<string>(
@@ -449,9 +437,29 @@ export function AgentsPage() {
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [input]);
 
-  // Fetch available repos and saved server chat sessions
+  // Purge legacy plain-text keys from localStorage and fetch Vault config, repos, and sessions
   useEffect(() => {
+    purgeLegacyLocalStorageSecrets();
     let active = true;
+
+    fetch(`${BASE}/api/agent/config`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg: AgentVaultConfig | null) => {
+        if (!active || !cfg) return;
+        setVaultConfig(cfg);
+        if (!activeSession?.provider) {
+          setProvider(cfg.defaultProvider);
+          if (cfg.defaultProvider === 'openrouter') {
+            setModel((prev) =>
+              OPENROUTER_MODELS.some((m) => m.id === prev) ? prev : 'meta-llama/llama-3.3-70b-instruct'
+            );
+          } else {
+            setModel((prev) => (GEMINI_MODELS.some((m) => m.id === prev) ? prev : 'auto'));
+          }
+        }
+      })
+      .catch(() => {});
+
     fetch(`${BASE}/api/agent/repos`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { repos?: RepoOption[] } | null) => {
@@ -558,20 +566,42 @@ export function AgentsPage() {
         setModel('auto');
       }
     }
-    const newSettings = { ...settings, provider: newProvider };
-    setSettings(newSettings);
-    saveSettings(newSettings);
+    fetch(`${BASE}/api/agent/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ provider: newProvider }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg: AgentVaultConfig | null) => {
+        if (cfg) setVaultConfig(cfg);
+      })
+      .catch(() => {});
   }
 
-  function handleSaveSettings(newGeminiKey: string, newOpenRouterKey: string) {
-    const updated: ProviderSettings = {
-      provider,
-      geminiApiKey: newGeminiKey.trim(),
-      openrouterApiKey: newOpenRouterKey.trim(),
-    };
-    setSettings(updated);
-    saveSettings(updated);
-    setShowSettingsModal(false);
+  async function handleSaveSettings(newGeminiKey: string, newOpenRouterKey: string) {
+    setSavingSettings(true);
+    try {
+      const res = await fetch(`${BASE}/api/agent/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          provider,
+          geminiApiKey: newGeminiKey.trim() || undefined,
+          openrouterApiKey: newOpenRouterKey.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        const cfg = (await res.json()) as AgentVaultConfig;
+        setVaultConfig(cfg);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSavingSettings(false);
+      setShowSettingsModal(false);
+    }
   }
 
   function handleStop() {
@@ -781,8 +811,6 @@ export function AgentsPage() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const userApiKey = provider === 'openrouter' ? settings.openrouterApiKey : settings.geminiApiKey;
-
     try {
       const res = await fetch(`${BASE}/api/agent/run`, {
         method: 'POST',
@@ -793,7 +821,6 @@ export function AgentsPage() {
           repo: targetRepo,
           instruction: trimmed,
           provider,
-          apiKey: userApiKey || undefined,
           model,
           history,
         }),
@@ -1134,30 +1161,62 @@ export function AgentsPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-ink mb-1">OpenRouter API Key</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-ink">OpenRouter API Key (VPS Vault)</label>
+                  {vaultConfig.openrouterConfigured ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-good/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-good">
+                      <CheckIcon size={11} />
+                      <span>Vault: {vaultConfig.openrouterMasked}</span>
+                    </span>
+                  ) : (
+                    <span className="rounded-md bg-line px-2 py-0.5 font-mono text-[10px] text-muted">
+                      Not configured
+                    </span>
+                  )}
+                </div>
                 <input
                   type="password"
                   name="openrouterKey"
-                  defaultValue={settings.openrouterApiKey}
-                  placeholder="sk-or-v1-..."
+                  defaultValue=""
+                  placeholder={
+                    vaultConfig.openrouterConfigured
+                      ? 'Stored in VPS Vault — enter a new key only to replace it'
+                      : 'sk-or-v1-...'
+                  }
                   className="w-full rounded-xl border border-line bg-page px-3 py-2 text-ink placeholder:text-muted focus:border-series focus:outline-none"
                 />
                 <span className="text-[11px] text-muted mt-1 block">
-                  Unlocks Claude 3.5 Sonnet, GPT-4o, Llama 3.3 70B, and DeepSeek R1.
+                  Encrypted with AES-256-GCM in the VPS Vault and shared across all your devices (never saved in browser localStorage).
                 </span>
               </div>
 
               <div>
-                <label className="block font-semibold text-ink mb-1">Gemini API Key (Optional Override)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-ink">Gemini API Key (VPS Vault)</label>
+                  {vaultConfig.geminiConfigured ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-good/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-good">
+                      <CheckIcon size={11} />
+                      <span>Vault: {vaultConfig.geminiMasked}</span>
+                    </span>
+                  ) : (
+                    <span className="rounded-md bg-line px-2 py-0.5 font-mono text-[10px] text-muted">
+                      Not configured
+                    </span>
+                  )}
+                </div>
                 <input
                   type="password"
                   name="geminiKey"
-                  defaultValue={settings.geminiApiKey}
-                  placeholder="Leave blank to use VPS environment key"
+                  defaultValue=""
+                  placeholder={
+                    vaultConfig.geminiConfigured
+                      ? 'Stored in VPS Vault — enter a new key only to replace it'
+                      : 'AIzaSy...'
+                  }
                   className="w-full rounded-xl border border-line bg-page px-3 py-2 text-ink placeholder:text-muted focus:border-series focus:outline-none"
                 />
                 <span className="text-[11px] text-muted mt-1 block">
-                  When empty, the agent uses the production <code>GEMINI_API_KEY</code> stored in the VPS Vault.
+                  Stored securely in the VPS Vault as <code>GEMINI_API_KEY</code>.
                 </span>
               </div>
 
@@ -1171,9 +1230,10 @@ export function AgentsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-series px-5 py-2 font-semibold text-white hover:opacity-95 transition cursor-pointer"
+                  disabled={savingSettings}
+                  className="rounded-xl bg-series px-5 py-2 font-semibold text-white hover:opacity-95 disabled:opacity-50 transition cursor-pointer"
                 >
-                  Save Settings
+                  {savingSettings ? 'Saving to Vault...' : 'Save to Vault'}
                 </button>
               </div>
             </form>
